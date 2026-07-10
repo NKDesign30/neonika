@@ -1,0 +1,25 @@
+node_modules/
+dist/
+state/
+logs/
+data/
+.env
+.env.*
+!.env.example
+.DS_Store
+.playwright-mcp/
+
+# Python bytecode. A .pyc embeds the absolute source path of the machine that
+# wrote it — a home directory, with a username in it, inside a binary that
+# `git grep` skips and a text scanner cannot read.
+__pycache__/
+*.pyc
+
+# Maintainer-only: hashed identity tokens for scripts/oss-identity-scan.py.
+# Kept out of the repository on purpose. See scripts/oss-audit.sh check 1.
+scripts/oss-audit-denylist.sha256
+
+# Ignored by the maintainer's global gitignore, which does not apply to readers
+# of this repository. A repo-level .gitignore outranks core.excludesFile, so the
+# negation here is what makes AGENTS.md's pointer to it true.
+!CLAUDE.md

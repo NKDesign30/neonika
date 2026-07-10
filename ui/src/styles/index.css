@@ -1,0 +1,56 @@
+/* Neon Mission Control — global stylesheet aggregate.
+   Order matters: tokens define the CSS variables that app.css + views.css read.
+   Sourced 1:1 from the Claude Design export (neon/colors_and_type.css,
+   app/app.css, app/views.css); font files live in ./fonts and are bundled
+   through Vite's asset pipeline (see tokens.css @font-face). */
+@import "./tokens.css";
+@import "./app.css";
+@import "./views.css";
+
+html,
+body {
+  height: 100%;
+}
+
+/* The Lit components render in the light DOM so the global design-system CSS
+   applies directly. They use display:contents so their rendered .shell / .nav /
+   .topbar / .page children participate in the parent grid + flow without the
+   custom-element wrapper breaking the layout. */
+neon-control-app,
+neon-sidebar,
+neon-topbar,
+neon-overview,
+neon-sessions,
+neon-usage,
+neon-chat,
+neon-activity,
+neon-cron,
+neon-agents,
+neon-skills,
+neon-nodes,
+neon-dreams,
+neon-config,
+neon-channels,
+neon-logs,
+neon-workboard,
+neon-placeholder {
+  display: contents;
+}
+
+/* Phosphor icons render as <i class="ph ...">. They inherit currentColor, which
+   is correct everywhere the parent sets the icon color (badges, feeds, buttons).
+   The nav tints icons separately from text via an svg selector in the design —
+   replicate that for the <i> glyphs. */
+.nav__item .ph {
+  color: var(--text-tertiary);
+  transition: color var(--duration-instant) var(--easing-out);
+}
+.nav__item:hover .ph {
+  color: var(--text-secondary);
+}
+.nav__item--active .ph {
+  color: var(--brand-primary);
+}
+.nav__new .ph {
+  color: var(--brand-primary);
+}

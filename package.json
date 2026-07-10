@@ -1,0 +1,42 @@
+{
+  "name": "@neon/core",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "An agent runtime: channels in, agent runs, operator dashboard out.",
+  "engines": {
+    "node": ">=22.19.0 <23 || >=23.11.0"
+  },
+  "bin": {
+    "neon-core": "./dist/src/cli.js"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "prebuild": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "start": "node dist/src/cli.js status",
+    "serve": "node dist/src/cli.js mission-control-serve",
+    "doctor": "npm run check && npm test",
+    "ui:install": "npm --prefix ui ci",
+    "ui:dev": "npm --prefix ui run dev",
+    "ui:build": "npm --prefix ui run build",
+    "ui:test": "npm run ui:install && npm --prefix ui run check && npm --prefix ui run test"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "discord.js": "^14.26.2",
+    "markdown-it": "^14.2.0",
+    "unpdf": "^1.6.2",
+    "ws": "^8.21.0"
+  },
+  "overrides": {
+    "undici": "^6.27.0"
+  }
+}

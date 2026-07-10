@@ -1,0 +1,261 @@
+/* ──────────────────────────────────────────────────────────────────
+   Neon Design System — Foundations
+   Forest Emerald · Warm Dark · Editorial Display
+   ────────────────────────────────────────────────────────────────── */
+
+/* ── Webfonts ─────────────────────────────────────────────────────── */
+/* Space Grotesk via Google Fonts (no licensed master yet) */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+/* DM Serif Display — official static masters, licensed (bundled under the SIL OFL).
+   Relative url() so Vite fingerprints them through the asset pipeline into
+   /control-ui/assets/* (cache-busted, no build-time resolve warning). */
+@font-face {
+  font-family: 'DM Serif Display';
+  src: url('./fonts/DMSerifDisplay-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DM Serif Display';
+  src: url('./fonts/DMSerifDisplay-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* Inter — official variable font, licensed master (bundled under the SIL OFL) */
+@font-face {
+  font-family: 'Inter';
+  src: url('./fonts/InterVariable.ttf') format('truetype-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Geist Mono — official variable font, licensed master (bundled under the SIL OFL) */
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('./fonts/GeistMono-Variable.ttf') format('truetype-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── Light theme (DEFAULT off — dark mode is the brand default) ──── */
+:root, .neon-light {
+  /* Brand */
+  --brand-primary: #1F8E5C;
+  --brand-bright:  #34C788;
+  --brand-faint:   rgba(31,142,92,0.10);
+  --brand-muted:   rgba(31,142,92,0.22);
+
+  /* Neon scale */
+  --neon-50:  #E8F5EE;
+  --neon-100: #C7E6D5;
+  --neon-200: #9FD4B6;
+  --neon-300: #6FBC93;
+  --neon-400: #3FA678;
+  --neon-500: #2EAB73;
+  --neon-600: #1F8E5C;
+  --neon-700: #177248;
+  --neon-800: #115638;
+  --neon-900: #0B3A26;
+
+  /* Warm neutrals */
+  --neutral-0:  #FFFFFF;
+  --neutral-25: #FAFAF9;
+  --neutral-50: #F4F4F2;
+  --neutral-100:#E5E5E2;
+  --neutral-200:#D4D4D0;
+  --neutral-300:#B8B8B4;
+  --neutral-400:#8E8E8A;
+  --neutral-500:#5A5A56;
+  --neutral-600:#3A3A36;
+  --neutral-700:#2C2C2A;
+  --neutral-800:#242422;
+  --neutral-900:#1A1A18;
+
+  /* Sub-brand accents */
+  --subbrand-wispr:    #409CFF;  /* NeoWispr — voice */
+  --subbrand-bar:      #FFB340;  /* NeoBar — HUD */
+  --subbrand-quill:    #7C8AFF;  /* Quill — meetings */
+  --subbrand-nkdesign: #D4845A;  /* NK Design — personal */
+
+  /* Semantic surfaces */
+  --surface-background: #FAFAF9;
+  --surface-card:       #FFFFFF;
+  --surface-sunken:     #F4F4F2;
+  --surface-elevated:   #FFFFFF;
+  --surface-input:      #FFFFFF;
+  --surface-row-hover:  #F4F4F2;
+
+  /* Text */
+  --text-primary:    rgba(0,0,0,0.92);
+  --text-secondary:  rgba(0,0,0,0.62);
+  --text-tertiary:   rgba(0,0,0,0.42);
+  --text-quaternary: rgba(0,0,0,0.26);
+  --text-on-brand:   #FFFFFF;
+  --text-link:       #0A84FF;
+
+  /* Status */
+  --status-success: #1F8E5C;
+  --status-warning: #F0A028;
+  --status-error:   #D94B4B;
+  --status-info:    #0A84FF;
+
+  /* Strokes */
+  --stroke-hairline: rgba(0,0,0,0.10);
+  --stroke-default:  rgba(0,0,0,0.14);
+  --stroke-strong:   rgba(0,0,0,0.22);
+  --stroke-brand:    rgba(31,142,92,0.60);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.10);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.18);
+  --shadow-xl: 0 30px 80px rgba(0,0,0,0.30);
+}
+
+/* ── Dark theme (DEFAULT for Neon products) ──────────────────────── */
+:root, .neon-dark, [data-theme="dark"] {
+  --brand-primary: #2EAB73;
+  --brand-bright:  #34C788;
+  --brand-faint:   rgba(46,171,115,0.10);
+  --brand-muted:   rgba(46,171,115,0.22);
+
+  --surface-background: #1A1A18;     /* warm dark, never #000 */
+  --surface-card:       rgba(255,255,255,0.04);
+  --surface-sunken:     rgba(255,255,255,0.02);
+  --surface-elevated:   rgba(255,255,255,0.06);
+  --surface-input:      rgba(255,255,255,0.04);
+  --surface-row-hover:  rgba(255,255,255,0.04);
+
+  --text-primary:    rgba(255,255,255,0.96);
+  --text-secondary:  rgba(255,255,255,0.66);
+  --text-tertiary:   rgba(255,255,255,0.42);
+  --text-quaternary: rgba(255,255,255,0.26);
+  --text-on-brand:   #FFFFFF;
+  --text-link:       #409CFF;
+
+  --status-success: #2EAB73;
+  --status-warning: #FFB340;
+  --status-error:   #FF6259;
+  --status-info:    #409CFF;
+
+  --stroke-hairline: rgba(255,255,255,0.08);
+  --stroke-default:  rgba(255,255,255,0.14);
+  --stroke-strong:   rgba(255,255,255,0.22);
+  --stroke-brand:    rgba(46,171,115,0.60);
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.20);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.30);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.45);
+  --shadow-xl: 0 30px 80px rgba(0,0,0,0.55);
+}
+
+/* ── Spacing · Radius · Motion ───────────────────────────────────── */
+:root {
+  --space-0: 0;
+  --space-1: 4px;   --space-2: 8px;   --space-3: 12px;
+  --space-4: 16px;  --space-5: 20px;  --space-6: 24px;
+  --space-8: 32px;  --space-10: 40px; --space-12: 48px;
+  --space-16: 64px; --space-20: 80px;
+
+  --radius-sm:  4px;
+  --radius-md:  6px;
+  --radius-lg:  10px;
+  --radius-xl:  14px;
+  --radius-2xl: 18px;
+  --radius-3xl: 22px;          /* macOS app icon squircle */
+  --radius-full: 9999px;
+
+  --duration-instant: 100ms;
+  --duration-fast:    150ms;
+  --duration-normal:  220ms;
+  --duration-slow:    320ms;
+
+  --easing-out:    cubic-bezier(0.2, 0.8, 0.2, 1);
+  --easing-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --easing-spring: cubic-bezier(0.5, 1.5, 0.6, 1);
+}
+
+/* ── Typography — Families ───────────────────────────────────────── */
+:root {
+  --font-display: 'DM Serif Display', Charter, 'Iowan Old Style', Georgia, serif;
+  --font-body:    'Space Grotesk', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  --font-alt:     'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono:    'Geist Mono', 'SF Mono', ui-monospace, 'JetBrains Mono', monospace;
+  --font-system:  -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+/* ── Typographic primitives (atomic classes) ─────────────────────── */
+/*  The brand signature: Mono Eyebrow → Editorial Display              */
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  line-height: 1;
+}
+
+.display {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  color: var(--text-primary);
+}
+
+.display-italic {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+
+/* Display sizes */
+.display-hero-xl   { font-size: 96px; }
+.display-hero      { font-size: 72px; }
+.display-stat      { font-size: 44px; }
+.display-window    { font-size: 32px; }
+.display-section   { font-size: 24px; }
+
+/* Body */
+.body-xl   { font-family: var(--font-body); font-size: 18px; line-height: 1.5;  font-weight: 400; color: var(--text-primary); }
+.body     { font-family: var(--font-body); font-size: 14px; line-height: 1.55; font-weight: 400; color: var(--text-primary); }
+.body-15   { font-family: var(--font-body); font-size: 15px; line-height: 1.55; font-weight: 400; color: var(--text-primary); }
+.body-sm   { font-family: var(--font-body); font-size: 12px; line-height: 1.4;  font-weight: 400; color: var(--text-secondary); }
+.body-button { font-family: var(--font-body); font-size: 13px; line-height: 1; font-weight: 500; }
+.body-label { font-family: var(--font-body); font-size: 12px; line-height: 1.3; font-weight: 500; color: var(--text-secondary); }
+
+/* Mono (metadata, code) */
+.mono-meta { font-family: var(--font-mono); font-size: 11px; font-weight: 400; color: var(--text-tertiary); }
+.mono-time { font-family: var(--font-mono); font-size: 11px; font-weight: 400; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.mono-code { font-family: var(--font-mono); font-size: 13px; line-height: 1.5; color: var(--text-primary); }
+
+/* Semantic element defaults — opt-in via .neon-prose wrapper */
+.neon-prose h1 { font: 400 56px/1.05 var(--font-display); letter-spacing: -0.02em; color: var(--text-primary); margin: 0 0 16px; }
+.neon-prose h2 { font: 400 36px/1.1  var(--font-display); letter-spacing: -0.02em; color: var(--text-primary); margin: 32px 0 12px; }
+.neon-prose h3 { font: 400 24px/1.15 var(--font-display); letter-spacing: -0.02em; color: var(--text-primary); margin: 24px 0 10px; }
+.neon-prose h4 { font: 600 14px/1.3  var(--font-body);    letter-spacing: 0;       color: var(--text-primary); margin: 20px 0 8px; }
+.neon-prose p  { font: 400 15px/1.6  var(--font-body); color: var(--text-secondary); margin: 0 0 12px; }
+.neon-prose code { font: 400 13px/1.5 var(--font-mono); color: var(--text-primary); background: var(--surface-elevated); padding: 1px 5px; border-radius: 4px; }
+.neon-prose a  { color: var(--text-link); text-decoration: none; border-bottom: 1px solid currentColor; }
+
+/* ── Utility — Body wrapper (warm dark by default) ───────────────── */
+.neon-app {
+  background: var(--surface-background);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "ss01", "cv11";
+}

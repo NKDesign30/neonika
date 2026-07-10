@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Actions are pinned to commit shas, not tags. A tag is a mutable pointer: the
+# same `@v4` can resolve to different code tomorrow. Pinning gitleaks by
+# checksum and then trusting a moving tag for the action that checks out the
+# code would be a strange place to stop. (`uses:` takes no variables, so each
+# sha is written out rather than named once.)
+
+jobs:
+  core:
+    name: check + test (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both ends of the supported range in package.json#engines.
+        node: ["22.19.0", "24.x"]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      # `npm test` builds first. The prebuild step wipes dist/, which is what
+      # stops a deleted test file from passing forever as stale compiled output.
+      - run: npm test
+
+  ui:
+    name: ui check + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.x
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      # Installs into ui/ itself — a root `npm ci` does not reach it, which is
+      # how a fresh clone first failed on a missing vite/client type.
+      - run: npm run ui:test
+
+  audit:
+    name: publication audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          # gitleaks scans every commit, not just the tip.
+          fetch-depth: 0
+      - name: Install gitleaks
+        env:
+          VERSION: 8.30.1
+          SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          set -euo pipefail
+          asset="gitleaks_${VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$asset" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/${asset}"
+          # A secret scanner pulled unverified over the network is the hole it
+          # is meant to close.
+          echo "${SHA256}  ${asset}" | sha256sum -c -
+          tar -xzf "$asset" gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+      # The denylist of removed identity tokens is not in the repository: unsalted
+      # hashes of guessable names are a membership oracle. Set the secret to
+      # OSS_AUDIT_DENYLIST (base64 of the file) and the identity check runs here
+      # too. Without it, the audit reports that check as skipped, loudly.
+      - name: Restore the maintainer denylist, if configured
+        env:
+          DENYLIST_B64: ${{ secrets.OSS_AUDIT_DENYLIST }}
+        run: |
+          set -euo pipefail
+          if [ -n "${DENYLIST_B64:-}" ]; then
+            printf '%s' "$DENYLIST_B64" | base64 -d > scripts/oss-audit-denylist.sha256
+            echo "denylist restored"
+          else
+            echo "no denylist secret; the identity check will report as skipped"
+          fi
+      # Tree mode, not --history: on the published branch the history is one
+      # commit, so the tree is the history. The --history run is the maintainer's
+      # gate before the push, where a skipped identity check is a hard failure.
+      - name: Audit
+        run: bash scripts/oss-audit.sh
