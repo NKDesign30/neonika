@@ -22,9 +22,11 @@ import {
 describe("Neonika Doctor", () => {
   it("reports pass when gateway runs prove memory, delivery, agents, and secrets health", async () => {
     const projectRoot = await createTempProjectRoot();
+    const transcriptProjectsDir = join(projectRoot, "transcripts");
 
     try {
       await writeNeonGatewayRun(projectRoot, createDoctorRun("run-doctor-pass", "attached"));
+      await writeTranscriptMarker(transcriptProjectsDir);
       await chmod(resolveGatewayStatePaths(projectRoot).stateRoot, 0o700);
       await writeFile(join(projectRoot, ".env"), "NEON_TEST=[REDACTED]\n", {
         encoding: "utf8",
@@ -41,7 +43,8 @@ describe("Neonika Doctor", () => {
       const snapshot = await createNeonDoctorSnapshot(projectRoot, {
         now: () => new Date("2026-05-31T19:00:00.000Z"),
         env: createReadyDiscordEnv(),
-        referenceRoot
+        referenceRoot,
+        transcriptProjectsDir
       });
       const report = renderNeonDoctorReport(snapshot);
 
@@ -1121,6 +1124,16 @@ async function writeExtensionManifest(
   const manifestPath = join(referenceRoot, "extensions", extensionId, "openclaw.plugin.json");
   await mkdir(dirname(manifestPath), { recursive: true });
   await writeFile(manifestPath, `${JSON.stringify(content, null, 2)}\n`, "utf8");
+}
+
+async function writeTranscriptMarker(projectsDir: string): Promise<void> {
+  const transcriptPath = join(projectsDir, "-Users-example-neonika", "session.jsonl");
+  await mkdir(dirname(transcriptPath), { recursive: true });
+  await writeFile(
+    transcriptPath,
+    `${JSON.stringify({ type: "assistant", message: "deterministic doctor transcript fixture" })}\n`.repeat(4),
+    "utf8"
+  );
 }
 
 // `body` is fixture text only — it is written into a SKILL.md so the doctor's
