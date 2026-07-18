@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -22,6 +22,18 @@ async function runCli(args: readonly string[], cwd = process.cwd()): Promise<str
 }
 
 describe("Neonika CLI runtime entry points", () => {
+  it("exposes global help and the package version through the installed bin contract", async () => {
+    const manifest = JSON.parse(
+      await readFile(join(process.cwd(), "package.json"), "utf8")
+    ) as { readonly version?: unknown };
+    const help = await runCli(["status", "--help"]);
+    const version = await runCli(["--version"]);
+
+    assert.match(help, /^Usage: neonika <command> \[options\]/u);
+    assert.match(help, /neonika status/u);
+    assert.equal(version.trim(), manifest.version);
+  });
+
   it("runs mission-control-filter-smoke with flags through the real top-level dispatch", async () => {
     const stdout = await runCli(["mission-control-filter-smoke", "--status", "done"]);
 

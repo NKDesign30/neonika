@@ -11,14 +11,22 @@
   "bin": {
     "neonika": "./dist/src/cli.js"
   },
+  "files": [
+    "dist/src",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
   "scripts": {
     "check": "tsc --noEmit",
     "prebuild": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build",
     "test": "npm run build && node --test dist/test/*.test.js",
     "start": "node dist/src/cli.js status",
     "serve": "node dist/src/cli.js mission-control-serve",
     "doctor": "npm run check && npm test",
+    "install:smoke": "bash scripts/npm-install-smoke.sh",
     "ui:install": "npm --prefix ui ci",
     "ui:dev": "npm --prefix ui run dev",
     "ui:build": "npm --prefix ui run build",

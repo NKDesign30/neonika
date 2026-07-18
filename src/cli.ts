@@ -1630,18 +1630,26 @@ function loadNeonEnvFile(): void {
 
 loadNeonEnvFile();
 
-const commandName = process.argv[2] ?? "status";
-const command = commands[commandName];
+const cliArgs = process.argv.slice(2);
+const commandName = cliArgs[0] ?? "status";
 
-if (!command) {
-  console.error(`Unknown command: ${commandName}`);
-  console.error(renderHelp());
-  process.exitCode = 1;
+if (cliArgs.includes("-h") || cliArgs.includes("--help")) {
+  console.log(renderHelp());
+} else if (cliArgs.includes("--version")) {
+  console.log(await readNeonikaPackageVersion());
 } else {
-  const output = await command.run();
+  const command = commands[commandName];
 
-  if (output !== undefined) {
-    console.log(output);
+  if (!command) {
+    console.error(`Unknown command: ${commandName}`);
+    console.error(renderHelp());
+    process.exitCode = 1;
+  } else {
+    const output = await command.run();
+
+    if (output !== undefined) {
+      console.log(output);
+    }
   }
 }
 
@@ -1846,7 +1854,36 @@ function renderHelp(): string {
     .map(([name, currentCommand]) => `- ${name}: ${currentCommand.description}`)
     .join("\n");
 
-  return `Usage: neonika <command>\n\n${commandLines}`;
+  return [
+    "Usage: neonika <command> [options]",
+    "",
+    "Global options:",
+    "- -h, --help: Print this help and exit.",
+    "- --version: Print the installed Neonika version and exit.",
+    "",
+    "Quick start:",
+    "- neonika status",
+    "- neonika doctor",
+    "",
+    "Commands:",
+    commandLines
+  ].join("\n");
+}
+
+async function readNeonikaPackageVersion(): Promise<string> {
+  const manifest = JSON.parse(
+    await readFile(new URL("../../package.json", import.meta.url), "utf8")
+  ) as unknown;
+  if (
+    typeof manifest !== "object" ||
+    manifest === null ||
+    !("version" in manifest) ||
+    typeof manifest.version !== "string" ||
+    manifest.version.trim().length === 0
+  ) {
+    throw new Error("Neonika package metadata is missing a version");
+  }
+  return manifest.version;
 }
 
 async function runHarnessSmoke(): Promise<string> {

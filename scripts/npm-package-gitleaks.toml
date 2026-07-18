@@ -1,0 +1,11 @@
+title = "Neonika npm package secret scan"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Exact generated barrel-export symbols. These are public TypeScript identifiers; compact export lines otherwise resemble Discord credentials."
+regexes = [
+  '''^mapDiscordMentionPolicyToChannel$''',
+  '''^NEON_DISCORD_STICKER_POLL_LIMITS$''',
+]

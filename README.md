@@ -18,6 +18,24 @@ delivery is suppressed at the seam, not merely unconfigured. Treat this as
 software you can read, run, and inspect — not as something to point at a
 production channel.
 
+## Install
+
+Requires Node.js 22.19+ (or 23.11+). The repository is private, so the
+installing GitHub account needs access.
+
+```bash
+npm install --global github:NKDesign30/neonika#main
+neonika --help
+neonika status
+```
+
+Upgrade and uninstall use the normal npm lifecycle:
+
+```bash
+npm install --global github:NKDesign30/neonika#main
+npm uninstall --global neonika
+```
+
 ## Quickstart
 
 Requires Node.js 22.19+ (or 23.11+). No database, no services, no API key.
