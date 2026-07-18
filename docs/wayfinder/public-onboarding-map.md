@@ -24,15 +24,15 @@ one local agent world:
 | Ticket | Owner | State | Acceptance proof |
 | --- | --- | --- | --- |
 | WF-01 Audit every public exposure surface | Chaty | done | Tree, history, package, GitHub metadata, Actions, alerts, and commit identities pass the publication audit |
-| WF-02 Publish the audited repository | Chaty | done | Repository is public and the `v0.1.0` baseline is installable |
-| WF-03 Ship the npm install artifact | Chaty | immutable release pending | Exact local `v0.2.2` tarball passes allowlist, leak scan, fresh-prefix install, onboarding, and uninstall; repository release immutability is enabled |
+| WF-02 Publish the audited repository | Chaty | done | Repository is public and the current `v0.2.2` release is installable |
+| WF-03 Ship the npm install artifact | Chaty | done | Immutable public `v0.2.2` passes digest, manifest, leak scan, latest-URL npm install, fresh onboarding, and uninstall |
 | WF-04 Persist a safe Fresh-Install config | Chaty | done | Atomic `0700/0600` setup, idempotent rerun, no secret values persisted |
 | WF-05 Bootstrap local memory | Chaty | done | Fresh SQLite schema opens through onboarding and memory checks |
 | WF-06 Link the owner across channels | Chaty | done | Discord and WhatsApp peer ids resolve to one canonical owner without appearing in reports |
 | WF-07 Onboard the Discord hub | Chaty | done | Explicit allowlists, actual ingress projection, and shared owner session are tested with outbound still cutover-gated |
 | WF-08 Onboard the WhatsApp companion | Chaty | local-green; device pending | QR/auth, strict DM/group policy, persistent replay guard, and shadow ingress are tested; phone scan remains |
-| WF-09 Prove the complete fresh-system flow | Chaty | immutable release pending | Local package/onboard/Doctor/channel/leak gates and public `main` CI are green; public `v0.2.2` asset install and the phone-gated WhatsApp smoke remain |
-| WF-10 Make releases repeatable | Chaty | immutable release pending | Version source, changelog gate, clean manifest, checksum, exact-artifact smoke, immutable-release setting, and tag workflow are implemented |
+| WF-09 Prove the complete fresh-system flow | Chaty | done; human auth gate documented | Package/onboard/Doctor/channel/UI/leak gates, public CI, and immutable latest-asset install are green; the phone-gated WhatsApp smoke remains explicit |
+| WF-10 Make releases repeatable | Chaty | done | Version source, changelog gate, clean manifest, checksum, exact-artifact smoke, immutable-release setting, and tag workflow are proven by `v0.2.2` |
 
 ## Guardrails
 
