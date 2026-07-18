@@ -4,6 +4,10 @@
 
 - Next changes are collected here.
 
+## [0.2.2] - 2026-07-19
+
+- Enabled GitHub release immutability so published tags and assets are protected from later replacement.
+
 ## [0.2.1] - 2026-07-18
 
 - Kept verified release tooling outside the source checkout so the immutable release manifest remains clean.
