@@ -9,10 +9,6 @@ An agent runtime in TypeScript: it takes messages in from a channel, runs an
 agent against them, and shows an operator what happened. Runs are persisted,
 redacted, and replayable. Nothing is sent back out until you explicitly arm it.
 
-Copied or adapted modules and their sources are listed in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Comments that say `upstream`
-identify adapted source.
-
 **Status: shadow.** The runtime observes, records, and reports. Outbound
 delivery is suppressed at the seam, not merely unconfigured. Treat this as
 software you can read, run, and inspect — not as something to point at a
@@ -20,11 +16,10 @@ production channel.
 
 ## Install
 
-Requires Node.js 22.19+ (or 23.11+). The repository is private, so the
-installing GitHub account needs access.
+Requires Node.js 22.19+ (or 23.11+).
 
 ```bash
-npm install --global github:NKDesign30/neonika#main
+npm install --global https://github.com/NKDesign30/neonika/releases/latest/download/neonika.tgz
 neonika --help
 neonika status
 ```
@@ -32,7 +27,7 @@ neonika status
 Upgrade and uninstall use the normal npm lifecycle:
 
 ```bash
-npm install --global github:NKDesign30/neonika#main
+npm install --global https://github.com/NKDesign30/neonika/releases/latest/download/neonika.tgz
 npm uninstall --global neonika
 ```
 

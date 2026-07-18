@@ -107,7 +107,7 @@ check "Discord snowflakes outside the placeholder ranges"
 #    block is the one .gitleaks.toml allowlists as well, and those two must not
 #    drift. The three literal ids below exist only here; gitleaks has no
 #    snowflake rule, so there is nothing on its side to mirror them.
-if hits=$(git grep -ohE '[0-9]{17,19}' -- . ':!scripts/oss-audit.sh' 2>/dev/null \
+if hits=$(git grep -I -ohE '[0-9]{17,19}' -- . ':!scripts/oss-audit.sh' 2>/dev/null \
     | sort -u \
     | grep -vE '^(9000000000000000[0-9]{2}|112233445566778899|123456789012345678|999999999999999999)$' ); then
   fail "non-placeholder snowflakes:"
