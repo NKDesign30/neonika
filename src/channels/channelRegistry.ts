@@ -2,13 +2,12 @@
  * Neon channel registry.
  *
  * Read-only projection that folds the static channel manifest catalog
- * (`channelManifest.ts`) together with the *live* Discord route-inspection
- * snapshot (`gateway/routeInspection.ts`). Upstream exposes a runtime channel
+ * (`channelManifest.ts`) together with Discord route inspection and WhatsApp
+ * linked-session readiness. Upstream exposes a runtime channel
  * registry (`src/channels/registry.ts`) that lists registered channel plugins
  * and their meta; Neon's version is intentionally narrower and safer: it never
- * loads a transport, never logs in, and never sends. Discord carries its real
- * configured auth/probe posture; every other platform is reported as a gated
- * inventory entry with outbound hard-suppressed.
+ * loads a transport, never logs in, and never sends. Discord and WhatsApp carry
+ * real configured posture; every other platform is a gated inventory entry.
  *
  * This is the single inventory consumed by the `channel-registry` CLI, the
  * `/api/neon-channels` endpoint, the Doctor channel-manifest check, and the
@@ -28,8 +27,9 @@ import {
   type TNeonGatewayChannelAuthState
 } from "../gateway/routeInspection.js";
 import type { TNeonDiscordRouteProbeState } from "../gateway/discordRouteProbe.js";
+import { inspectNeonWhatsAppAuthState } from "./whatsappAuth.js";
 
-/** Overall registry posture: driven by the one live channel (Discord). */
+/** Overall registry posture across enabled live channels. */
 export type TNeonChannelRegistryState = "ready" | "needs-config" | "unsafe";
 
 /** Outbound posture per channel — always suppressed in shadow mode. */
@@ -43,7 +43,7 @@ export type TNeonChannelDeliveryPosture = "suppressed";
 export interface INeonChannelRuntimeStatus {
   readonly liveStatus: TNeonChannelLiveStatus;
   readonly delivery: TNeonChannelDeliveryPosture;
-  readonly inbound: "live-tap" | "gated";
+  readonly inbound: "live-tap" | "disabled" | "gated";
   readonly authState?: TNeonGatewayChannelAuthState;
   readonly probeState?: TNeonDiscordRouteProbeState;
   readonly notes: readonly string[];
@@ -78,11 +78,13 @@ export async function createNeonChannelRegistrySnapshot(
   options: ICreateNeonChannelRegistrySnapshotOptions = {}
 ): Promise<INeonChannelRegistrySnapshot> {
   const now = options.now ?? (() => new Date());
+  const env = options.env ?? process.env;
   const routeInspection = await createNeonGatewayRouteInspectionSnapshot(projectRoot, {
     ...(options.env ? { env: options.env } : {}),
     now
   });
   const discordAuth = routeInspection.authStatus.find((auth) => auth.channel === "discord");
+  const whatsappRuntime = await buildWhatsAppRuntime(env);
   const entries = listNeonChannelManifests().map((manifest): INeonChannelRegistryEntry => {
     if (manifest.id === "discord") {
       return {
@@ -92,6 +94,9 @@ export async function createNeonChannelRegistrySnapshot(
           routeInspection.discordProbe.state
         )
       };
+    }
+    if (manifest.id === "whatsapp") {
+      return { manifest, runtime: whatsappRuntime };
     }
 
     return {
@@ -103,7 +108,10 @@ export async function createNeonChannelRegistrySnapshot(
   return {
     generatedAt: now().toISOString(),
     projectRoot,
-    state: resolveRegistryState(discordAuth?.state ?? "needs-config"),
+    state: resolveRegistryState(
+      discordAuth?.state ?? "needs-config",
+      whatsappRuntime.authState
+    ),
     totals: buildTotals(),
     entries,
     referenceImplementation: "src/channels/registry.ts"
@@ -117,7 +125,7 @@ export function renderNeonChannelRegistryReport(
     const runtime = entry.runtime;
     const liveDetail =
       runtime.liveStatus === "live"
-        ? `auth=${runtime.authState ?? "needs-config"} probe=${runtime.probeState ?? "unknown"}`
+        ? `auth=${runtime.authState ?? "disabled"} probe=${runtime.probeState ?? "n/a"}`
         : `login=${entry.manifest.loginPolicy}`;
 
     return `- ${entry.manifest.id}: ${runtime.liveStatus} inbound=${runtime.inbound} delivery=${runtime.delivery} ${liveDetail}`;
@@ -129,6 +137,50 @@ export function renderNeonChannelRegistryReport(
     "Routes:",
     ...lines
   ].join("\n");
+}
+
+async function buildWhatsAppRuntime(
+  env: Readonly<Record<string, string | undefined>>
+): Promise<INeonChannelRuntimeStatus> {
+  if (!isReadyLike(env["NEON_WHATSAPP_ENABLED"])) {
+    return {
+      liveStatus: "live",
+      delivery: "suppressed",
+      inbound: "disabled",
+      notes: ["Live owner-only shadow tap is available but not enabled."]
+    };
+  }
+  const authPath = env["NEON_WHATSAPP_AUTH_DIR"]?.trim();
+  const ownerPeer = env["NEON_WHATSAPP_OWNER_PEER"]?.trim();
+  if (!authPath || !ownerPeer) {
+    return {
+      liveStatus: "live",
+      delivery: "suppressed",
+      inbound: "disabled",
+      authState: "needs-config",
+      notes: ["WhatsApp is enabled but owner link or private auth path is missing."]
+    };
+  }
+  const evidence = await inspectNeonWhatsAppAuthState(authPath);
+  return evidence.state === "linked"
+    ? {
+        liveStatus: "live",
+        delivery: "suppressed",
+        inbound: "live-tap",
+        authState: "ready",
+        notes: ["Linked owner-only shadow tap; groups disabled; replies suppressed."]
+      }
+    : {
+        liveStatus: "live",
+        delivery: "suppressed",
+        inbound: "disabled",
+        authState: evidence.state === "invalid" ? "unsafe" : "needs-config",
+        notes: [
+          evidence.state === "invalid"
+            ? "WhatsApp linked-device auth state is unsafe or invalid."
+            : "WhatsApp linked-device login is pending."
+        ]
+      };
 }
 
 function buildDiscordRuntime(
@@ -157,17 +209,22 @@ function buildGatedRuntime(manifest: INeonChannelManifest): INeonChannelRuntimeS
 }
 
 function resolveRegistryState(
-  discordAuth: TNeonGatewayChannelAuthState
+  discordAuth: TNeonGatewayChannelAuthState,
+  whatsappAuth: TNeonGatewayChannelAuthState | undefined
 ): TNeonChannelRegistryState {
-  if (discordAuth === "unsafe") {
+  if (discordAuth === "unsafe" || whatsappAuth === "unsafe") {
     return "unsafe";
   }
 
-  if (discordAuth === "needs-config") {
+  if (discordAuth === "needs-config" || whatsappAuth === "needs-config") {
     return "needs-config";
   }
 
   return "ready";
+}
+
+function isReadyLike(value: string | undefined): boolean {
+  return ["1", "true", "ready", "yes", "on"].includes(value?.trim().toLowerCase() ?? "");
 }
 
 function buildTotals(): INeonChannelRegistryTotals {

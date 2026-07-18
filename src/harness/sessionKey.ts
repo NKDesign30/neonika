@@ -5,6 +5,18 @@ import type { ICodexSessionBinding } from "./types.js";
 
 export function deriveCodexSessionKey(binding: ICodexSessionBinding): string {
   const workspaceHash = hashWorkspace(binding.workspaceRoot);
+  if (binding.sessionPeerKey) {
+    const peerHash = createHash("sha256").update(binding.sessionPeerKey).digest("hex").slice(0, 16);
+    return [
+      "neon",
+      "codex",
+      segment(binding.agentId),
+      "linked-peer",
+      peerHash,
+      workspaceHash,
+      binding.mode
+    ].join(":");
+  }
   const guildSegment = binding.guildId ? segment(binding.guildId) : "dm";
   const threadSegment = binding.threadId ? segment(binding.threadId) : "main";
 

@@ -12,6 +12,8 @@ export interface ICodexSessionBinding {
   readonly agentId: string;
   readonly workspaceRoot: string;
   readonly mode: THarnessRunMode;
+  /** Explicit, already leak-safe peer key for an identity linked across channels. */
+  readonly sessionPeerKey?: string;
 }
 
 export interface IMemoryAttachment {

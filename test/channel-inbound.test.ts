@@ -105,7 +105,7 @@ describe("generic channel inbound decision", () => {
 });
 
 describe("generic channel outbound policy", () => {
-  it("hard-suppresses every manifest-only platform with no send path", () => {
+  it("hard-suppresses every non-Discord platform, including live WhatsApp inbound", () => {
     for (const platform of neonChannelPlatforms) {
       if (platform === "discord") {
         continue;
@@ -115,6 +115,22 @@ describe("generic channel outbound policy", () => {
       assert.equal(policy.canSend, false);
       assert.equal(policy.canary, undefined);
     }
+  });
+
+  it("never lets the Discord canary flags open WhatsApp outbound", () => {
+    const policy = resolveNeonChannelOutboundPolicy("whatsapp", {
+      env: {
+        NEON_DISCORD_BOT_TOKEN: "present-not-a-real-token",
+        NEON_CUTOVER_STAGE: "canary",
+        NEON_CUTOVER_CANARY_APPROVED: "ready",
+        NEON_CUTOVER_OUTBOUND_ENABLED: "ready",
+        NEON_CUTOVER_CANARY_CHANNELS: "900000000000000005"
+      }
+    });
+
+    assert.equal(policy.mode, "suppressed");
+    assert.equal(policy.canSend, false);
+    assert.equal(policy.canary, undefined);
   });
 
   it("keeps Discord canary-gated and closed by default", () => {

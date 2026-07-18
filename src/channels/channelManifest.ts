@@ -9,10 +9,9 @@
  * plugin implementations (which upstream deliberately keeps "heavy" because they
  * pull in live transports, monitors, and web login).
  *
- * Why static and gated, not live: the project's shadow contract keeps Discord as
- * the only live channel. Telegram/Slack/WhatsApp/Matrix/Teams are inventoried as
- * `gated` capabilities — modeled, route-inspectable, Doctor-checkable — but they
- * never open a new live login and never send. This file is the source of truth
+ * Why static manifests: the project's shadow contract keeps outbound delivery
+ * suppressed even for wired inbound transports. Discord and WhatsApp have real
+ * shadow taps; Telegram/Slack/Matrix/Teams remain gated capabilities. This file is the source of truth
  * for "what channels exist and what they can do", consumed by the channel
  * registry, route inspection, Doctor, and Mission Control.
  */
@@ -34,10 +33,10 @@ export type TNeonChannelPlatform =
 export type TNeonChannelLiveStatus = "live" | "gated";
 
 /**
- * Inbound transport binding. Only Discord has a real adapter; every other
- * platform is `manifest-only` until a future, separately-approved slice.
+ * Inbound transport binding. Discord and WhatsApp have real adapters; every
+ * other platform is `manifest-only` until a future, separately-approved slice.
  */
-export type TNeonChannelTransport = "discord.js" | "manifest-only";
+export type TNeonChannelTransport = "discord.js" | "baileys" | "manifest-only";
 
 /** How a platform names its top-level, account-scoped container. */
 export type TNeonChannelWorkspaceScope =
@@ -49,11 +48,13 @@ export type TNeonChannelWorkspaceScope =
   | "team"; // Microsoft Teams
 
 /**
- * Login posture. Only Discord may reuse an existing live session; every other
- * platform is hard-pinned to `no-new-login` to enforce the goal constraint
- * "keine neuen Live-Logins außer Discord".
+ * Login posture. Discord uses a bot session, WhatsApp uses an explicit terminal
+ * linked-device QR, and every gated platform is pinned to `no-new-login`.
  */
-export type TNeonChannelLoginPolicy = "existing-discord-session" | "no-new-login";
+export type TNeonChannelLoginPolicy =
+  | "existing-discord-session"
+  | "linked-device-qr"
+  | "no-new-login";
 
 /** Inbound message-handling capabilities a platform exposes. */
 export interface INeonChannelInboundCapabilities {
@@ -118,8 +119,8 @@ const richOutbound: INeonChannelOutboundCapabilities = {
 };
 
 /**
- * The channel capability catalog. Discord is the one live channel; the rest are
- * gated manifests mirroring upstream's per-platform channel plugins. Capability
+ * The channel capability catalog. Discord and WhatsApp are live shadow-ingress
+ * channels; the rest are gated manifests. Capability
  * flags reflect well-established platform facts (e.g. WhatsApp has no native
  * slash commands and only inline-style markdown), not fabricated data.
  *
@@ -227,13 +228,13 @@ export const neonChannelManifests: readonly INeonChannelManifest[] = Object.free
   {
     id: "whatsapp",
     label: "WhatsApp",
-    blurb: "Gated manifest: WhatsApp Web chats and groups.",
-    liveStatus: "gated",
-    transport: "manifest-only",
+    blurb: "Live owner-only shadow companion over a linked WhatsApp Web session.",
+    liveStatus: "live",
+    transport: "baileys",
     workspaceScope: "account",
     markdownCapable: false,
     requiresLogin: true,
-    loginPolicy: "no-new-login",
+    loginPolicy: "linked-device-qr",
     allowlistSupported: true,
     mentionPolicySupported: true,
     inbound: {

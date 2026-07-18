@@ -119,6 +119,63 @@ export {
   mapDiscordMentionPolicyToChannel
 } from "./channels/discordChannelAdapter.js";
 export {
+  resolveNeonCanonicalPeer,
+  type INeonCanonicalPeerResolution,
+  type INeonChannelPeerInput
+} from "./channels/channelIdentity.js";
+export {
+  assertNeonWhatsAppAuthLinked,
+  assertNeonWhatsAppCredentialsPersisted,
+  inspectNeonWhatsAppAuthState,
+  type INeonWhatsAppAuthEvidence,
+  type TNeonWhatsAppAuthReason,
+  type TNeonWhatsAppAuthState
+} from "./channels/whatsappAuth.js";
+export {
+  createSilentNeonWhatsAppLogger,
+  hardenNeonWhatsAppAuthDirectory,
+  loadNeonWhatsAppRuntime,
+  renderNeonWhatsAppLoginReport,
+  runNeonWhatsAppLogin,
+  type INeonBaileysRuntime,
+  type INeonWhatsAppLoginResult,
+  type INeonWhatsAppSocket,
+  type IRunNeonWhatsAppLoginOptions
+} from "./channels/whatsappLogin.js";
+export {
+  decideNeonWhatsAppInbound,
+  runNeonWhatsAppShadowIngress,
+  type INeonWhatsAppInboundMessage,
+  type IRunNeonWhatsAppShadowIngressOptions,
+  type TNeonWhatsAppDropReason,
+  type TNeonWhatsAppInboundDecision
+} from "./channels/whatsappInbound.js";
+export {
+  startNeonWhatsAppShadowTap,
+  type INeonWhatsAppShadowTapHandle,
+  type INeonWhatsAppTapCloseResult,
+  type INeonWhatsAppTapStats,
+  type IStartNeonWhatsAppShadowTapOptions,
+  type TNeonWhatsAppTapEvent
+} from "./channels/whatsappShadowTap.js";
+export {
+  createNeonWhatsAppReplayStore,
+  type ICreateNeonWhatsAppReplayStoreOptions,
+  type INeonWhatsAppReplayStore
+} from "./channels/whatsappReplayStore.js";
+export { installNeonWhatsAppLibsignalLogGuard } from "./channels/whatsappLogGuard.js";
+export {
+  createNeonWhatsAppStatusSnapshot,
+  renderNeonWhatsAppStatusReport,
+  type INeonWhatsAppStatusSnapshot,
+  type TNeonWhatsAppStatusState
+} from "./channels/whatsappStatus.js";
+export {
+  acquireNeonWhatsAppTapLock,
+  type IAcquireNeonWhatsAppTapLockOptions,
+  type INeonWhatsAppTapLock
+} from "./channels/whatsappTapLock.js";
+export {
   createNeonAutomationSnapshot,
   evaluateNeonCronRunIntent,
   renderNeonAutomationCronJobReport,
@@ -540,6 +597,28 @@ export {
   type TNeonOnboardingStepId,
   type TNeonOnboardingStepState
 } from "./onboarding/neonOnboarding.js";
+export {
+  neonSetupConfigFile,
+  neonSetupConfigRootEnvKey,
+  neonSetupDiscordTokenEnvKey,
+  applyNeonSetupEnvironment,
+  readNeonSetupConfig,
+  renderNeonSetupReport,
+  resolveNeonSetupPaths,
+  runNeonSetup,
+  type INeonSetupChannelInput,
+  type INeonSetupConfig,
+  type INeonSetupDiscordInput,
+  type INeonSetupEnvironmentResult,
+  type INeonSetupIdentityLink,
+  type INeonSetupPaths,
+  type INeonSetupResult,
+  type INeonSetupWhatsAppInput,
+  type IRunNeonSetupOptions,
+  type TNeonSetupChannel,
+  type TNeonSetupState,
+  type TNeonWhatsAppMode
+} from "./onboarding/neonSetup.js";
 export {
   classifyOnePasswordSecretRef,
   countOnePasswordSecretRefs,

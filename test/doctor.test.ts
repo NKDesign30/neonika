@@ -113,7 +113,7 @@ describe("Neonika Doctor", () => {
     }
   });
 
-  it("inventories the channel manifest catalog with one live channel (Discord)", async () => {
+  it("inventories the channel manifest catalog with Discord and WhatsApp live", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "neonika-doctor-channels-"));
 
     try {
@@ -125,8 +125,8 @@ describe("Neonika Doctor", () => {
 
       assert.ok(channelManifest);
       assert.equal(channelManifest.state, "pass");
-      assert.match(channelManifest.summary, /1 live \(discord\)/);
-      assert.ok(channelManifest.details.some((detail) => detail.includes("total=6 live=1 gated=5")));
+      assert.match(channelManifest.summary, /2 live \(discord,whatsapp\)/);
+      assert.ok(channelManifest.details.some((detail) => detail.includes("total=6 live=2 gated=4")));
       assert.ok(
         channelManifest.details.some((detail) =>
           detail.includes("telegram=gated") && detail.includes("login=no-new-login")

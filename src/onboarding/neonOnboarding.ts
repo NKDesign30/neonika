@@ -10,16 +10,27 @@ import {
   type TNeonSecretInputStatus,
   type TOnePasswordSecretRefReachability
 } from "../secrets/secretRefs.js";
+import {
+  inspectNeonWhatsAppAuthState,
+  type TNeonWhatsAppAuthState
+} from "../channels/whatsappAuth.js";
+import {
+  readNeonSetupConfig,
+  resolveNeonSetupPaths,
+  type INeonSetupConfig
+} from "./neonSetup.js";
 
 export type TNeonOnboardingState = "ready-for-discord-smoke" | "needs-action";
 export type TNeonOnboardingStepState = "pass" | "warn" | "action";
 
 export type TNeonOnboardingStepId =
   | "workspace"
+  | "identity"
   | "gateway"
   | "agents"
   | "memory"
   | "discord"
+  | "whatsapp"
   | "doctor";
 
 export interface INeonOnboardingEnvPreview {
@@ -35,9 +46,6 @@ export interface INeonOnboardingEnvPreview {
 }
 
 export interface INeonOnboardingConfigPreview {
-  readonly projectRoot: string;
-  readonly stateRoot: string;
-  readonly gatewayRunsPath: string;
   readonly command: "discord-shadow-tap";
   readonly env: readonly INeonOnboardingEnvPreview[];
   readonly secretsPrinted: false;
@@ -55,6 +63,8 @@ export interface INeonOnboardingSnapshot {
   readonly generatedAt: string;
   readonly state: TNeonOnboardingState;
   readonly readyForDiscordSmoke: boolean;
+  readonly readyForWhatsAppLogin: boolean;
+  readonly whatsappSessionLinked: boolean;
   readonly configPreview: INeonOnboardingConfigPreview;
   readonly steps: readonly INeonOnboardingStep[];
 }
@@ -63,6 +73,7 @@ export interface ICreateNeonOnboardingSnapshotOptions {
   readonly now?: () => Date;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly memorySearchCommandPath?: string;
+  readonly configRoot?: string;
 }
 
 // Same contract as neonMemory.ts: the CLI memory backend is opt-in via env, so a
@@ -81,30 +92,46 @@ export async function createNeonOnboardingSnapshot(
 ): Promise<INeonOnboardingSnapshot> {
   const env = options.env ?? process.env;
   const paths = resolveGatewayStatePaths(projectRoot);
-  const [workspaceReady, memoryReady, gatewayStatus, doctor] = await Promise.all([
+  const setupPaths = resolveNeonSetupPaths(options.configRoot, env);
+  const memorySearchPath = options.memorySearchCommandPath ?? env[memorySearchCommandEnvKey]?.trim() ?? "";
+  const memoryDbPath = env["NEON_MEMORY_DB_PATH"]?.trim() ?? "";
+  const [workspaceReady, memorySearchReady, memoryDbReady, gatewayStatus, doctor, setupConfig, whatsappSessionLinked] = await Promise.all([
     fileExists(join(paths.projectRoot, "package.json")),
-    fileExists(options.memorySearchCommandPath ?? env[memorySearchCommandEnvKey]?.trim() ?? ""),
+    fileExists(memorySearchPath),
+    fileExists(memoryDbPath),
     readNeonGatewayStatus(projectRoot),
-    createNeonDoctorSnapshot(projectRoot)
+    createNeonDoctorSnapshot(projectRoot, { env }),
+    readNeonSetupConfig(options.configRoot, env),
+    inspectNeonWhatsAppAuthState(setupPaths.whatsappAuthPath)
   ]);
+  const memoryReady = memorySearchReady || memoryDbReady;
   const agents = createNeonAgentsSnapshot();
-  const configPreview = createConfigPreview(paths.projectRoot, paths.stateRoot, paths.runsPath, env);
+  const configPreview = createConfigPreview(env, setupConfig);
   const steps = [
     buildWorkspaceStep(workspaceReady),
+    buildIdentityStep(setupConfig),
     buildGatewayStep(gatewayStatus.runCount),
     buildAgentsStep(agents.agents.length, agents.defaultAgentId),
     buildMemoryStep(memoryReady),
-    buildDiscordStep(configPreview.env),
+    buildDiscordStep(configPreview.env, setupConfig),
+    buildWhatsAppStep(setupConfig, whatsappSessionLinked.state),
     buildDoctorStep(doctor.state)
   ];
   const readyForDiscordSmoke = steps
-    .filter((step) => step.id !== "gateway" && step.id !== "doctor")
+    .filter((step) => ["workspace", "identity", "agents", "memory", "discord"].includes(step.id))
     .every((step) => step.state === "pass");
+  const whatsapp = setupConfig?.channels.whatsapp;
+  const readyForWhatsAppLogin =
+    whatsapp?.enabled === true &&
+    whatsapp.ownerPeerId !== undefined &&
+    whatsapp.groupPolicy === "disabled";
 
   return {
     generatedAt: (options.now?.() ?? new Date()).toISOString(),
     state: readyForDiscordSmoke ? "ready-for-discord-smoke" : "needs-action",
     readyForDiscordSmoke,
+    readyForWhatsAppLogin,
+    whatsappSessionLinked: whatsappSessionLinked.state === "linked",
     configPreview,
     steps
   };
@@ -120,26 +147,53 @@ export function renderNeonOnboardingReport(snapshot: INeonOnboardingSnapshot): s
   return [
     `Neonika Onboarding: ${snapshot.state}`,
     `Ready for Discord smoke: ${snapshot.readyForDiscordSmoke ? "yes" : "no"}`,
+    `Ready for WhatsApp login: ${snapshot.readyForWhatsAppLogin ? "yes" : "no"}`,
+    `WhatsApp session linked: ${snapshot.whatsappSessionLinked ? "yes" : "no"}`,
     `Config preview: ${snapshot.configPreview.command}, secretsPrinted=${String(snapshot.configPreview.secretsPrinted)}`,
-    `Project: ${snapshot.configPreview.projectRoot}`,
     ...snapshot.configPreview.env.map((entry) => `${entry.name}: ${entry.status}`),
     ...stepLines
   ].join("\n");
 }
 
 function createConfigPreview(
-  projectRoot: string,
-  stateRoot: string,
-  runsPath: string,
-  env: Readonly<Record<string, string | undefined>>
+  env: Readonly<Record<string, string | undefined>>,
+  setupConfig: INeonSetupConfig | undefined
 ): INeonOnboardingConfigPreview {
+  const configuredEnv: Readonly<Record<string, string | undefined>> = {
+    ...env,
+    ...(setupConfig?.channels.discord.allowedGuilds.length
+      ? { NEON_DISCORD_ALLOWED_GUILDS: "configured" }
+      : {}),
+    ...(setupConfig?.channels.discord.allowedChannels.length
+      ? { NEON_DISCORD_ALLOWED_CHANNELS: "configured" }
+      : {})
+  };
   return {
-    projectRoot,
-    stateRoot,
-    gatewayRunsPath: runsPath,
     command: "discord-shadow-tap",
-    env: discordEnvNames.map((name) => buildEnvPreview(name, env[name])),
+    env: discordEnvNames.map((name) => buildEnvPreview(name, configuredEnv[name])),
     secretsPrinted: false
+  };
+}
+
+function buildIdentityStep(config: INeonSetupConfig | undefined): INeonOnboardingStep {
+  if (config === undefined) {
+    return {
+      id: "identity",
+      label: "Identity",
+      state: "action",
+      summary: "No private owner identity has been configured.",
+      recovery: ["Run neonika onboard."]
+    };
+  }
+  return {
+    id: "identity",
+    label: "Identity",
+    state: config.identity.links.length > 0 ? "pass" : "warn",
+    summary:
+      config.identity.links.length > 0
+        ? `${config.identity.links.length} explicit channel identity link(s).`
+        : "Owner identity exists, but no channel peer is linked.",
+    recovery: config.identity.links.length > 0 ? [] : ["Run neonika onboard --interactive to link a channel peer."]
   };
 }
 
@@ -196,14 +250,38 @@ function buildMemoryStep(memoryReady: boolean): INeonOnboardingStep {
     id: "memory",
     label: "Memory",
     state: memoryReady ? "pass" : "action",
-    summary: memoryReady ? "memory-search command is available." : "memory-search command is missing.",
+    summary: memoryReady ? "Local memory backend is available." : "Local memory backend is missing.",
     recovery: memoryReady
       ? []
-      : [`Point ${memorySearchCommandEnvKey} at an executable memory-search command (optional).`]
+      : [
+          "Run neonika onboard to create local SQLite memory.",
+          `Alternatively point ${memorySearchCommandEnvKey} at an executable memory-search command.`
+        ]
   };
 }
 
-function buildDiscordStep(envPreview: readonly INeonOnboardingEnvPreview[]): INeonOnboardingStep {
+function buildDiscordStep(
+  envPreview: readonly INeonOnboardingEnvPreview[],
+  config: INeonSetupConfig | undefined
+): INeonOnboardingStep {
+  if (config?.channels.discord.enabled !== true) {
+    return {
+      id: "discord",
+      label: "Discord",
+      state: "action",
+      summary: "Discord is not configured as the primary hub.",
+      recovery: ["Run neonika onboard --interactive and configure Discord."]
+    };
+  }
+  if (config.channels.discord.ownerPeerId === undefined) {
+    return {
+      id: "discord",
+      label: "Discord",
+      state: "action",
+      summary: "Discord hub has no explicit owner identity link.",
+      recovery: ["Run neonika onboard --discord --discord-owner <Discord user id>."]
+    };
+  }
   const missing = envPreview.filter((entry) => !entry.present).map((entry) => entry.name);
   // Present op:// refs that cannot structurally resolve — flagged without ever
   // reading or echoing the secret value (only the env var name surfaces).
@@ -239,6 +317,50 @@ function buildDiscordStep(envPreview: readonly INeonOnboardingEnvPreview[]): INe
     state: "pass",
     summary: "Discord shadow tap env is ready.",
     recovery: []
+  };
+}
+
+function buildWhatsAppStep(
+  config: INeonSetupConfig | undefined,
+  authState: TNeonWhatsAppAuthState
+): INeonOnboardingStep {
+  const whatsapp = config?.channels.whatsapp;
+  if (whatsapp?.enabled !== true) {
+    return {
+      id: "whatsapp",
+      label: "WhatsApp",
+      state: "warn",
+      summary: "WhatsApp companion is skipped.",
+      recovery: ["Run neonika onboard --interactive to configure the companion."]
+    };
+  }
+  if (whatsapp.ownerPeerId === undefined) {
+    return {
+      id: "whatsapp",
+      label: "WhatsApp",
+      state: "action",
+      summary: "WhatsApp companion has no explicit owner link.",
+      recovery: ["Run neonika onboard --whatsapp --whatsapp-owner <E.164 number>."]
+    };
+  }
+  if (authState === "invalid") {
+    return {
+      id: "whatsapp",
+      label: "WhatsApp",
+      state: "action",
+      summary: "WhatsApp linked-device auth state is unsafe or invalid.",
+      recovery: ["Repair the private auth state, then run neonika whatsapp-login again."]
+    };
+  }
+  const sessionLinked = authState === "linked";
+  return {
+    id: "whatsapp",
+    label: "WhatsApp",
+    state: sessionLinked ? "pass" : "action",
+    summary: sessionLinked
+      ? "WhatsApp linked-device state is present."
+      : "WhatsApp access policy is ready; linked-device login is pending.",
+    recovery: sessionLinked ? [] : ["Complete the WhatsApp linked-device QR login."]
   };
 }
 

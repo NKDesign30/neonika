@@ -24,25 +24,29 @@ describe("Neon channel manifest catalog", () => {
     assert.equal(neonChannelManifests[0]?.id, "discord");
   });
 
-  it("keeps exactly one live channel (Discord) and gates the rest", () => {
+  it("keeps Discord and WhatsApp live for shadow ingress and gates the rest", () => {
     const totals = summarizeNeonChannelManifests();
 
     assert.equal(totals.total, 6);
-    assert.equal(totals.live, 1);
-    assert.equal(totals.gated, 5);
+    assert.equal(totals.live, 2);
+    assert.equal(totals.gated, 4);
 
     const live = neonChannelManifests.filter((manifest) => manifest.liveStatus === "live");
     assert.deepEqual(
       live.map((manifest) => manifest.id),
-      ["discord"]
+      ["discord", "whatsapp"]
     );
   });
 
-  it("only lets Discord reuse an existing session; every other platform is no-new-login", () => {
+  it("allows only the two wired login policies; every gated platform is no-new-login", () => {
     for (const manifest of neonChannelManifests) {
       if (manifest.id === "discord") {
         assert.equal(manifest.loginPolicy, "existing-discord-session");
         assert.equal(manifest.transport, "discord.js");
+      } else if (manifest.id === "whatsapp") {
+        assert.equal(manifest.loginPolicy, "linked-device-qr");
+        assert.equal(manifest.transport, "baileys");
+        assert.equal(manifest.liveStatus, "live");
       } else {
         assert.equal(
           manifest.loginPolicy,

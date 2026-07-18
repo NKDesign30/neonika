@@ -210,6 +210,7 @@ export function createSessionBindingFromGatewayMessage(
     // Write-mode gate: a `write` request only survives behind an explicit env
     // flag; otherwise it is forced to read-only (see resolveNeonHarnessRunMode).
     mode: resolveNeonHarnessRunMode(message.mode, env).mode,
+    ...(message.sessionPeerKey ? { sessionPeerKey: message.sessionPeerKey } : {}),
     ...(message.guildId ? { guildId: message.guildId } : {}),
     ...(message.threadId ? { threadId: message.threadId } : {})
   };

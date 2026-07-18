@@ -21,8 +21,37 @@ Requires Node.js 22.19+ (or 23.11+).
 ```bash
 npm install --global https://github.com/NKDesign30/neonika/releases/latest/download/neonika.tgz
 neonika --help
-neonika status
+neonika onboard
+neonika onboarding-smoke
 ```
+
+`neonika onboard` is an interactive first-use wizard in a terminal. For CI or
+headless hosts, use `neonika onboard --yes` and add channel settings later. The
+wizard creates a private local config, bootstraps SQLite memory, links an
+explicit owner identity across configured channels, and keeps outbound delivery
+suppressed. Tokens remain environment variables and are never written to the
+config file.
+
+Discord is configured as the primary hub. WhatsApp is configured as a linked
+companion with DMs allowlisted to the owner and groups disabled by default. The
+wizard reports WhatsApp login as pending until a real linked-device session has
+been verified.
+
+After onboarding, link the companion from an interactive terminal and scan the
+QR in WhatsApp under **Linked devices**:
+
+```bash
+neonika whatsapp-login
+neonika whatsapp-status
+neonika onboarding-smoke
+neonika whatsapp-shadow-tap
+```
+
+The tap accepts only the explicitly linked owner, ignores history replay,
+deduplicates message ids across restarts, attaches the same local memory used by
+Discord, and records a terminal shadow run. Start both channel taps from the
+same workspace so they resolve to the same owner session. The WhatsApp tap does
+not send a reply.
 
 Upgrade and uninstall use the normal npm lifecycle:
 
@@ -36,7 +65,7 @@ npm uninstall --global neonika
 Requires Node.js 22.19+ (or 23.11+). No database, no services, no API key.
 
 ```bash
-git clone <this repo> && cd neonika
+git clone https://github.com/NKDesign30/neonika.git && cd neonika
 npm ci
 npm run build
 node dist/src/cli.js status

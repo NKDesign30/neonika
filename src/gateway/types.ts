@@ -56,6 +56,7 @@ export interface INeonGatewayInboundMessage {
   readonly agentId: string;
   readonly workspaceRoot: string;
   readonly mode: THarnessRunMode;
+  readonly sessionPeerKey?: string;
   readonly goal?: string;
   readonly content: string;
   readonly context?: readonly INeonGatewayPromptContextMessage[];

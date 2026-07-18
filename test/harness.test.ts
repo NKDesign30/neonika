@@ -41,6 +41,28 @@ describe("Neonika Codex Harness foundation", () => {
     assert.match(writeKey, /:write$/);
   });
 
+  it("shares one session only when both channels carry the same explicit peer key", () => {
+    const sessionPeerKey = "owner:4f0c7cbad6f3c3281dc4018a";
+    const discord = deriveCodexSessionKey({ ...baseBinding, sessionPeerKey });
+    const whatsapp = deriveCodexSessionKey({
+      ...baseBinding,
+      channel: "whatsapp",
+      accountId: "owner-personal",
+      channelId: "wa-private",
+      sessionPeerKey
+    });
+    const unlinked = deriveCodexSessionKey({
+      ...baseBinding,
+      channel: "whatsapp",
+      accountId: "owner-personal",
+      channelId: "wa-private"
+    });
+
+    assert.equal(discord, whatsapp);
+    assert.notEqual(discord, unlinked);
+    assert.doesNotMatch(discord, /4f0c7cbad6f3c3281dc4018a/u);
+  });
+
   it("redacts known secret shapes", () => {
     const bearerToken = "abcDEF0123456789._-+=AA=";
     const awsAccessKeyId = "AKIA1234567890ABCDEF";

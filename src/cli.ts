@@ -3,6 +3,7 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { createInterface } from "node:readline/promises";
 
 import { ThreadAutoArchiveDuration, type ChatInputCommandInteraction, type Message } from "discord.js";
 import WebSocket, { type RawData as WsRawData } from "ws";
@@ -264,6 +265,14 @@ import {
   createNeonNodePairingSnapshot,
   createNeonNodePairingTokenGateSnapshot,
   createNeonOnboardingSnapshot,
+  applyNeonSetupEnvironment,
+  readNeonSetupConfig,
+  resolveNeonCanonicalPeer,
+  resolveNeonSetupPaths,
+  runNeonSetup,
+  runNeonWhatsAppLogin,
+  startNeonWhatsAppShadowTap,
+  createNeonWhatsAppStatusSnapshot,
   createNeonReplaySnapshot,
   createNeonSessionsSnapshot,
   createNeonIndexerSnapshot,
@@ -375,6 +384,9 @@ import {
   renderNeonNodePairingReport,
   renderNeonNodePairingTokenGateReport,
   renderNeonOnboardingReport,
+  renderNeonSetupReport,
+  renderNeonWhatsAppLoginReport,
+  renderNeonWhatsAppStatusReport,
   renderNeonReplayReport,
   renderNeonExtensionsReport,
   renderNeonSkillInventoryReport,
@@ -539,6 +551,7 @@ import {
   createMergedNeonMemoryProvider,
   renderNeonContextPackReport,
   type INeonContextPack,
+  type IRunNeonSetupOptions,
   type TNeonChannel,
   renderArchitectureSummary,
   renderNeonAutomationCronJobReport,
@@ -1111,12 +1124,27 @@ const commands: Record<string, ICommand> = {
     run: runRoutesSmoke
   },
   "channel-registry": {
-    description: "Print the multi-channel registry (Discord live, others gated) without secrets.",
+    description: "Print the multi-channel registry (Discord and WhatsApp shadow ingress) without secrets.",
     run: runChannelRegistry
   },
   "channel-registry-smoke": {
     description: "Start a local API server and verify the channel registry endpoint.",
     run: runChannelRegistrySmoke
+  },
+  "whatsapp-login": {
+    description:
+      "Link the configured WhatsApp companion by terminal QR. Writes private auth state; agent-message outbound remains suppressed.",
+    run: runWhatsAppLogin
+  },
+  "whatsapp-status": {
+    description:
+      "Print WhatsApp configuration, private auth evidence, and shadow delivery posture without ids or paths.",
+    run: runWhatsAppStatus
+  },
+  "whatsapp-shadow-tap": {
+    description:
+      "Run the linked WhatsApp companion as owner-only shadow ingress with shared memory and fully suppressed replies.",
+    run: runWhatsAppShadowTap
   },
   workboard: {
     description: "Print the Neonika Workboard (tasks grouped into status columns) from the task store.",
@@ -1578,8 +1606,9 @@ const commands: Record<string, ICommand> = {
     run: runMirrorRunSmoke
   },
   onboard: {
-    description: "Render a no-secret Neon setup preview.",
-    run: runOnboardingSmoke
+    description:
+      "Run the first-use wizard or update private setup state. Use --yes for non-interactive defaults; channel flags configure Discord/WhatsApp explicitly.",
+    run: runOnboard
   },
   "onboarding-smoke": {
     description: "Render a no-secret Neon setup preview.",
@@ -1628,9 +1657,9 @@ function loadNeonEnvFile(): void {
   }
 }
 
+const cliArgs = process.argv.slice(2);
 loadNeonEnvFile();
 
-const cliArgs = process.argv.slice(2);
 const commandName = cliArgs[0] ?? "status";
 
 if (cliArgs.includes("-h") || cliArgs.includes("--help")) {
@@ -1645,12 +1674,21 @@ if (cliArgs.includes("-h") || cliArgs.includes("--help")) {
     console.error(renderHelp());
     process.exitCode = 1;
   } else {
+    await loadNeonSetupEnvironment(readFlagValue(cliArgs, "--config-root"));
     const output = await command.run();
 
     if (output !== undefined) {
       console.log(output);
     }
   }
+}
+
+async function loadNeonSetupEnvironment(configRoot?: string): Promise<void> {
+  const config = await readNeonSetupConfig(configRoot);
+  if (config === undefined) {
+    return;
+  }
+  applyNeonSetupEnvironment(config, resolveNeonSetupPaths(configRoot));
 }
 
 async function runAppServerSmoke(): Promise<string> {
@@ -1862,8 +1900,18 @@ function renderHelp(): string {
     "- --version: Print the installed Neonika version and exit.",
     "",
     "Quick start:",
+    "- neonika onboard",
+    "- neonika onboarding-smoke",
     "- neonika status",
     "- neonika doctor",
+    "",
+    "Onboard options:",
+    "- --yes: Use safe non-interactive defaults.",
+    "- --interactive: Require the terminal wizard.",
+    "- --config-root <path>: Override the private config root.",
+    "- --owner-id <id>, --name <display name>: Set the local owner identity.",
+    "- --discord, --discord-owner <id>, --discord-guilds <csv>, --discord-channels <csv>.",
+    "- --whatsapp, --whatsapp-owner <E.164>, --whatsapp-mode <dedicated|personal>.",
     "",
     "Commands:",
     commandLines
@@ -5043,6 +5091,8 @@ async function runDeliveryDispatchSmoke(): Promise<string> {
 }
 
 async function runDiscordShadowTap(): Promise<undefined> {
+  const configRoot = readFlagValue(process.argv.slice(3), "--config-root");
+  const setupConfig = await readNeonSetupConfig(configRoot);
   const token = readRequiredEnv(["NEON_DISCORD_BOT_TOKEN", "DISCORD_BOT_TOKEN"]);
   setRuntimeEnv("NEON_DISCORD_BOT_TOKEN", token);
   const botUserId = readRequiredEnv(["NEON_DISCORD_BOT_USER_ID"]);
@@ -5068,6 +5118,20 @@ async function runDiscordShadowTap(): Promise<undefined> {
       : undefined;
   const ignoredMentionAliases = agentId === "neo" ? undefined : ["neo"];
   const accountId = process.env["NEON_DISCORD_ACCOUNT_ID"] ?? "default";
+  const discordOwnerLink = setupConfig?.identity.links.find(
+    (link) => link.channel === "discord" && link.accountId === accountId
+  );
+  const ownerSession =
+    setupConfig && discordOwnerLink
+      ? {
+          userId: discordOwnerLink.peerId,
+          sessionPeerKey: resolveNeonCanonicalPeer(setupConfig, {
+            channel: "discord",
+            accountId,
+            peerId: discordOwnerLink.peerId
+          }).sessionPeerKey
+        }
+      : undefined;
   const harnessMode = process.env["NEON_DISCORD_TAP_HARNESS"] ?? "dry";
   const tapRunMode = readDiscordTapRunModeEnv();
   const inboundDebounceMs = readNonNegativeIntegerEnv("NEON_DISCORD_INBOUND_DEBOUNCE_MS", 1500);
@@ -5136,7 +5200,8 @@ async function runDiscordShadowTap(): Promise<undefined> {
     allowedChannelIds,
     ...(agentMentionRoutes ? { agentMentionRoutes } : {}),
     ...(ignoredMentionAliases ? { ignoredMentionAliases } : {}),
-    ...(ignoredMentionedUserIds ? { ignoredMentionedUserIds } : {})
+    ...(ignoredMentionedUserIds ? { ignoredMentionedUserIds } : {}),
+    ...(ownerSession ? { ownerSession } : {})
   };
   const canaryReplyTransport =
     (canaryReplyRequested ||
@@ -9409,6 +9474,16 @@ function readFlagValue(args: readonly string[], flag: string): string | undefine
   return value && !value.startsWith("--") ? value : undefined;
 }
 
+function readCsvFlag(args: readonly string[], flag: string): readonly string[] {
+  const value = readFlagValue(args, flag);
+  return value === undefined
+    ? []
+    : value
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0);
+}
+
 function readFlagRest(args: readonly string[], flag: string): string | undefined {
   const index = args.indexOf(flag);
   if (index < 0) {
@@ -11912,9 +11987,327 @@ async function runMirrorRunSmoke(): Promise<string> {
 }
 
 async function runOnboardingSmoke(): Promise<string> {
-  const snapshot = await createNeonOnboardingSnapshot(process.cwd());
+  const configRoot = readFlagValue(process.argv.slice(3), "--config-root");
+  const snapshot = await createNeonOnboardingSnapshot(process.cwd(), {
+    ...(configRoot ? { configRoot } : {})
+  });
 
   return renderNeonOnboardingReport(snapshot);
+}
+
+async function runOnboard(): Promise<string> {
+  const args = process.argv.slice(3);
+  assertOnboardingInvocation(args);
+  const interactiveOptions = shouldPromptForOnboarding(args)
+    ? await collectInteractiveSetupOptions()
+    : {};
+  const configRoot = readFlagValue(args, "--config-root");
+  const ownerId = readFlagValue(args, "--owner-id");
+  const displayName = readFlagRest(args, "--name");
+  const discordOwner = readFlagValue(args, "--discord-owner");
+  const whatsappOwner = readFlagValue(args, "--whatsapp-owner");
+  const whatsappMode = readFlagValue(args, "--whatsapp-mode");
+  if (whatsappMode !== undefined && whatsappMode !== "dedicated" && whatsappMode !== "personal") {
+    throw new Error("--whatsapp-mode must be dedicated or personal");
+  }
+  const discordRequested = [
+    "--discord",
+    "--discord-owner",
+    "--discord-guilds",
+    "--discord-channels"
+  ].some((flag) => args.includes(flag));
+  const whatsappRequested = ["--whatsapp", "--whatsapp-owner", "--whatsapp-mode"].some(
+    (flag) => args.includes(flag)
+  );
+  const result = await runNeonSetup({
+    ...interactiveOptions,
+    ...(configRoot ? { configRoot } : {}),
+    ...(ownerId ? { ownerId } : {}),
+    ...(displayName ? { displayName } : {}),
+    ...(discordRequested
+      ? {
+          discord: {
+            enabled: true,
+            ...(discordOwner ? { ownerPeerId: discordOwner } : {}),
+            allowedGuilds: readCsvFlag(args, "--discord-guilds"),
+            allowedChannels: readCsvFlag(args, "--discord-channels")
+          }
+        }
+      : {}),
+    ...(whatsappRequested
+      ? {
+          whatsapp: {
+            enabled: true,
+            ...(whatsappOwner ? { ownerPeerId: whatsappOwner } : {}),
+            ...(whatsappMode ? { mode: whatsappMode } : {})
+          }
+        }
+      : {})
+  });
+
+  return renderNeonSetupReport(result);
+}
+
+async function runWhatsAppLogin(): Promise<string> {
+  const configRoot = readFlagValue(process.argv.slice(3), "--config-root");
+  const result = await runNeonWhatsAppLogin({
+    ...(configRoot ? { configRoot } : {})
+  });
+  return renderNeonWhatsAppLoginReport(result);
+}
+
+async function runWhatsAppStatus(): Promise<string> {
+  const configRoot = readFlagValue(process.argv.slice(3), "--config-root");
+  return renderNeonWhatsAppStatusReport(
+    await createNeonWhatsAppStatusSnapshot(configRoot)
+  );
+}
+
+async function runWhatsAppShadowTap(): Promise<undefined> {
+  const configRoot = readFlagValue(process.argv.slice(3), "--config-root");
+  const harnessMode = process.env["NEON_WHATSAPP_TAP_HARNESS"] ?? "codex";
+  const lifecycleGate = resolveNeonInFlightRunGate();
+  const inFlightRuns = createNeonInFlightRunRegistry({ gate: lifecycleGate });
+  const harness = await createWhatsAppTapHarness(harnessMode, inFlightRuns);
+  const handle = await startNeonWhatsAppShadowTap({
+    ...(configRoot ? { configRoot } : {}),
+    projectRoot: process.cwd(),
+    harness,
+    memoryProvider: createMergedNeonMemoryProvider(),
+    agentId: process.env["NEON_WHATSAPP_AGENT_ID"] ?? "chaty",
+    onEvent: (event) => {
+      if (event.kind === "connection") {
+        console.log(`whatsapp-shadow-tap connection ${event.state}`);
+      } else if (event.kind === "accepted") {
+        console.log(`whatsapp-shadow-tap accepted ${event.runId}`);
+      } else if (event.kind === "dropped") {
+        console.log(`whatsapp-shadow-tap dropped ${event.reason}`);
+      } else if (event.kind === "duplicate") {
+        console.log("whatsapp-shadow-tap duplicate");
+      } else {
+        console.error(`whatsapp-shadow-tap error ${event.message}`);
+      }
+    }
+  });
+
+  await handle.ready;
+  console.log(
+    [
+      "WhatsApp shadow tap: ready",
+      `Harness: ${harnessMode}`,
+      "Owner policy: explicit link only",
+      "Groups: disabled",
+      "Memory: shared local provider",
+      "Delivery: suppressed",
+      "Stop: Ctrl+C"
+    ].join("\n")
+  );
+  const closed = await waitForWhatsAppTapStop(handle);
+  console.log(
+    [
+      `WhatsApp shadow tap: stopped (${closed.reason})`,
+      `Accepted: ${handle.stats.accepted}`,
+      `Dropped: ${handle.stats.dropped}`,
+      `Duplicates: ${handle.stats.duplicates}`,
+      `Errors: ${handle.stats.errors}`,
+      "Replies sent: 0"
+    ].join("\n")
+  );
+  if (closed.reason === "transport-closed") {
+    process.exitCode = 1;
+  }
+  return undefined;
+}
+
+async function createWhatsAppTapHarness(
+  mode: string,
+  inFlightRuns: INeonInFlightRunRegistry
+): Promise<ICodexHarness> {
+  if (mode === "dry") {
+    return createDryRunHarness();
+  }
+  if (mode === "claude") {
+    return createDiscordClaudeTapHarness();
+  }
+  if (mode === "codex") {
+    return createDiscordCodexTapHarness(inFlightRuns);
+  }
+  throw new Error(`Invalid NEON_WHATSAPP_TAP_HARNESS: ${mode}`);
+}
+
+async function waitForWhatsAppTapStop(
+  handle: Awaited<ReturnType<typeof startNeonWhatsAppShadowTap>>
+): Promise<Awaited<typeof handle.closed>> {
+  return await new Promise((resolveStop) => {
+    const cleanup = (): void => {
+      process.off("SIGINT", stop);
+      process.off("SIGTERM", stop);
+    };
+    const stop = (): void => {
+      void handle.close();
+    };
+    process.once("SIGINT", stop);
+    process.once("SIGTERM", stop);
+    void handle.closed.then((result) => {
+      cleanup();
+      resolveStop(result);
+    });
+  });
+}
+
+function shouldPromptForOnboarding(args: readonly string[]): boolean {
+  return (
+    process.stdin.isTTY === true &&
+    process.stdout.isTTY === true &&
+    !args.includes("--yes") &&
+    (args.length === 0 || args.includes("--interactive"))
+  );
+}
+
+function assertOnboardingInvocation(args: readonly string[]): void {
+  const interactiveTerminal = process.stdin.isTTY === true && process.stdout.isTTY === true;
+  const booleanFlags = new Set(["--yes", "--interactive", "--discord", "--whatsapp"]);
+  const singleValueFlags = new Set([
+    "--config-root",
+    "--owner-id",
+    "--discord-owner",
+    "--discord-guilds",
+    "--discord-channels",
+    "--whatsapp-owner",
+    "--whatsapp-mode"
+  ]);
+  const consumed = new Set<number>();
+
+  if (args.includes("--yes") && args.includes("--interactive")) {
+    throw new Error("--yes and --interactive are mutually exclusive");
+  }
+  for (let index = 0; index < args.length; index += 1) {
+    if (consumed.has(index)) {
+      continue;
+    }
+    const arg = args[index];
+    if (!arg) {
+      continue;
+    }
+    if (booleanFlags.has(arg)) {
+      continue;
+    }
+    if (arg === "--name") {
+      let valueCount = 0;
+      for (let valueIndex = index + 1; valueIndex < args.length; valueIndex += 1) {
+        const value = args[valueIndex];
+        if (!value || value.startsWith("--")) {
+          break;
+        }
+        consumed.add(valueIndex);
+        valueCount += 1;
+      }
+      if (valueCount === 0) {
+        throw new Error("--name requires a value");
+      }
+      continue;
+    }
+    if (singleValueFlags.has(arg)) {
+      const value = args[index + 1];
+      if (!value || value.startsWith("--")) {
+        throw new Error(`${arg} requires a value`);
+      }
+      consumed.add(index + 1);
+      continue;
+    }
+    if (arg.startsWith("--")) {
+      throw new Error(`Unknown onboard option: ${arg}`);
+    }
+    throw new Error(`Unexpected onboard argument: ${arg}`);
+  }
+  if (args.includes("--interactive") && !interactiveTerminal) {
+    throw new Error("Interactive onboarding requires a terminal; use neonika onboard --yes for headless setup");
+  }
+  const explicitSetupFlags = [
+    "--owner-id",
+    "--name",
+    "--discord",
+    "--discord-owner",
+    "--discord-guilds",
+    "--discord-channels",
+    "--whatsapp",
+    "--whatsapp-owner",
+    "--whatsapp-mode"
+  ];
+  if (
+    !interactiveTerminal &&
+    !args.includes("--yes") &&
+    !explicitSetupFlags.some((flag) => args.includes(flag))
+  ) {
+    throw new Error("Headless onboarding requires --yes or explicit channel settings");
+  }
+}
+
+async function collectInteractiveSetupOptions(): Promise<IRunNeonSetupOptions> {
+  const prompt = createInterface({ input: process.stdin, output: process.stdout });
+  console.log("Neonika first-use setup");
+  console.log("Shadow mode stays on. No outbound message is sent during setup.");
+  console.log("Secrets stay in environment variables and are never written to config.");
+
+  try {
+    const displayName = (await prompt.question("Operator name [Operator]: ")).trim() || "Operator";
+    const configureDiscord = await askYesNo(prompt, "Configure Discord as the primary hub? [Y/n]: ", true);
+    const discord = configureDiscord
+      ? {
+          enabled: true,
+          ownerPeerId: (await prompt.question("Your Discord user id (optional): ")).trim(),
+          allowedGuilds: splitCsv(await prompt.question("Allowed Discord guild ids (comma-separated): ")),
+          allowedChannels: splitCsv(await prompt.question("Allowed Discord channel ids (comma-separated): "))
+        }
+      : { enabled: false };
+    const configureWhatsApp = await askYesNo(
+      prompt,
+      "Configure WhatsApp as a linked companion? [Y/n]: ",
+      true
+    );
+    let whatsapp: IRunNeonSetupOptions["whatsapp"] = { enabled: false };
+    if (configureWhatsApp) {
+      const personal = await askYesNo(prompt, "Use your personal number/self-chat? [y/N]: ", false);
+      whatsapp = {
+        enabled: true,
+        mode: personal ? "personal" : "dedicated",
+        ownerPeerId: (await prompt.question("Your WhatsApp number in E.164 form (for example +15551234567): ")).trim()
+      };
+    }
+
+    return {
+      displayName,
+      discord,
+      whatsapp
+    };
+  } finally {
+    prompt.close();
+  }
+}
+
+async function askYesNo(
+  prompt: ReturnType<typeof createInterface>,
+  question: string,
+  defaultValue: boolean
+): Promise<boolean> {
+  const answer = (await prompt.question(question)).trim().toLowerCase();
+  if (answer === "") {
+    return defaultValue;
+  }
+  if (answer === "y" || answer === "yes" || answer === "j" || answer === "ja") {
+    return true;
+  }
+  if (answer === "n" || answer === "no" || answer === "nein") {
+    return false;
+  }
+  throw new Error("Please answer yes or no");
+}
+
+function splitCsv(value: string): readonly string[] {
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
 }
 
 async function runMissionControlSnapshotSmoke(): Promise<string> {

@@ -4,8 +4,8 @@
  * Default is no-send. The only platform with a real (still gated) live delivery
  * path is Discord, governed by the canary cutover gate
  * (`gateway/outboundSender.ts: createNeonCanaryOutboundSender` +
- * `evaluateNeonCanaryLivePreconditions`). Every manifest-only platform is
- * hard-suppressed because no transport exists to send through. This module
+ * `evaluateNeonCanaryLivePreconditions`). WhatsApp is live inbound-only and
+ * every other non-Discord platform is hard-suppressed. This module
  * projects, per platform, whether outbound is `suppressed` (no path) or
  * `canary-gated` (a gated path exists), and whether the gate is currently open —
  * reusing the existing canary precondition evaluation rather than duplicating it.
@@ -21,8 +21,8 @@ import {
 } from "./channelManifest.js";
 
 /**
- * `suppressed` = no live transport, hard no-send. `canary-gated` = a gated live
- * path exists (Discord) whose `canSend` follows the canary cutover gate.
+ * `suppressed` = no outbound path, hard no-send. `canary-gated` = a gated live
+ * outbound path exists (Discord) whose `canSend` follows the canary cutover gate.
  */
 export type TNeonChannelOutboundMode = "suppressed" | "canary-gated";
 
@@ -45,13 +45,14 @@ export function resolveNeonChannelOutboundPolicy(
 ): INeonChannelOutboundPolicy {
   const manifest = getNeonChannelManifest(platform);
 
-  // Manifest-only platforms have no transport: always hard-suppressed.
-  if (!manifest || manifest.transport === "manifest-only") {
+  // Discord is the only platform with an outbound implementation. A real
+  // inbound transport (WhatsApp/Baileys) never implies a send path.
+  if (!manifest || platform !== "discord") {
     return {
       platform,
       mode: "suppressed",
       canSend: false,
-      reason: "No live transport (manifest-only); outbound hard-suppressed."
+      reason: "No outbound transport; delivery hard-suppressed."
     };
   }
 

@@ -207,17 +207,17 @@ describe("Neonika Mission Control Gateway HTML", () => {
     const html = renderNeonMissionControlGatewayHtml(snapshot);
 
     assert.match(html, /id="channelsPanel"/);
-    assert.match(html, /id="channelsCount">1 live \/ 5 gated</);
+    assert.match(html, /id="channelsCount">2 live \/ 4 gated</);
 
     const panelBody = html.match(/id="channelsPanelBody">([\s\S]*?)<\/div>\s*<\/article>/)?.[1] ?? "";
     assert.ok(panelBody.length > 0, "channels panel body rendered");
 
-    // Every catalog platform has a row; exactly one is live, the rest gated.
+    // Every catalog platform has a row; Discord and WhatsApp are live inbound.
     for (const id of ["discord", "matrix", "msteams", "slack", "telegram", "whatsapp"]) {
       assert.match(panelBody, new RegExp(`data-channel="${id}"`));
     }
-    assert.equal((panelBody.match(/>live<\/span>/g) ?? []).length, 1);
-    assert.equal((panelBody.match(/>gated<\/span>/g) ?? []).length, 5);
+    assert.equal((panelBody.match(/>live<\/span>/g) ?? []).length, 2);
+    assert.equal((panelBody.match(/>gated<\/span>/g) ?? []).length, 4);
     // No channel implies a live send path: outbound is suppressed for all six.
     assert.equal((panelBody.match(/>suppressed<\/span>/g) ?? []).length, 6);
     assert.match(panelBody, /no-new-login/);

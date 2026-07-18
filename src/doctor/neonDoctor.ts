@@ -662,8 +662,7 @@ function buildChannelManifestCheck(): INeonDoctorCheck {
   const manifests = listNeonChannelManifests();
   const totals = summarizeNeonChannelManifests(manifests);
   const liveChannels = manifests.filter((manifest) => manifest.liveStatus === "live");
-  // Invariant: every non-live channel must stay no-new-login (goal constraint:
-  // no new live logins except Discord). A gated channel that declared an
+  // Invariant: every non-live channel must stay no-new-login. A gated channel that declared an
   // existing-session login would silently allow a second live connection.
   const escapedLogins = manifests.filter(
     (manifest) => manifest.liveStatus !== "live" && manifest.loginPolicy !== "no-new-login"
@@ -684,12 +683,13 @@ function buildChannelManifestCheck(): INeonDoctorCheck {
     };
   }
 
-  if (liveChannels.length !== 1 || liveChannels[0]?.id !== "discord") {
+  const liveIds = liveChannels.map((manifest) => manifest.id);
+  if (liveIds.length !== 2 || liveIds[0] !== "discord" || liveIds[1] !== "whatsapp") {
     return {
       id: "channel-manifest",
       label: "Channel Manifest",
       state: "warn",
-      summary: "Expected exactly one live channel (Discord).",
+      summary: "Expected exactly two live shadow-ingress channels (Discord and WhatsApp).",
       details
     };
   }
@@ -698,7 +698,7 @@ function buildChannelManifestCheck(): INeonDoctorCheck {
     id: "channel-manifest",
     label: "Channel Manifest",
     state: "pass",
-    summary: `${totals.total} channels inventoried: 1 live (discord), ${totals.gated} gated no-login.`,
+    summary: `${totals.total} channels inventoried: 2 live (discord,whatsapp), ${totals.gated} gated no-login.`,
     details
   };
 }

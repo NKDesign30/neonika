@@ -131,6 +131,10 @@ export interface INeonDiscordIngressPolicy {
   readonly allowTextCommands?: boolean;
   readonly allowedImplicitMentionKinds?: readonly TNeonImplicitMentionKind[];
   readonly agentMentionRoutes?: readonly INeonDiscordAgentMentionRoute[];
+  readonly ownerSession?: {
+    readonly userId: string;
+    readonly sessionPeerKey: string;
+  };
 }
 
 export interface INeonDiscordAgentMentionRoute {
@@ -636,6 +640,9 @@ export function createNeonDiscordIngressDecision(
       agentId: agentMention?.agentId ?? policy.agentId,
       workspaceRoot: policy.workspaceRoot,
       mode: policy.mode,
+      ...(policy.ownerSession?.userId === envelope.author.id
+        ? { sessionPeerKey: policy.ownerSession.sessionPeerKey }
+        : {}),
       content,
       ...(envelope.attachments && envelope.attachments.length > 0 ? { attachments: envelope.attachments } : {}),
       createdAt: envelope.createdAt,

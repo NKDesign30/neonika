@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -16,7 +16,7 @@ async function createTempProjectRoot(): Promise<string> {
 }
 
 describe("Neon channel registry", () => {
-  it("folds the manifest catalog into a read-only snapshot with Discord live", async () => {
+  it("folds the manifest catalog into a read-only snapshot with two live shadow transports", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -27,8 +27,8 @@ describe("Neon channel registry", () => {
 
       assert.equal(snapshot.entries.length, 6);
       assert.equal(snapshot.totals.total, 6);
-      assert.equal(snapshot.totals.live, 1);
-      assert.equal(snapshot.totals.gated, 5);
+      assert.equal(snapshot.totals.live, 2);
+      assert.equal(snapshot.totals.gated, 4);
       assert.equal(snapshot.totals.suppressed, 6);
       assert.equal(snapshot.referenceImplementation, "src/channels/registry.ts");
 
@@ -40,19 +40,26 @@ describe("Neon channel registry", () => {
       // Empty env => Discord route is unconfigured but still the live channel.
       assert.equal(discord.runtime.authState, "needs-config");
       assert.equal(discord.runtime.probeState, "unknown");
+      const whatsapp = snapshot.entries.find((entry) => entry.manifest.id === "whatsapp");
+      assert.ok(whatsapp);
+      assert.equal(whatsapp.runtime.liveStatus, "live");
+      assert.equal(whatsapp.runtime.inbound, "disabled");
+      assert.equal(whatsapp.runtime.delivery, "suppressed");
     } finally {
       await rm(projectRoot, { force: true, recursive: true });
     }
   });
 
-  it("keeps every non-Discord platform gated, no-login, and outbound-suppressed", async () => {
+  it("keeps every platform without a wired transport gated, no-login, and outbound-suppressed", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
       const snapshot = await createNeonChannelRegistrySnapshot(projectRoot, { env: {} });
-      const gated = snapshot.entries.filter((entry) => entry.manifest.id !== "discord");
+      const gated = snapshot.entries.filter(
+        (entry) => entry.manifest.id !== "discord" && entry.manifest.id !== "whatsapp"
+      );
 
-      assert.equal(gated.length, 5);
+      assert.equal(gated.length, 4);
       for (const entry of gated) {
         assert.equal(entry.runtime.liveStatus, "gated");
         assert.equal(entry.runtime.inbound, "gated");
@@ -84,9 +91,45 @@ describe("Neon channel registry", () => {
 
       assert.match(report, /Neonika Channel Registry: ready/);
       assert.match(report, /discord: live/);
+      assert.match(report, /whatsapp: live/);
       assert.match(report, /telegram: gated/);
       assert.doesNotMatch(report, new RegExp(secretToken));
       assert.doesNotMatch(JSON.stringify(snapshot), new RegExp(secretToken));
+    } finally {
+      await rm(projectRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("reports WhatsApp ready only after enabled owner config has private credentials and a marker", async () => {
+    const projectRoot = await createTempProjectRoot();
+    const authPath = join(projectRoot, "private-whatsapp-auth");
+    try {
+      await mkdir(authPath, { recursive: true, mode: 0o700 });
+      await writeFile(
+        join(authPath, "session.json"),
+        `${JSON.stringify({
+          version: 1,
+          state: "linked",
+          accountId: "default",
+          verifiedAt: "2026-07-18T18:00:00.000Z"
+        })}\n`,
+        { encoding: "utf8", mode: 0o600 }
+      );
+      await writeFile(join(authPath, "creds.json"), '{"registered":true}\n', {
+        encoding: "utf8",
+        mode: 0o600
+      });
+      const snapshot = await createNeonChannelRegistrySnapshot(projectRoot, {
+        env: {
+          NEON_WHATSAPP_ENABLED: "ready",
+          NEON_WHATSAPP_AUTH_DIR: authPath,
+          NEON_WHATSAPP_OWNER_PEER: "+15551234567"
+        }
+      });
+      const whatsapp = snapshot.entries.find((entry) => entry.manifest.id === "whatsapp");
+
+      assert.equal(whatsapp?.runtime.authState, "ready");
+      assert.equal(whatsapp?.runtime.inbound, "live-tap");
     } finally {
       await rm(projectRoot, { force: true, recursive: true });
     }

@@ -84,8 +84,10 @@ Installed from npm, not vendored. Full license texts ship inside their packages.
 
 | Package | License |
 | --- | --- |
+| `baileys` | MIT |
 | `discord.js` | Apache-2.0 |
 | `markdown-it` | MIT |
+| `qrcode-terminal` | Apache-2.0 |
 | `unpdf` | MIT |
 | `ws` | MIT |
 | `lit` (UI) | BSD-3-Clause |

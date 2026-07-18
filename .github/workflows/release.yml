@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - run: npm ci
+      - name: Verify tag and changelog
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+          version=$(node -p 'require("./package.json").version')
+          test "${GITHUB_REF_NAME}" = "v${version}"
+          bash scripts/verify-changelog.sh
+      - run: npm run doctor
+      - run: npm run ui:test
+      - name: Install gitleaks
+        env:
+          VERSION: 8.30.1
+          SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          set -euo pipefail
+          asset="gitleaks_${VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$asset" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/${asset}"
+          echo "${SHA256}  ${asset}" | sha256sum -c -
+          tar -xzf "$asset" gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+      - name: Restore publication identity denylist
+        env:
+          DENYLIST_B64: ${{ secrets.OSS_AUDIT_DENYLIST }}
+        run: |
+          set -euo pipefail
+          test -n "${DENYLIST_B64:-}"
+          printf '%s' "$DENYLIST_B64" | base64 -d > scripts/oss-audit-denylist.sha256
+      - run: bash scripts/oss-audit.sh --history
+      - run: bash scripts/package-release.sh
+      - run: bash scripts/npm-install-smoke.sh release/neonika.tgz
+      - name: Verify release manifest is clean
+        run: |
+          node <<'NODE'
+          const manifest = require("./release/neonika.release.json");
+          if (manifest.dirty || manifest.commit !== process.env.GITHUB_SHA) {
+            throw new Error("release manifest is dirty or points at the wrong commit");
+          }
+          NODE
+      - name: Publish immutable GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            release/neonika.tgz \
+            release/neonika.tgz.sha256 \
+            release/neonika.release.json \
+            --verify-tag \
+            --title "Neonika ${GITHUB_REF_NAME#v}" \
+            --notes-file release/neonika.release-notes.md
