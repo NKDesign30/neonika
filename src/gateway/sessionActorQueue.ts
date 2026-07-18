@@ -20,6 +20,7 @@ export interface INeonSessionActorQueueSnapshot {
 }
 
 export interface INeonSessionActorQueue {
+  cancelPending(sessionKey: string): number;
   cleanupIdle(): number;
   enqueue<T>(sessionKey: string, task: () => Promise<T> | T): Promise<T>;
   getPendingCountForSession(sessionKey: string): number;
@@ -31,8 +32,25 @@ export interface INeonSessionActorQueue {
 interface INeonSessionActorQueueState {
   active: number;
   lastSettledAtMs: number;
+  nextTaskId: number;
   pending: number;
+  tasks: Map<number, TNeonSessionActorTaskState>;
   tail: Promise<void>;
+}
+
+type TNeonSessionActorTaskState = "queued" | "active" | "cancelled";
+
+export class NeonSessionActorQueueCancellationError extends Error {
+  constructor(readonly sessionKey: string) {
+    super("Neon session work was cancelled by an operator control");
+    this.name = "NeonSessionActorQueueCancellationError";
+  }
+}
+
+export function isNeonSessionActorQueueCancellationError(
+  error: unknown
+): error is NeonSessionActorQueueCancellationError {
+  return error instanceof NeonSessionActorQueueCancellationError;
 }
 
 export class NeonSessionActorQueue implements INeonSessionActorQueue {
@@ -43,6 +61,28 @@ export class NeonSessionActorQueue implements INeonSessionActorQueue {
   constructor(options: INeonSessionActorQueueOptions = {}) {
     this.maxIdleMs = Math.max(0, options.maxIdleMs ?? NEON_SESSION_ACTOR_QUEUE_DEFAULT_MAX_IDLE_MS);
     this.now = options.now ?? Date.now;
+  }
+
+  cancelPending(sessionKey: string): number {
+    const key = normalizeNeonSessionActorQueueKey(sessionKey);
+    const state = this.sessions.get(key);
+    if (!state) {
+      return 0;
+    }
+
+    let cancelled = 0;
+    for (const [taskId, taskState] of state.tasks) {
+      if (taskState !== "queued") {
+        continue;
+      }
+      state.tasks.set(taskId, "cancelled");
+      state.pending = Math.max(0, state.pending - 1);
+      cancelled += 1;
+    }
+    if (cancelled > 0) {
+      state.lastSettledAtMs = this.now();
+    }
+    return cancelled;
   }
 
   cleanupIdle(): number {
@@ -64,15 +104,24 @@ export class NeonSessionActorQueue implements INeonSessionActorQueue {
   enqueue<T>(sessionKey: string, task: () => Promise<T> | T): Promise<T> {
     const key = normalizeNeonSessionActorQueueKey(sessionKey);
     const state = this.getOrCreateState(key);
+    const taskId = state.nextTaskId;
+    state.nextTaskId += 1;
+    state.tasks.set(taskId, "queued");
     state.pending += 1;
 
     const current = state.tail.catch(() => undefined).then(async () => {
+      if (state.tasks.get(taskId) === "cancelled") {
+        state.tasks.delete(taskId);
+        throw new NeonSessionActorQueueCancellationError(key);
+      }
+      state.tasks.set(taskId, "active");
       state.active += 1;
       try {
         return await task();
       } finally {
         state.active -= 1;
         state.pending = Math.max(0, state.pending - 1);
+        state.tasks.delete(taskId);
         state.lastSettledAtMs = this.now();
       }
     });
@@ -128,7 +177,9 @@ export class NeonSessionActorQueue implements INeonSessionActorQueue {
     const state: INeonSessionActorQueueState = {
       active: 0,
       lastSettledAtMs: this.now(),
+      nextTaskId: 1,
       pending: 0,
+      tasks: new Map(),
       tail: Promise.resolve()
     };
     this.sessions.set(sessionKey, state);

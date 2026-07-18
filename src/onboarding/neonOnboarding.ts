@@ -118,7 +118,7 @@ export function renderNeonOnboardingReport(snapshot: INeonOnboardingSnapshot): s
   });
 
   return [
-    `Neon Onboarding: ${snapshot.state}`,
+    `Neonika Onboarding: ${snapshot.state}`,
     `Ready for Discord smoke: ${snapshot.readyForDiscordSmoke ? "yes" : "no"}`,
     `Config preview: ${snapshot.configPreview.command}, secretsPrinted=${String(snapshot.configPreview.secretsPrinted)}`,
     `Project: ${snapshot.configPreview.projectRoot}`,
@@ -247,7 +247,7 @@ function buildDoctorStep(doctorState: string): INeonOnboardingStep {
     id: "doctor",
     label: "Doctor",
     state: doctorState === "fail" ? "action" : doctorState === "warn" ? "warn" : "pass",
-    summary: `Neon Doctor reports ${doctorState}.`,
+    summary: `Neonika Doctor reports ${doctorState}.`,
     recovery: doctorState === "fail" ? ["node dist/src/cli.js doctor-smoke"] : []
   };
 }

@@ -303,7 +303,7 @@ export async function createNeonMemoryAttachment(
       return {
         state: "skipped",
         hitCount: 0,
-        note: "No Neon Memory hits"
+        note: "No Neonika Memory hits"
       };
     }
 
@@ -319,7 +319,7 @@ export async function createNeonMemoryAttachment(
     return {
       state: "failed",
       hitCount: 0,
-      note: `Neon Memory search failed: ${error instanceof Error ? redactText(error.message) : "unknown error"}`
+      note: `Neonika Memory search failed: ${error instanceof Error ? redactText(error.message) : "unknown error"}`
     };
   }
 }
@@ -436,7 +436,7 @@ function toMemoryExcerpt(hit: INeonMemorySearchHit): IMemoryExcerpt {
 }
 
 function buildMemoryAttachmentNote(excerpts: readonly IMemoryExcerpt[]): string {
-  const note = `Attached ${excerpts.length} Neon Memory hit(s): ${excerpts
+  const note = `Attached ${excerpts.length} Neonika Memory hit(s): ${excerpts
     .map((excerpt) => excerpt.source)
     .join(", ")}`;
 

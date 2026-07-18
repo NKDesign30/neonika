@@ -1,5 +1,5 @@
 /**
- * Tiny, pure record helpers for the Neon Plugin SDK.
+ * Tiny, pure record helpers for the Neonika Plugin SDK.
  *
  * The plugin SDK is intentionally a standalone contract module with no
  * filesystem or node-runtime imports, mirroring how upstream keeps

@@ -62,7 +62,7 @@ export function resolveNeonWebSearchProviders(
 
 export function renderNeonWebSearchResolution(resolution: INeonWebSearchResolution): string {
   const lines = [
-    `Neon Web-Search resolution: ${resolution.chosen ?? "none"}`,
+    `Neonika Web-Search resolution: ${resolution.chosen ?? "none"}`,
     `Fallback chain: ${resolution.fallbackChain.length > 0 ? resolution.fallbackChain.join(" -> ") : "(empty)"}`,
     resolution.reason
   ];

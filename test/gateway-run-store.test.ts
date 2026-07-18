@@ -14,7 +14,7 @@ import {
   type INeonGatewayShadowRun
 } from "../src/index.js";
 
-describe("Neon Gateway run store", () => {
+describe("Neonika Gateway run store", () => {
   it("writes and reads shadow runs from a Neon-owned JSONL store", async () => {
     const projectRoot = await createTempProjectRoot();
 

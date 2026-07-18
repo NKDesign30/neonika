@@ -13,7 +13,7 @@ import {
 
 const leakedSecret = "sk-ABCDEFGHIJKLMNOP1234567890";
 
-describe("Neon Memory importer/exporter dry-run", () => {
+describe("Neonika Memory importer/exporter dry-run", () => {
   it("plans candidate imports from the isolated store without touching a real DB", async () => {
     const storePath = await seedStore([
       { id: "mem-1", content: "first isolated note", writtenAt: "2026-06-01T00:00:00.000Z", category: "project" },

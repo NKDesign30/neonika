@@ -229,7 +229,7 @@ export function renderNeonNodePairingCanaryTokenReport(
       : ["- none"];
 
   return [
-    `Neon Node Canary Tokens: ${snapshot.state}`,
+    `Neonika Node Canary Tokens: ${snapshot.state}`,
     `Gate: ${snapshot.tokenGate.state} / blockers=${snapshot.tokenGate.totals.blockers}`,
     `Totals: issued=${snapshot.totals.issued} active=${snapshot.totals.active} expired=${snapshot.totals.expired}`,
     `Delivery: rawPersistence=${snapshot.deliveryPolicy.rawTokenPersistence} http=${snapshot.deliveryPolicy.rawTokenHttpExposure} cli=${snapshot.deliveryPolicy.rawTokenCliEcho}`,

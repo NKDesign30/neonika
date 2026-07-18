@@ -26,7 +26,7 @@ async function modeOf(path: string): Promise<number> {
   return (await stat(path)).mode & 0o777;
 }
 
-describe("Neon Doctor --fix runtime (DP-12)", () => {
+describe("Neonika Doctor --fix runtime (DP-12)", () => {
   it("keeps the fix gate off by default and arms only on an explicit ready flag", () => {
     assert.equal(resolveNeonDoctorFixGate({}).enabled, false);
     for (const value of ["1", "ready", "true", "yes"]) {

@@ -15,7 +15,7 @@ import {
   type INeonGatewayShadowRun
 } from "../src/index.js";
 
-describe("Neon Delivery Queue", () => {
+describe("Neonika Delivery Queue", () => {
   it("creates no-send Discord delivery candidates from Gateway runs", () => {
     const candidate = createNeonDeliveryDryRunCandidate(createRun(), {
       now: () => new Date("2026-05-31T20:00:00.000Z")

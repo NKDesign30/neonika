@@ -14,7 +14,7 @@ import {
   type INeonCutoverGateSnapshot
 } from "../src/index.js";
 
-describe("Neon Node Pairing Token Gate", () => {
+describe("Neonika Node Pairing Token Gate", () => {
   it("keeps approved shadow pairings locked before canary cutover", async () => {
     const projectRoot = await createTempProjectRoot();
 
@@ -80,7 +80,7 @@ describe("Neon Node Pairing Token Gate", () => {
         })
       );
 
-      assert.match(report, /Neon Node Pairing Token Gate: locked/);
+      assert.match(report, /Neonika Node Pairing Token Gate: locked/);
       assert.match(report, /cutover-stage-before-canary/);
       assert.match(report, /tokenIssued=false/);
       assert.match(report, /No device token material is generated/);

@@ -69,7 +69,7 @@ export function renderNeonInboundDebounceReport(params: {
   readonly debounceMs: number;
 }): string {
   return [
-    "Neon Inbound Debounce Policy",
+    "Neonika Inbound Debounce Policy",
     `Debounce: ${params.decision}`,
     `Window: ${params.debounceMs}ms`
   ].join("\n");

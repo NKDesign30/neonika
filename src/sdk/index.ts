@@ -1,4 +1,4 @@
-// Neon SDK — stable curated public surface (umbrella).
+// Neonika SDK — stable curated public surface (umbrella).
 //
 // The single import for SDK consumers. Like upstream `packages/sdk` (which
 // re-exports its workspace packages), this is the umbrella that unifies the

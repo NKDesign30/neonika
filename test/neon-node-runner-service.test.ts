@@ -20,7 +20,7 @@ import {
   type INeonCutoverGateSnapshot
 } from "../src/index.js";
 
-describe("Neon Node Runner Service", () => {
+describe("Neonika Node Runner Service", () => {
   it("renders a LaunchAgent plan without executing service mutations or exposing secrets", async () => {
     const projectRoot = await createTempProjectRoot();
 

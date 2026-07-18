@@ -15,7 +15,7 @@ const channelId = "channel-1";
 // Live-ingress proof that `createNeonDiscordIngressDecision` runs the real
 // inbound access chain (allow-from -> access groups -> DM guard -> command auth
 // -> mention) and not just the legacy bot/guild/channel/mention gates.
-describe("Neon Discord ingress — inbound access stack composition", () => {
+describe("Neonika Discord ingress — inbound access stack composition", () => {
   it("drops a guild sender outside the configured allow-from", () => {
     const decision = createNeonDiscordIngressDecision(
       guildEnvelope({ author: { id: "stranger", username: "stranger" } }),

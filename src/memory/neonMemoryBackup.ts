@@ -128,7 +128,7 @@ export async function rotateNeonMemoryBackups(
 
 export function renderNeonMemoryBackupReport(result: INeonMemoryBackupResult): string {
   return [
-    `Neon Memory Backup: ${result.state}`,
+    `Neonika Memory Backup: ${result.state}`,
     `Snapshot: ${result.snapshotPath ?? "none"}`,
     `Size: ${result.bytes} bytes  Entries: ${result.entries}`,
     `Rotation: kept ${result.kept}, removed ${result.rotated.length}`,

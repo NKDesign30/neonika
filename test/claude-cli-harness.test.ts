@@ -77,8 +77,8 @@ describe("Claude CLI harness", () => {
 
     const userFrame = JSON.parse(transport.sent[0]?.trim() ?? "{}") as Record<string, unknown>;
     const message = userFrame["message"] as Record<string, unknown>;
-    assert.match(String(message["content"]), /Neon Agent: Chaty/);
-    assert.match(String(message["content"]), /Neon Memory: attached; hits=1/);
+    assert.match(String(message["content"]), /Neonika Agent: Chaty/);
+    assert.match(String(message["content"]), /Neonika Memory: attached; hits=1/);
     assert.match(capturedSpec?.systemPrompt ?? "", /newline-separated Markdown list items/u);
     assert.match(capturedSpec?.systemPrompt ?? "", /never leave bare inline numbers after a colon/u);
     assert.match(capturedSpec?.systemPrompt ?? "", /do not emit Cyrillic homoglyphs/u);

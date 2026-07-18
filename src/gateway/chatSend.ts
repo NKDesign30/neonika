@@ -170,7 +170,7 @@ export async function submitNeonChatSend(
 
 export function renderNeonChatSendReport(result: INeonChatSendResult): string {
   return [
-    "Neon Chat Send (dry-run)",
+    "Neonika Chat Send (dry-run)",
     `State: ${result.state}`,
     `Run: ${result.runId}`,
     `Candidate: ${result.candidateId} (${result.candidateState})`,

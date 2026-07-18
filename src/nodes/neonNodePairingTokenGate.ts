@@ -147,7 +147,7 @@ export function renderNeonNodePairingTokenGateReport(
       : ["- none"];
 
   return [
-    `Neon Node Pairing Token Gate: ${snapshot.state}`,
+    `Neonika Node Pairing Token Gate: ${snapshot.state}`,
     `Cutover: ${snapshot.cutoverStage} / ${snapshot.cutoverState} / gate=${snapshot.currentGateState}`,
     `Totals: eligible=${snapshot.totals.eligibleApprovals} blockers=${snapshot.totals.blockers}`,
     "Blockers:",

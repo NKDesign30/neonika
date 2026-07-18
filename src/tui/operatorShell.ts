@@ -1,8 +1,8 @@
 /**
- * Neon Operator Shell — pure contract.
+ * Neonika Operator Shell — pure contract.
  *
  * A textual, read-only operator surface that is the terminal-native sibling of
- * Neon Mission Control. This module holds ONLY pure logic: the panel registry,
+ * Neonika Mission Control. This module holds ONLY pure logic: the panel registry,
  * command routing, and rendering. All I/O (snapshot loading) lives in
  * `operatorShellData.ts`; the interactive REPL lives in `interactiveShell.ts`.
  *
@@ -184,7 +184,7 @@ export function renderNeonTuiPanel(view: INeonTuiPanelView): string {
 /** Render the full dashboard: banner, every panel, and a footer hint. */
 export function renderNeonTuiDashboard(dashboard: INeonTuiDashboard): string {
   const head = [
-    "Neon Operator Shell — dashboard",
+    "Neonika Operator Shell — dashboard",
     `Project: ${dashboard.projectRoot}`,
     `Generated: ${dashboard.generatedAt}`,
     `Panels: ${dashboard.panels.length}`
@@ -197,7 +197,7 @@ export function renderNeonTuiDashboard(dashboard: INeonTuiDashboard): string {
 /** Render the welcome banner shown when the interactive shell starts. */
 export function renderNeonTuiBanner(): string {
   return [
-    "Neon Operator Shell",
+    "Neonika Operator Shell",
     "Read-only terminal surface over live Neon snapshots (shadow mode).",
     "Type a panel name, `all` for the full dashboard, `help`, or `quit`."
   ].join("\n");
@@ -217,7 +217,7 @@ export function renderNeonTuiHelp(): string {
   );
 
   return [
-    "Neon Operator Shell — commands",
+    "Neonika Operator Shell — commands",
     ...panelLines,
     "  all       Render every panel as one dashboard.",
     "  help      Show this help.",
@@ -234,7 +234,7 @@ export function renderNeonTuiUnknownCommand(input: string): string {
 
 /** Render the goodbye line printed when the shell closes. */
 export function renderNeonTuiGoodbye(reason: "quit" | "eof"): string {
-  return reason === "quit" ? "Neon Operator Shell: closed." : "Neon Operator Shell: input ended.";
+  return reason === "quit" ? "Neonika Operator Shell: closed." : "Neonika Operator Shell: input ended.";
 }
 
 function renderNeonTuiFooter(): string {

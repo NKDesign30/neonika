@@ -165,7 +165,7 @@ export async function createNeonWorkspaceSnapshot(
 
 export function renderNeonWorkspaceSnapshotReport(snapshot: INeonWorkspaceSnapshot): string {
   return [
-    `Neon Workspace Notes: ${snapshot.state}`,
+    `Neonika Workspace Notes: ${snapshot.state}`,
     `Root: ${snapshot.root}`,
     `Totals: files=${snapshot.totals.filesPresent} notes=${snapshot.totals.noteCount}`,
     `Safety: semanticMemoryWritten=${snapshot.safety.semanticMemoryWritten} outboundSent=${snapshot.safety.outboundSent}`,

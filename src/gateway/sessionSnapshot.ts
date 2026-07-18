@@ -12,7 +12,7 @@ import type {
 import type { TMemoryAttachmentState, TNeonChannel } from "../harness/types.js";
 
 export type TNeonSessionsSnapshotState = "ready" | "empty";
-export type TNeonSessionStatus = "running" | "done" | "failed";
+export type TNeonSessionStatus = "running" | "done" | "failed" | "cancelled";
 
 export interface INeonSessionTokenTotals {
   readonly inputTokens: number;
@@ -37,6 +37,7 @@ export interface INeonSessionsTotals {
   readonly runs: number;
   readonly completedRuns: number;
   readonly failedRuns: number;
+  readonly cancelledRuns: number;
   readonly runningRuns: number;
   readonly suppressedDeliveries: number;
   readonly tokenTotals: INeonSessionTokenTotals;
@@ -62,6 +63,7 @@ export interface INeonSessionSummary {
   readonly messageCount: number;
   readonly completedRuns: number;
   readonly failedRuns: number;
+  readonly cancelledRuns: number;
   readonly runningRuns: number;
   readonly sessionStatus: TNeonSessionStatus;
   readonly tokenTotals: INeonSessionTokenTotals;
@@ -95,6 +97,7 @@ interface ISessionAccumulator {
   messageCount: number;
   completedRuns: number;
   failedRuns: number;
+  cancelledRuns: number;
   runningRuns: number;
   tokenTotals: INeonSessionTokenTotals;
   latestRun: INeonGatewayShadowRun;
@@ -109,6 +112,7 @@ export async function createNeonSessionsSnapshot(
 
   const completedRuns = runs.filter((run) => run.status === "completed").length;
   const failedRuns = runs.filter((run) => run.status === "failed").length;
+  const cancelledRuns = runs.filter((run) => run.status === "cancelled").length;
 
   return {
     state: sessions.length > 0 ? "ready" : "empty",
@@ -118,7 +122,8 @@ export async function createNeonSessionsSnapshot(
       runs: runs.length,
       completedRuns,
       failedRuns,
-      runningRuns: runs.length - completedRuns - failedRuns,
+      cancelledRuns,
+      runningRuns: runs.length - completedRuns - failedRuns - cancelledRuns,
       suppressedDeliveries: runs.filter((run) => run.delivery.state === "suppressed").length,
       tokenTotals: sumRunTokenTotals(runs)
     },
@@ -145,7 +150,7 @@ export function renderNeonSessionsReport(snapshot: INeonSessionsSnapshot): strin
   });
 
   return [
-    `Neon Sessions: ${snapshot.state}`,
+    `Neonika Sessions: ${snapshot.state}`,
     `Sessions: ${snapshot.totals.sessions}`,
     `Runs: ${snapshot.totals.runs}`,
     ...lines
@@ -170,6 +175,7 @@ function createNeonSessionSummaries(
     existing.messageCount += 2;
     existing.completedRuns += run.status === "completed" ? 1 : 0;
     existing.failedRuns += run.status === "failed" ? 1 : 0;
+    existing.cancelledRuns += run.status === "cancelled" ? 1 : 0;
     existing.runningRuns += isRunningGatewayRun(run) ? 1 : 0;
     existing.tokenTotals = addTokenTotals(existing.tokenTotals, extractRunTokenTotals(run));
     existing.createdAt = earliestTimestamp(existing.createdAt, run.startedAt);
@@ -197,6 +203,7 @@ function createSessionAccumulator(key: string, run: INeonGatewayShadowRun): ISes
     messageCount: 2,
     completedRuns: run.status === "completed" ? 1 : 0,
     failedRuns: run.status === "failed" ? 1 : 0,
+    cancelledRuns: run.status === "cancelled" ? 1 : 0,
     runningRuns: isRunningGatewayRun(run) ? 1 : 0,
     tokenTotals: extractRunTokenTotals(run),
     latestRun: run
@@ -226,6 +233,7 @@ function freezeSession(accumulator: ISessionAccumulator): INeonSessionSummary {
     messageCount: accumulator.messageCount,
     completedRuns: accumulator.completedRuns,
     failedRuns: accumulator.failedRuns,
+    cancelledRuns: accumulator.cancelledRuns,
     runningRuns: accumulator.runningRuns,
     sessionStatus: resolveSessionStatus(accumulator, latest),
     tokenTotals: accumulator.tokenTotals,
@@ -246,11 +254,15 @@ function resolveSessionStatus(
     return "running";
   }
 
-  return latest.status === "failed" ? "failed" : "done";
+  if (latest.status === "failed") {
+    return "failed";
+  }
+
+  return latest.status === "cancelled" ? "cancelled" : "done";
 }
 
 function isRunningGatewayRun(run: INeonGatewayShadowRun): boolean {
-  return run.status !== "completed" && run.status !== "failed";
+  return run.status === "running";
 }
 
 function sumRunTokenTotals(runs: readonly INeonGatewayShadowRun[]): INeonSessionTokenTotals {

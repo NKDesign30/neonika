@@ -1,6 +1,6 @@
-// Neon SDK — Gateway Client surface.
+// Neonika SDK — Gateway Client surface.
 //
-// Curated, stable contract for a client that talks to the Neon Gateway over the
+// Curated, stable contract for a client that talks to the Neonika Gateway over the
 // WS-JSON-RPC + SSE wire: frame shapes, the method/event vocabulary, protocol
 // constants, and the frame builders/parsers/guards needed to encode requests
 // and decode responses/events. This is a thin re-export facade over

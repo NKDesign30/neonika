@@ -9,7 +9,7 @@ import {
   type TNeonTuiPanelId
 } from "../src/index.js";
 
-describe("Neon Operator Shell — interactive REPL", () => {
+describe("Neonika Operator Shell — interactive REPL", () => {
   it("routes scripted commands through the loop and quits cleanly", async () => {
     const requestedPanels: TNeonTuiPanelId[] = [];
     let dashboardCalls = 0;
@@ -38,13 +38,13 @@ describe("Neon Operator Shell — interactive REPL", () => {
     assert.deepEqual(requestedPanels, ["status"]);
     assert.equal(dashboardCalls, 1);
 
-    assert.match(text, /Neon Operator Shell/u);
+    assert.match(text, /Neonika Operator Shell/u);
     assert.match(text, /Panels: status, gateway/u);
     assert.match(text, /STUB-PANEL status/u);
-    assert.match(text, /Neon Operator Shell — commands/u);
+    assert.match(text, /Neonika Operator Shell — commands/u);
     assert.match(text, /Unknown command: frobnicate/u);
     assert.match(text, /STUB-DASHBOARD/u);
-    assert.match(text, /Neon Operator Shell: closed\./u);
+    assert.match(text, /Neonika Operator Shell: closed\./u);
     // The stub bodies are leak-safe; nothing secret-shaped leaves the loop.
     assert.doesNotMatch(text, /sk-[a-z0-9]/u);
   });
@@ -61,7 +61,7 @@ describe("Neon Operator Shell — interactive REPL", () => {
 
     assert.equal(result.quitReason, "eof");
     assert.equal(result.commandsHandled, 1);
-    assert.match(output.text(), /Neon Operator Shell: input ended\./u);
+    assert.match(output.text(), /Neonika Operator Shell: input ended\./u);
   });
 });
 

@@ -160,17 +160,17 @@ export async function executeNeonWebFetch(
 
 export function renderNeonWebFetchResult(result: INeonWebFetchResult): string {
   if (result.kind === "blocked") {
-    return `Neon Web-Fetch: BLOCKED (${result.reason}) — ${result.detail}`;
+    return `Neonika Web-Fetch: BLOCKED (${result.reason}) — ${result.detail}`;
   }
   if (result.kind === "dry-run") {
     return [
-      `Neon Web-Fetch: dry-run (live gate closed, ${result.gateEnvKey})`,
+      `Neonika Web-Fetch: dry-run (live gate closed, ${result.gateEnvKey})`,
       `Target (allowed): ${result.target}`,
       "No network call was made; arm the tools-live gate to fetch."
     ].join("\n");
   }
   return [
-    `Neon Web-Fetch: fetched ${result.status} from ${result.target}`,
+    `Neonika Web-Fetch: fetched ${result.status} from ${result.target}`,
     `Bytes: ${result.result.byteCount} (truncated=${result.result.truncated}, redacted)`,
     `Preview: ${result.result.preview}`
   ].join("\n");

@@ -12,7 +12,7 @@ import {
   type INeonGatewayShadowRun
 } from "../src/index.js";
 
-describe("Neon Activity stream", () => {
+describe("Neonika Activity stream", () => {
   it("emits one activity frame per run on start and only new run ids on refresh", async () => {
     const projectRoot = await createTempProjectRoot();
     const frames: INeonActivityStreamFrame[] = [];

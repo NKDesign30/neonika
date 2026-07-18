@@ -12,7 +12,7 @@ import { NeonResponseBodyLimitError, readNeonResponseBodyLimited } from "./bound
  * Two attachment sources:
  *  - inline: raw bytes already held in process (a generated image/file). Fully
  *    validated offline (size, filename safety, mime shape).
- *  - url: a remote reference. The pure builder runs the existing Neon SSRF guard
+ *  - url: a remote reference. The pure builder runs the existing Neonika SSRF guard
  *    (classifyNeonWebFetchTarget) so a private/loopback/link-local target is
  *    rejected before anything is sent. The transport, NOT discord.js, fetches
  *    the bytes (discord.js would fetch a url itself inside the bot process, which

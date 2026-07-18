@@ -43,7 +43,7 @@ test("listNeonTaskAuditFindings returns nothing for a clean board", () => {
 
   const summary = summarizeNeonTaskAuditFindings(findings);
   assert.equal(summary.total, 0);
-  assert.match(renderNeonTaskAuditReport(findings, summary), /Neon Task Audit: clean/);
+  assert.match(renderNeonTaskAuditReport(findings, summary), /Neonika Task Audit: clean/);
 });
 
 test("overdue fires for non-terminal past-due tasks but never for terminal ones", () => {

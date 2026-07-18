@@ -189,7 +189,7 @@ export function createNeonDiscordOperatorSlashCommands(): readonly INeonSlashCom
   return [
     {
       name: "workboard",
-      description: "Create a Neon Workboard card",
+      description: "Create a Neonika Workboard card",
       options: [WORKBOARD_TASK_OPTION]
     },
     {

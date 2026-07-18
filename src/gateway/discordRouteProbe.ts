@@ -2,7 +2,15 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import type { TNeonDiscordDropReason } from "./discordIngress.js";
+import {
+  neonStatusReactionEmojis,
+  type TNeonStatusReactionState
+} from "../channels/statusReactions.js";
 import { resolveGatewayStatePaths } from "./runStore.js";
+
+function isStatusReactionState(value: unknown): value is TNeonStatusReactionState {
+  return typeof value === "string" && value in neonStatusReactionEmojis;
+}
 
 export type TNeonDiscordRouteProbeState = "running" | "stopped" | "unknown";
 
@@ -18,10 +26,27 @@ export interface INeonDiscordRouteProbeStats {
   readonly lastTypingState?: "started" | "failed";
   readonly reactionsSent?: number;
   readonly reactionErrors?: number;
-  readonly lastReactionState?: "queued" | "done" | "error";
+  readonly controlsAccepted?: number;
+  readonly controlsDropped?: number;
+  readonly progressCardsStarted?: number;
+  readonly progressCardUpdates?: number;
+  readonly progressCardErrors?: number;
+  readonly runtimePickersOpened?: number;
+  readonly runtimePickerErrors?: number;
+  readonly capacityPromptsOpened?: number;
+  readonly capacityPromptErrors?: number;
+  readonly recoveryCardsStarted?: number;
+  readonly recoveryCardErrors?: number;
+  readonly lastReactionState?: TNeonStatusReactionState;
   readonly lastReactionOutcome?: "sent" | "failed";
+  readonly lastControlState?: "stopped" | "idle" | "blocked" | "partial";
+  readonly lastControlAt?: string;
+  readonly lastProgressCardMessageId?: string;
+  readonly lastRuntimePickerMessageId?: string;
+  readonly lastCapacityPromptMessageId?: string;
+  readonly lastRecoveryCardMessageId?: string;
   readonly lastRunId?: string;
-  readonly lastReplyState?: "delivered" | "suppressed" | "skipped" | "transport-error";
+  readonly lastReplyState?: "delivered" | "review-pending" | "suppressed" | "skipped" | "transport-error";
   readonly lastReplyMessageId?: string;
   readonly lastDropReason?: TNeonDiscordDropReason | "unmapped-message";
   readonly lastErrorMessage?: string;
@@ -30,6 +55,7 @@ export interface INeonDiscordRouteProbeStats {
 export interface INeonDiscordRouteProbe {
   readonly channel: "discord";
   readonly accountId: string;
+  readonly allowedChannelIds?: readonly string[];
   readonly state: TNeonDiscordRouteProbeState;
   readonly running: boolean;
   readonly startedAt?: string;
@@ -120,6 +146,10 @@ function parseNeonDiscordRouteProbe(value: unknown): INeonDiscordRouteProbe | un
   return {
     channel: "discord",
     accountId: value["accountId"],
+    ...(Array.isArray(value["allowedChannelIds"]) &&
+    value["allowedChannelIds"].every((entry): entry is string => typeof entry === "string")
+      ? { allowedChannelIds: value["allowedChannelIds"] }
+      : {}),
     state,
     running: value["running"],
     ...(typeof value["startedAt"] === "string" ? { startedAt: value["startedAt"] } : {}),
@@ -170,13 +200,60 @@ function parseNeonDiscordRouteProbeStats(value: unknown): INeonDiscordRouteProbe
     ...(typeof value["reactionErrors"] === "number"
       ? { reactionErrors: Math.max(0, Math.trunc(value["reactionErrors"])) }
       : {}),
-    ...(value["lastReactionState"] === "queued" ||
-    value["lastReactionState"] === "done" ||
-    value["lastReactionState"] === "error"
+    ...(typeof value["controlsAccepted"] === "number"
+      ? { controlsAccepted: Math.max(0, Math.trunc(value["controlsAccepted"])) }
+      : {}),
+    ...(typeof value["controlsDropped"] === "number"
+      ? { controlsDropped: Math.max(0, Math.trunc(value["controlsDropped"])) }
+      : {}),
+    ...(typeof value["progressCardsStarted"] === "number"
+      ? { progressCardsStarted: Math.max(0, Math.trunc(value["progressCardsStarted"])) }
+      : {}),
+    ...(typeof value["progressCardUpdates"] === "number"
+      ? { progressCardUpdates: Math.max(0, Math.trunc(value["progressCardUpdates"])) }
+      : {}),
+    ...(typeof value["progressCardErrors"] === "number"
+      ? { progressCardErrors: Math.max(0, Math.trunc(value["progressCardErrors"])) }
+      : {}),
+    ...(typeof value["runtimePickersOpened"] === "number"
+      ? { runtimePickersOpened: Math.max(0, Math.trunc(value["runtimePickersOpened"])) }
+      : {}),
+    ...(typeof value["runtimePickerErrors"] === "number"
+      ? { runtimePickerErrors: Math.max(0, Math.trunc(value["runtimePickerErrors"])) }
+      : {}),
+    ...(typeof value["capacityPromptsOpened"] === "number"
+      ? { capacityPromptsOpened: Math.max(0, Math.trunc(value["capacityPromptsOpened"])) }
+      : {}),
+    ...(typeof value["capacityPromptErrors"] === "number"
+      ? { capacityPromptErrors: Math.max(0, Math.trunc(value["capacityPromptErrors"])) }
+      : {}),
+    ...(typeof value["recoveryCardsStarted"] === "number"
+      ? { recoveryCardsStarted: Math.max(0, Math.trunc(value["recoveryCardsStarted"])) }
+      : {}),
+    ...(typeof value["recoveryCardErrors"] === "number"
+      ? { recoveryCardErrors: Math.max(0, Math.trunc(value["recoveryCardErrors"])) }
+      : {}),
+    ...(isStatusReactionState(value["lastReactionState"])
       ? { lastReactionState: value["lastReactionState"] }
       : {}),
     ...(value["lastReactionOutcome"] === "sent" || value["lastReactionOutcome"] === "failed"
       ? { lastReactionOutcome: value["lastReactionOutcome"] }
+      : {}),
+    ...(isControlState(value["lastControlState"])
+      ? { lastControlState: value["lastControlState"] }
+      : {}),
+    ...(typeof value["lastControlAt"] === "string" ? { lastControlAt: value["lastControlAt"] } : {}),
+    ...(typeof value["lastProgressCardMessageId"] === "string"
+      ? { lastProgressCardMessageId: value["lastProgressCardMessageId"] }
+      : {}),
+    ...(typeof value["lastRuntimePickerMessageId"] === "string"
+      ? { lastRuntimePickerMessageId: value["lastRuntimePickerMessageId"] }
+      : {}),
+    ...(typeof value["lastCapacityPromptMessageId"] === "string"
+      ? { lastCapacityPromptMessageId: value["lastCapacityPromptMessageId"] }
+      : {}),
+    ...(typeof value["lastRecoveryCardMessageId"] === "string"
+      ? { lastRecoveryCardMessageId: value["lastRecoveryCardMessageId"] }
       : {}),
     ...(typeof value["lastRunId"] === "string" ? { lastRunId: value["lastRunId"] } : {}),
     ...(isReplyState(value["lastReplyState"]) ? { lastReplyState: value["lastReplyState"] } : {}),
@@ -186,6 +263,10 @@ function parseNeonDiscordRouteProbeStats(value: unknown): INeonDiscordRouteProbe
     ...(isDropReason(value["lastDropReason"]) ? { lastDropReason: value["lastDropReason"] } : {}),
     ...(typeof value["lastErrorMessage"] === "string" ? { lastErrorMessage: value["lastErrorMessage"] } : {})
   };
+}
+
+function isControlState(value: unknown): value is "stopped" | "idle" | "blocked" | "partial" {
+  return value === "stopped" || value === "idle" || value === "blocked" || value === "partial";
 }
 
 function parseNeonDiscordRouteProbeState(value: unknown): TNeonDiscordRouteProbeState | undefined {
@@ -207,9 +288,10 @@ function isDropReason(value: unknown): value is TNeonDiscordDropReason | "unmapp
 
 function isReplyState(
   value: unknown
-): value is "delivered" | "suppressed" | "skipped" | "transport-error" {
+): value is "delivered" | "review-pending" | "suppressed" | "skipped" | "transport-error" {
   return (
     value === "delivered" ||
+    value === "review-pending" ||
     value === "suppressed" ||
     value === "skipped" ||
     value === "transport-error"

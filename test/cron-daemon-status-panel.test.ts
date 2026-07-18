@@ -14,7 +14,7 @@ import {
 
 const now = new Date("2026-06-02T12:00:00.000Z");
 
-describe("Neon Cron daemon status panel", () => {
+describe("Neonika Cron daemon status panel", () => {
   it("reports an honest empty cursor state and the disabled gate when nothing has ticked", async () => {
     const projectRoot = await tempProjectRoot();
 

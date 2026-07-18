@@ -45,6 +45,12 @@ the constant originated upstream.
 | `src/skills/neonSkillExtensions.ts` | `src/plugins/{dependency-denylist,min-host-version}.ts` | both of the above |
 | `src/doctor/neonDoctor.ts` | `src/commands/doctor-workspace.ts`, `src/memory/root-memory-files.ts` | `detectRootMemoryFiles`, exact-case entry check |
 | `src/secrets/secretRefs.ts` | `src/config/redact-snapshot.secret-ref.ts` | shape-validation approach, rebuilt for `op://` strings |
+| `src/gateway/discordProgressCard.ts` | `src/channels/streaming.ts`, `src/agents/tool-display-config.ts` | progress-draft layout and tool display labels |
+| `src/gateway/discordRecoveryFlow.ts` | `extensions/discord/src/approval-handler.runtime.ts` | owner-bound expiring recovery card pattern |
+| `src/gateway/discordShadowTap.ts` | `src/channels/status-reactions.ts` | terminal-safe status-reaction lifecycle |
+| `src/gateway/discordThreadWorkspace.ts` | `extensions/discord/src/monitor/thread-title.ts` | bounded thread-title heuristic |
+| `src/gateway/discordUiColors.ts` | `extensions/discord/src/ui-colors.ts`, `extensions/discord/src/approval-handler.runtime.ts` | shared accent, severity and expiry presentation |
+| `src/harness/threadRun.ts` | `src/agents/tool-display-config.ts` | bounded tool-detail extraction keys |
 
 ### MIT License
 

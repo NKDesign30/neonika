@@ -180,7 +180,7 @@ export function dispatchNeonInternalHook(
 
 export function renderNeonHookDispatchReport(result: INeonHookDispatchResult): string {
   const lines = [
-    `Neon Hook Dispatch: ${result.dispatched ? "armed" : "disabled"} (${result.gate.reason}, env ${result.gate.envKey})`,
+    `Neonika Hook Dispatch: ${result.dispatched ? "armed" : "disabled"} (${result.gate.reason}, env ${result.gate.envKey})`,
     `Event: ${result.event}`,
     `Evaluated: ${result.evaluatedAt}`,
     `Ran handlers: ${result.ranHandlers.length}${result.ranHandlers.length ? ` (${result.ranHandlers.join(", ")})` : ""}`,

@@ -18,7 +18,7 @@ import {
 
 const SECRET = "sk-live-0123456789abcdefghij";
 
-describe("Neon Context Engine — pack assembly", () => {
+describe("Neonika Context Engine — pack assembly", () => {
   it("assembles memory, runs, tasks, and an always-present channel section", () => {
     const pack = assembleNeonContextPack(baseInput({ memory: memoryWith("clean memory note") }));
 

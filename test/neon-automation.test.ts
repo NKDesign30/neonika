@@ -8,7 +8,7 @@ import {
   renderNeonAutomationReport
 } from "../src/index.js";
 
-describe("Neon Automation", () => {
+describe("Neonika Automation", () => {
   it("models cron, hooks, and dreams as read-only disabled inventory", () => {
     const snapshot = createNeonAutomationSnapshot({
       generatedAt: new Date("2026-06-01T00:00:00.000Z")
@@ -77,7 +77,7 @@ describe("Neon Automation", () => {
       })
     );
 
-    assert.match(report, /Neon Automation: ready/);
+    assert.match(report, /Neonika Automation: ready/);
     assert.match(report, /Policy: shadow-read-only/);
     assert.match(report, /enabled=0/);
     assert.match(report, /Run Intent: heartbeat-review \/ blocked \/ scheduler-disabled/);
@@ -145,7 +145,7 @@ describe("Neon Automation", () => {
 
     const report = renderNeonAutomationCronJobReport(snapshot, "heartbeat-review");
 
-    assert.match(report, /Neon Cron Job: heartbeat-review/);
+    assert.match(report, /Neonika Cron Job: heartbeat-review/);
     assert.match(report, /State: disabled \/ policy=operator-approval-required/);
     assert.match(report, /Run intent: blocked \/ scheduler-disabled \/ action=none/);
     assert.match(report, /read-only due evaluation/);
@@ -158,7 +158,7 @@ describe("Neon Automation", () => {
 
     const report = renderNeonAutomationCronListReport(snapshot);
 
-    assert.match(report, /Neon Cron Jobs: \d+ \(policy=shadow-read-only\)/);
+    assert.match(report, /Neonika Cron Jobs: \d+ \(policy=shadow-read-only\)/);
     assert.match(report, /Scheduler: disabled \(read-only shadow inventory\)/);
     assert.match(report, /- heartbeat-review \[disabled\] policy=.* schedule=every-15m.*next=.* last=.* source=/);
     // cron-only: the hooks/dreams/recovery sections from the full report are absent.
@@ -185,7 +185,7 @@ describe("Neon Automation", () => {
       "missing-cron"
     );
 
-    assert.match(report, /Neon Cron job not found: missing-cron/);
+    assert.match(report, /Neonika Cron job not found: missing-cron/);
     assert.match(report, /Available jobs: .*heartbeat-review/);
   });
 });

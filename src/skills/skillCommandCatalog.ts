@@ -108,7 +108,7 @@ export function createNeonSkillCommandCatalog(
 
 export function renderNeonSkillCommandCatalogReport(catalog: INeonSkillCommandCatalog): string {
   const lines = [
-    `Neon Skill Commands: ${catalog.totals.commands} command(s)`,
+    `Neonika Skill Commands: ${catalog.totals.commands} command(s)`,
     `Model-invocable: ${catalog.totals.modelInvocable} / collisions: ${catalog.totals.collisions}`
   ];
 

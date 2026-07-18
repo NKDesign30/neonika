@@ -2,7 +2,7 @@ import { readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-// Neon Transcript Indexer — scan stage. A read-only walk of the Claude Code
+// Neonika Transcript Indexer — scan stage. A read-only walk of the Claude Code
 // transcript store (~/.claude/projects/<dir>/<sessionId>.jsonl), the same source
 // a live session indexer ingests. No writes, no LLM, no clock side
 // effects: the wall-clock `now` is injected so tests are deterministic and CI

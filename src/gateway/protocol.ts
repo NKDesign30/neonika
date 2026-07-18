@@ -330,7 +330,7 @@ export function parseNeonGatewayFrame(input: unknown): TNeonGatewayFrame {
     return input;
   }
 
-  throw new Error("Invalid Neon Gateway frame");
+  throw new Error("Invalid Neonika Gateway frame");
 }
 
 export function isNeonGatewayRequestFrame(input: unknown): input is INeonGatewayRequestFrame {
@@ -385,7 +385,7 @@ export function detectNeonGatewaySequenceGap(
 
 export function renderNeonGatewayProtocolReport(snapshot: INeonGatewayProtocolSnapshot): string {
   return [
-    "Neon Gateway Protocol",
+    "Neonika Gateway Protocol",
     `Generated: ${snapshot.generatedAt}`,
     `Transport: ${snapshot.protocol.transport}`,
     `Version: ${snapshot.protocol.version} (min client ${snapshot.protocol.minClientVersion})`,

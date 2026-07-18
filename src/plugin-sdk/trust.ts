@@ -1,5 +1,5 @@
 /**
- * Neon Plugin trust + allowlist policy.
+ * Neonika Plugin trust + allowlist policy.
  *
  * Trust is the gate that keeps Neon read-only: a plugin can be catalogued and
  * audited from its manifest, but it is never loadable. Every trust decision

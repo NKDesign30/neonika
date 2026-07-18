@@ -12,7 +12,7 @@ import {
   type INeonReplayStreamFrame
 } from "../src/index.js";
 
-describe("Neon Replay stream", () => {
+describe("Neonika Replay stream", () => {
   it("emits the leak-safe backlog on start and pushes only new run ids on refresh", async () => {
     const projectRoot = await createTempProjectRoot();
     const frames: INeonReplayStreamFrame[] = [];

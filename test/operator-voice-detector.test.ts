@@ -6,7 +6,7 @@ function messages(entries: ReadonlyArray<readonly ["user" | "assistant", string]
   return entries.map(([role, text], index) => ({ messageIndex: index + 1, role, text }));
 }
 
-describe("Neon Operator-voice detector", () => {
+describe("Neonika Operator-voice detector", () => {
   it("classifies a user-sourced decision as operator + confirmed", () => {
     const result = classifyNeonDecisionVoice(
       1,

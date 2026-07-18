@@ -1,4 +1,4 @@
-// Neon Transcript Indexer — decision importance scorer. Port of the v3 dynamic
+// Neonika Transcript Indexer — decision importance scorer. Port of the v3 dynamic
 // score (the fix for "everything is importance 85/72"): base 50, scope bonus,
 // confirmation and trade-off bonuses, subagent and bug-prefix penalties.
 // Distinct from src/memory/neonMemoryImportance.ts, which handles Ebbinghaus

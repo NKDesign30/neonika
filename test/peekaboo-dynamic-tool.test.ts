@@ -10,7 +10,7 @@ import {
   neonPeekabooDynamicToolSpec
 } from "../src/index.js";
 
-describe("Neon Peekaboo dynamic tool", () => {
+describe("Neonika Peekaboo dynamic tool", () => {
   it("advertises a host-side peekaboo tool", () => {
     assert.equal(neonPeekabooDynamicToolSpec.name, "peekaboo");
     assert.match(neonPeekabooDynamicToolSpec.description, /Neon host/u);

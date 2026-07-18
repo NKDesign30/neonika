@@ -150,7 +150,7 @@ export async function readNeonMemoryStore(
 
 export function renderNeonMemoryWriteRuntimeReport(result: INeonMemoryWriteRuntimeResult): string {
   return [
-    `Neon Memory Write: ${result.mode} / ${result.state} (${result.gate.reason}, env ${result.gate.envKey})`,
+    `Neonika Memory Write: ${result.mode} / ${result.state} (${result.gate.reason}, env ${result.gate.envKey})`,
     `Redacted content: ${result.redactedContent}`,
     `Entry id: ${result.entryId ?? "none"}`,
     `Store: ${result.storePath ?? "none (isolated store required for productive)"}`,

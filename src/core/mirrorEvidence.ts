@@ -149,7 +149,7 @@ export async function createNeonMirrorEvidenceSnapshot(
 
 export function renderNeonMirrorEvidenceReport(snapshot: INeonMirrorEvidenceSnapshot): string {
   return [
-    `Neon Mirror Evidence: ${snapshot.state}`,
+    `Neonika Mirror Evidence: ${snapshot.state}`,
     `Records: ${snapshot.totals.records}`,
     `Accepted: ${snapshot.totals.accepted}`,
     `Drift: ${snapshot.totals.drift}`,

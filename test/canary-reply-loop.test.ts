@@ -13,7 +13,7 @@ import {
   type TNeonDiscordMediaAttachment
 } from "../src/index.js";
 
-describe("Neon Canary reply loop", () => {
+describe("Neonika Canary reply loop", () => {
   it("delivers a completed Discord run through the injected sender", async () => {
     const calls: string[] = [];
     const sender: INeonOutboundSender = {

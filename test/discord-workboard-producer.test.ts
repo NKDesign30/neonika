@@ -24,7 +24,7 @@ const guildId = "900000000000000001";
 const channelId = "900000000000000005";
 const threadId = "900000000000000011";
 
-describe("Discord -> Neon Workboard producer", () => {
+describe("Discord -> Neonika Workboard producer", () => {
   it("creates one redacted Workboard card for a Discord action intent and dedupes by message", async () => {
     const projectRoot = await createTempProjectRoot();
     const message = createGatewayMessage({

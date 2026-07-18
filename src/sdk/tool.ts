@@ -1,4 +1,4 @@
-// Neon SDK — Tool surface.
+// Neonika SDK — Tool surface.
 //
 // Curated, stable contract for tool execution and tool-call projection: the
 // persisted harness event union (assistant-delta / tool-start / tool-output /

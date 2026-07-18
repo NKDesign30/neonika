@@ -220,7 +220,7 @@ export async function runNeonCronDaemonTick(
 
 export function renderNeonCronDaemonTickReport(result: INeonCronDaemonTickResult): string {
   const lines = [
-    `Neon Cron Daemon Tick: ${result.armed ? "armed" : "disabled"} (${result.gate.reason}, env ${result.gate.envKey})`,
+    `Neonika Cron Daemon Tick: ${result.armed ? "armed" : "disabled"} (${result.gate.reason}, env ${result.gate.envKey})`,
     `Tick at: ${result.tickAt}`,
     `Current windows: ${result.tick.emitted.length}${result.tick.emitted.length ? ` (${result.tick.emitted.join(", ")})` : ""}`,
     `Catch-up windows: ${result.catchup.length}${result.catchupTruncated ? ` (+${result.catchupTruncated} dropped, bounded)` : ""}`,

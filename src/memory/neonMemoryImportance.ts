@@ -177,7 +177,7 @@ function blocked(
 
 export function renderNeonImportanceRecalcReport(result: INeonImportanceRecalcResult): string {
   return [
-    `Neon Memory Importance Recalc: ${result.state}`,
+    `Neonika Memory Importance Recalc: ${result.state}`,
     `Scanned: ${result.scanned}  Updated: ${result.updated}`,
     `Mean retention: ${result.meanRetention.toFixed(3)}  Faded (<0.25): ${result.faded}`,
     `Safety: targetedRealMemoryDb=${result.safety.targetedRealMemoryDb}`,

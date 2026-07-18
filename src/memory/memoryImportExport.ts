@@ -118,7 +118,7 @@ export async function createNeonMemoryImportPlan(
 
 export function renderNeonMemoryImportPlanReport(plan: INeonMemoryImportPlan): string {
   const lines = [
-    `Neon Memory Import Plan: ${plan.mode}`,
+    `Neonika Memory Import Plan: ${plan.mode}`,
     `Store: ${plan.storePath}`,
     `Entries: ${plan.totalEntries} · importable: ${plan.importableRecords} · skipped-empty: ${plan.skippedEmpty}`,
     `Safety: wouldWriteRealDb=${plan.safety.wouldWriteRealDb} realDbConnected=${plan.safety.realDbConnected} targetedRealMemoryDb=${plan.safety.targetedRealMemoryDb}`,

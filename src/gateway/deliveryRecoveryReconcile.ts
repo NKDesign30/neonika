@@ -106,7 +106,7 @@ export function renderNeonDeliveryReconcileReport(
       : "no further retry";
 
   return [
-    "Neon Delivery Recovery Reconcile",
+    "Neonika Delivery Recovery Reconcile",
     `State: ${decision.state} (${decision.reason})`,
     `Permanent: ${decision.permanent}`,
     `Retry: ${backoff}`,

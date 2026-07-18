@@ -1,4 +1,4 @@
-// Neon SDK — Channel surface.
+// Neonika SDK — Channel surface.
 //
 // Curated, stable contract for a channel author: the channel identity, the
 // inbound-message shape the gateway ingests, the shadow run/delivery records a

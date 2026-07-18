@@ -1,4 +1,4 @@
-// Neon Transcript Indexer — Operator-voice detector. Pure heuristic (no LLM) that
+// Neonika Transcript Indexer — Operator-voice detector. Pure heuristic (no LLM) that
 // classifies who made a decision and whether the operator confirmed or rejected it:
 //   - decision sourced from a user message      -> actor "operator", confirmed
 //   - decision sourced from an assistant message -> actor "neo"; the NEXT user

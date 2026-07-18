@@ -17,7 +17,7 @@ import {
   type INeonWorkboardListResult
 } from "../src/index.js";
 
-describe("Neon Workboard cards", () => {
+describe("Neonika Workboard cards", () => {
   it("supports card create, claim, heartbeat, proof completion, and redacted reads", async () => {
     const projectRoot = await createTempProjectRoot();
 

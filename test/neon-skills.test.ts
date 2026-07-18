@@ -16,7 +16,7 @@ import {
   type INeonSkillRootConfig
 } from "../src/index.js";
 
-describe("Neon Skills inventory", () => {
+describe("Neonika Skills inventory", () => {
   it("discovers local skills, marks lower-precedence duplicates shadowed, and redacts bodies", async () => {
     const projectRoot = await createTempProjectRoot();
 
@@ -107,7 +107,7 @@ describe("Neon Skills inventory", () => {
       assert.equal(snapshot.extensions[0]?.capabilities.channels, 1);
       assert.equal(snapshot.extensions[0]?.capabilities.tools, 1);
       assert.doesNotMatch(JSON.stringify(snapshot), /SECRET_TOKEN/);
-      assert.match(report, /Neon Skills Inventory: ready/);
+      assert.match(report, /Neonika Skills Inventory: ready/);
       assert.match(report, /skill alpha: available/);
     } finally {
       await rm(projectRoot, { force: true, recursive: true });
@@ -376,7 +376,7 @@ describe("scanNeonSkillScripts", () => {
   });
 });
 
-describe("Neon Skills inventory security scan", () => {
+describe("Neonika Skills inventory security scan", () => {
   it("flags a skill body with dangerous code without leaking the body", async () => {
     const projectRoot = await createTempProjectRoot();
 
@@ -466,7 +466,7 @@ describe("Neon Skills inventory security scan", () => {
   });
 });
 
-describe("Neon Skills inventory content hash", () => {
+describe("Neonika Skills inventory content hash", () => {
   function roots(primaryRoot: string): readonly INeonSkillRootConfig[] {
     return [
       { id: "primary", label: "Primary", kind: "workspace", path: primaryRoot, trust: "trusted-project" }

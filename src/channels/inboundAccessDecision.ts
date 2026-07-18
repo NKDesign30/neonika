@@ -187,7 +187,7 @@ export function renderNeonInboundAccessDecisionReport(
   decision: INeonInboundAccessDecision
 ): string {
   return [
-    "Neon Inbound Access Decision",
+    "Neonika Inbound Access Decision",
     `Outcome: ${decision.outcome}${decision.blockReason ? ` (${decision.blockReason})` : ""}`,
     `Sender allowed: ${decision.senderAllowed}`,
     `Command authorized: ${decision.commandAuthorized}`,

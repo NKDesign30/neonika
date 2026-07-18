@@ -35,6 +35,7 @@ export interface INeonGatewayShadowOptions {
   readonly now?: () => Date;
   readonly createRunId?: (message: INeonGatewayInboundMessage, startedAt: string) => string;
   readonly onRunStarted?: (run: INeonGatewayShadowRun) => Promise<void> | void;
+  readonly onHarnessEvent?: (event: TCodexHarnessEvent) => void;
   readonly resolveAbortSignal?: (
     runId: string,
     message: INeonGatewayInboundMessage
@@ -49,7 +50,13 @@ export async function runNeonGatewayShadow(
   const startedAt = resolveNow(options).toISOString();
   const runId = options.createRunId?.(input.message, startedAt) ?? createShadowRunId(input.message, startedAt);
   const abortSignal = options.resolveAbortSignal?.(runId, input.message);
-  const harnessInput = createHarnessInputFromGatewayMessage(input, options.resolveAgent, runId, abortSignal);
+  const harnessInput = createHarnessInputFromGatewayMessage(
+    input,
+    options.resolveAgent,
+    runId,
+    abortSignal,
+    options.onHarnessEvent
+  );
   const request = createGatewayRunRequest(input.message, startedAt);
 
   await options.onRunStarted?.(
@@ -58,6 +65,7 @@ export async function runNeonGatewayShadow(
       request,
       runId,
       harnessId: options.harness.id,
+      ...(options.harness.runtime ? { runtime: options.harness.runtime } : {}),
       harnessSessionKey: deriveCodexSessionKey(harnessInput.binding),
       startedAt
     })
@@ -65,7 +73,7 @@ export async function runNeonGatewayShadow(
 
   const harness = await options.harness.run(harnessInput);
   const completedAt = resolveNow(options).toISOString();
-  const status = resolveRunStatus(harness.events);
+  const status = resolveRunStatus(harness.events, harness.cancelled === true);
   const finalText = redactText(harness.finalText);
 
   return {
@@ -76,6 +84,7 @@ export async function runNeonGatewayShadow(
       status,
       request,
       harnessId: options.harness.id,
+      ...(options.harness.runtime ? { runtime: options.harness.runtime } : {}),
       harnessSessionKey: harness.sessionKey,
       memoryState: harness.memoryState,
       events: harness.events,
@@ -126,6 +135,7 @@ interface ICreateGatewayRunningRunParams {
   readonly request: INeonGatewayRunRequest;
   readonly runId: string;
   readonly harnessId: ICodexHarness["id"];
+  readonly runtime?: ICodexHarness["runtime"];
   readonly harnessSessionKey: string;
   readonly startedAt: string;
 }
@@ -137,6 +147,7 @@ function createGatewayRunningRun(params: ICreateGatewayRunningRunParams): INeonG
     status: "running",
     request: params.request,
     harnessId: params.harnessId,
+    ...(params.runtime ? { runtime: params.runtime } : {}),
     harnessSessionKey: params.harnessSessionKey,
     memoryState: params.input.memory.state,
     events: [],
@@ -157,13 +168,15 @@ export function createHarnessInputFromGatewayMessage(
   input: INeonGatewayShadowInput,
   resolveAgent: INeonGatewayShadowOptions["resolveAgent"] = defaultResolveAgent,
   runId?: string,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  onEvent?: (event: TCodexHarnessEvent) => void
 ): ICodexHarnessInput {
   const agent = resolveGatewayAgentOrThrow(input, resolveAgent);
 
   return {
     ...(runId ? { runId } : {}),
     ...(abortSignal ? { abortSignal } : {}),
+    ...(onEvent ? { onEvent } : {}),
     prompt: renderGatewayPrompt(input.message),
     binding: createSessionBindingFromGatewayMessage(input.message),
     memory: input.memory,
@@ -178,7 +191,7 @@ function resolveGatewayAgentOrThrow(
   const agent = input.agent ?? resolveAgent(input.message.agentId, input.message);
 
   if (!agent) {
-    throw new Error("Neon Gateway agent profile not resolved");
+    throw new Error("Neonika Gateway agent profile not resolved");
   }
 
   return agent;
@@ -211,7 +224,7 @@ export function renderGatewayPrompt(message: INeonGatewayInboundMessage): string
   const attachmentLines = renderGatewayAttachmentLines(message.attachments);
 
   return [
-    "Neon Gateway inbound message.",
+    "Neonika Gateway inbound message.",
     `Channel: ${message.channel}`,
     `Agent: ${message.agentId}`,
     `User: ${message.userDisplayName ?? message.userId}`,
@@ -391,7 +404,14 @@ function createSuspiciousPreviewTag(redacted: string): string {
   return ` [suspicious: ${summary}]`;
 }
 
-function resolveRunStatus(events: readonly TCodexHarnessEvent[]): TNeonGatewayRunStatus {
+function resolveRunStatus(
+  events: readonly TCodexHarnessEvent[],
+  cancelled: boolean
+): TNeonGatewayRunStatus {
+  if (cancelled) {
+    return "cancelled";
+  }
+
   return events.at(-1)?.kind === "failed" ? "failed" : "completed";
 }
 

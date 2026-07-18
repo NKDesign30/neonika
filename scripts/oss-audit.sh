@@ -133,7 +133,9 @@ check "Binary files outside the allowlist"
 binaries=$(PYTHONDONTWRITEBYTECODE=1 python3 - <<'PYEOF'
 import subprocess, sys
 ALLOWED = {
-    "logo-dark.png",                              # no tEXt/iTXt/eXIf chunks
+    "assets/banner-dark.png",                     # README banner, rendered from
+    "assets/banner-light.png",                    # SVG: IHDR/bKGD/IDAT/IEND only,
+                                                  # no tEXt/iTXt/zTXt/eXIf/tIME
     "ui/public/fonts/SpaceGrotesk-Variable.ttf",  # the five fonts, SIL OFL,
     "ui/src/styles/fonts/InterVariable.ttf",      # see THIRD_PARTY_NOTICES.md
     "ui/src/styles/fonts/GeistMono-Variable.ttf",

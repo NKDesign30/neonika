@@ -49,7 +49,7 @@ const entries: readonly INeonActivityEntry[] = [
   entry({ id: "d", agentId: "neo", kind: "inbound", status: "done", title: "Inbound message", summary: "discord message" })
 ];
 
-describe("Neon Mission-Control activity filter (Z94)", () => {
+describe("Neonika Mission-Control activity filter (Z94)", () => {
   it("returns every entry and marks unfiltered when no criteria are given", () => {
     const result = filterNeonMissionControlActivity(entries);
     assert.equal(result.totalCount, 4);

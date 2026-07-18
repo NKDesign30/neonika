@@ -9,7 +9,7 @@ import {
   renderNeonNodesReport
 } from "../src/index.js";
 
-describe("Neon Nodes", () => {
+describe("Neonika Nodes", () => {
   it("summarizes the local Neonika node with read-only file-transfer policy", async () => {
     const projectRoot = await createTempProjectRoot();
 
@@ -114,7 +114,7 @@ describe("Neon Nodes", () => {
         })
       );
 
-      assert.match(report, /Neon Nodes: ready/);
+      assert.match(report, /Neonika Nodes: ready/);
       assert.match(report, /Pairing: locked \/ operator-required/);
       assert.match(report, /Token Gate: locked/);
       assert.match(report, /Canary Tokens: locked/);

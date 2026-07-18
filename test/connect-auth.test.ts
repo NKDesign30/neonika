@@ -16,7 +16,7 @@ import {
 const TOKEN_ENV = "NEON_GATEWAY_HTTP_MUTATION_TOKEN";
 const TEST_TOKEN = "connect-token-SHOULD-NEVER-LEAK-xyz789";
 
-describe("Neon Gateway connect-credential auth (Z303)", () => {
+describe("Neonika Gateway connect-credential auth (Z303)", () => {
   it("authorizes loopback with no configured token (backward-compatible)", () => {
     const decision = resolveNeonGatewayConnectAuth({ env: {}, remoteAddress: "127.0.0.1" });
     assert.equal(decision.state, "authorized");

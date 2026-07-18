@@ -9,6 +9,12 @@ import type {
 } from "./deliveryQueue.js";
 import { resolveNeonDeliveryQueuePaths } from "./deliveryQueue.js";
 import type { INeonOutboundSender } from "./outboundSender.js";
+import {
+  createNeonDeliveryIntentId,
+  createNeonDeliveryPayloadHash,
+  executeNeonExactlyOnceDelivery,
+  type INeonExactlyOnceDeliveryResult
+} from "./deliveryReceiptStore.js";
 
 /**
  * Gated delivery dispatch: glues a DeliveryQueue candidate + operator approval to
@@ -104,7 +110,8 @@ export async function deliverAndRecordNeonApprovedCandidate(
     return replayBlock;
   }
 
-  const result = await deliverNeonApprovedCandidate(options);
+  const preflight = await resolveDispatchPreflight(options);
+  const result = preflight ?? await deliverApprovedCandidateExactlyOnce(options);
   if (result.outboundSent) {
     try {
       await recordNeonDeliveryPlatformSendMarker(options.projectRoot, result);
@@ -115,6 +122,103 @@ export async function deliverAndRecordNeonApprovedCandidate(
   await recordNeonDeliveryDispatchResult(options.projectRoot, result);
 
   return result;
+}
+
+async function resolveDispatchPreflight(
+  options: IDeliverAndRecordNeonApprovedCandidateOptions
+): Promise<INeonDeliveryDispatchResult | undefined> {
+  if (options.candidate.ackState !== "done" && isApprovedFor(options.candidate, options.approval)) {
+    return undefined;
+  }
+  return await deliverNeonApprovedCandidate(options);
+}
+
+async function deliverApprovedCandidateExactlyOnce(
+  options: IDeliverAndRecordNeonApprovedCandidateOptions
+): Promise<INeonDeliveryDispatchResult> {
+  const attemptedAt = (options.now?.() ?? new Date()).toISOString();
+  const candidate = options.candidate;
+  const intentId = createNeonDeliveryIntentId(candidate.id, candidate.target, "text");
+  const result = await executeNeonExactlyOnceDelivery({
+    projectRoot: options.projectRoot,
+    intentId,
+    runId: candidate.runId,
+    kind: "text",
+    target: candidate.target,
+    payloadHash: createNeonDeliveryPayloadHash([
+      candidate.target.accountId,
+      candidate.target.channelId,
+      candidate.target.threadId ?? "main",
+      candidate.finalTextPreview
+    ]),
+    send: async (target) => await options.sender.sendText(target, candidate.finalTextPreview),
+    ...(options.now ? { now: options.now } : {})
+  });
+  return projectExactlyOnceDispatchResult(candidate, attemptedAt, result);
+}
+
+function projectExactlyOnceDispatchResult(
+  candidate: INeonDeliveryQueueCandidate,
+  attemptedAt: string,
+  result: INeonExactlyOnceDeliveryResult
+): INeonDeliveryDispatchResult {
+  const base = {
+    candidateId: candidate.id,
+    runId: candidate.runId,
+    bodyPreview: candidate.finalTextPreview,
+    attemptedAt
+  } as const;
+
+  if (result.state === "delivered") {
+    return {
+      ...base,
+      outcome: "delivered",
+      outboundSent: true,
+      ackState: "done",
+      recoveryState: "none",
+      ...(result.messageId ? { messageId: result.messageId } : {})
+    };
+  }
+  if (result.state === "already-delivered") {
+    return {
+      ...base,
+      outcome: "already-sent",
+      outboundSent: false,
+      ackState: "done",
+      recoveryState: "none",
+      ...(result.messageId ? { messageId: result.messageId } : {}),
+      reason: "delivery receipt already exists"
+    };
+  }
+  if (result.state === "suppressed") {
+    return {
+      ...base,
+      outcome: "suppressed",
+      outboundSent: false,
+      ackState: "queued",
+      recoveryState: "none",
+      reason: result.reason ?? "delivery suppressed"
+    };
+  }
+  if (result.state === "transport-error") {
+    return {
+      ...base,
+      outcome: "transport-error",
+      outboundSent: false,
+      ackState: "working",
+      recoveryState: "pending-drain",
+      reason: "transport-error"
+    };
+  }
+  return {
+    ...base,
+    outcome: "pending-drain",
+    outboundSent: false,
+    ackState: "working",
+    recoveryState: "pending-drain",
+    ...(result.messageId ? { messageId: result.messageId } : {}),
+    reason: result.reason ?? result.state
+  };
 }
 
 export async function deliverNeonApprovedCandidate(
@@ -276,7 +380,7 @@ export function renderNeonDeliveryDispatchReport(
   result: INeonDeliveryDispatchResult
 ): string {
   return [
-    `Neon Delivery dispatch: ${result.outcome}`,
+    `Neonika Delivery dispatch: ${result.outcome}`,
     `Candidate: ${result.candidateId} (run ${result.runId})`,
     `Outbound sent: ${result.outboundSent}`,
     `Ack state: ${result.ackState}`,
@@ -295,11 +399,7 @@ function resolveDispatchReplayBlock(
 ): INeonDeliveryDispatchResult | undefined {
   const prior = [...records]
     .reverse()
-    .find(
-      (record) =>
-        record.candidateId === candidate.id &&
-        (record.outboundSent || record.recoveryState === "pending-drain")
-    );
+    .find((record) => record.candidateId === candidate.id && record.outboundSent);
   const priorPlatformSend = [...platformSends]
     .reverse()
     .find((marker) => marker.candidateId === candidate.id);
@@ -316,26 +416,15 @@ function resolveDispatchReplayBlock(
     attemptedAt
   } as const;
 
-  if (prior?.outboundSent || priorPlatformSend) {
-    const messageId = prior?.messageId ?? priorPlatformSend?.messageId;
-    return {
-      ...base,
-      outcome: "already-sent",
-      outboundSent: false,
-      ackState: "done",
-      recoveryState: "none",
-      ...(messageId ? { messageId } : {}),
-      reason: "prior outbound send recorded"
-    };
-  }
-
+  const messageId = prior?.messageId ?? priorPlatformSend?.messageId;
   return {
     ...base,
-    outcome: "pending-drain",
+    outcome: "already-sent",
     outboundSent: false,
-    ackState: "working",
-    recoveryState: "pending-drain",
-    reason: "prior transport attempt needs drain"
+    ackState: "done",
+    recoveryState: "none",
+    ...(messageId ? { messageId } : {}),
+    reason: "prior outbound send recorded"
   };
 }
 

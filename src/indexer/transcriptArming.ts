@@ -1,4 +1,4 @@
-// Neon Transcript Indexer — production arming resolution. One pure place that
+// Neonika Transcript Indexer — production arming resolution. One pure place that
 // answers "is the LLM pass armed, is persistence armed, and where does the
 // isolated store live?" so the CLI stays thin and the answer is testable.
 //
@@ -50,7 +50,7 @@ export function resolveNeonTranscriptArming(
 
 export function renderNeonTranscriptArmingReport(arming: INeonTranscriptArming): string {
   return [
-    `Neon Transcript production check: ${arming.fullyArmed ? "ARMED" : "not armed"}`,
+    `Neonika Transcript production check: ${arming.fullyArmed ? "ARMED" : "not armed"}`,
     `LLM pass: ${arming.llmArmed ? "armed (real claude -p runner)" : "dry-run"} (env ${arming.llmGate.envKey})`,
     `Persist: ${arming.persistArmed ? "productive (isolated store)" : "dry-run"} (env NEON_MEMORY_WRITE_ENABLED + ${neonTranscriptStorePathEnvKey})`,
     `Store path: ${arming.storePath ?? "(not set)"}`,

@@ -1,5 +1,5 @@
 /**
- * Neon Plugin Manifest contract.
+ * Neonika Plugin Manifest contract.
  *
  * This is the Neon-native, source-backed projection of an OpenClaw extension
  * manifest (`openclaw.plugin.json`). It is a pure description: parsing a

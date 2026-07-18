@@ -143,7 +143,7 @@ export function resolveNeonSecretsAuditExitCode(
 export function renderNeonSecretsAuditReport(report: INeonSecretsAuditReport): string {
   const lines: string[] = [];
 
-  lines.push(`Neon Secrets Audit: ${report.findings.length === 0 ? "clean" : "findings"}`);
+  lines.push(`Neonika Secrets Audit: ${report.findings.length === 0 ? "clean" : "findings"}`);
   lines.push(`Scanned fields: ${report.scannedFields}`);
   lines.push(`Clean fields: ${report.cleanFields}`);
   lines.push(`Exit code: ${report.exitCode}`);

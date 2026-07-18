@@ -127,7 +127,7 @@ export async function runNeonMirrorComparison(
 
 export function renderNeonMirrorComparisonReport(result: INeonMirrorComparisonResult): string {
   return [
-    `Neon Mirror Run: ${result.state} (${result.gate.reason}, env ${result.gate.envKey})`,
+    `Neonika Mirror Run: ${result.state} (${result.gate.reason}, env ${result.gate.envKey})`,
     `Verdict: ${result.verdict ?? "n/a"}`,
     `Evidence: ${result.evidenceId ?? "none"}`,
     `Latency delta: ${result.latencyDeltaMs ?? "n/a"}`,

@@ -6,7 +6,7 @@ import {
   type TNeonToolFamily
 } from "./toolCapabilities.js";
 
-// Neon Tools Runtime — provider + tool descriptor catalog and availability plan.
+// Neonika Tools Runtime — provider + tool descriptor catalog and availability plan.
 //
 // Data layer for the capability model. The provider catalog records ONLY the
 // env-var reference NAMES that would unlock each provider — never a value, never

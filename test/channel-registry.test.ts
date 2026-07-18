@@ -82,7 +82,7 @@ describe("Neon channel registry", () => {
       });
       const report = renderNeonChannelRegistryReport(snapshot);
 
-      assert.match(report, /Neon Channel Registry: ready/);
+      assert.match(report, /Neonika Channel Registry: ready/);
       assert.match(report, /discord: live/);
       assert.match(report, /telegram: gated/);
       assert.doesNotMatch(report, new RegExp(secretToken));

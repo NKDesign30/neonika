@@ -12,6 +12,8 @@ import type {
 } from "./deliveryQueue.js";
 import { formatNeonDiscordReplyText } from "./discordReplyFormat.js";
 import type { TNeonDiscordMediaAttachment } from "./discordMediaPayload.js";
+import type { INeonDiscordPoll } from "./discordStickerPollPayload.js";
+import type { INeonDiscordEmbed } from "./discordRichPayload.js";
 
 /**
  * Outbound-Sender-Vertrag für Neonika.
@@ -32,6 +34,14 @@ export interface INeonOutboundSender {
     target: INeonDeliveryQueueTarget,
     message: string | undefined,
     attachments: readonly TNeonDiscordMediaAttachment[]
+  ): Promise<INeonOutboundSendResult>;
+  sendPoll?(
+    target: INeonDeliveryQueueTarget,
+    poll: INeonDiscordPoll
+  ): Promise<INeonOutboundSendResult>;
+  sendEmbeds?(
+    target: INeonDeliveryQueueTarget,
+    embeds: readonly INeonDiscordEmbed[]
   ): Promise<INeonOutboundSendResult>;
 }
 
@@ -90,6 +100,14 @@ export interface INeonOutboundTransport {
     target: INeonDeliveryQueueTarget,
     body: string | undefined,
     attachments: readonly TNeonDiscordMediaAttachment[]
+  ): Promise<{ readonly messageId: string }>;
+  postPoll?(
+    target: INeonDeliveryQueueTarget,
+    poll: INeonDiscordPoll
+  ): Promise<{ readonly messageId: string }>;
+  postEmbed?(
+    target: INeonDeliveryQueueTarget,
+    embeds: readonly INeonDiscordEmbed[]
   ): Promise<{ readonly messageId: string }>;
 }
 
@@ -286,6 +304,30 @@ export function createNeonDryRunOutboundSender(
         cutoverStage: "shadow",
         attemptedAt
       });
+    },
+    sendPoll(target, poll): Promise<INeonOutboundSendResult> {
+      const attemptedAt = (options.now?.() ?? new Date()).toISOString();
+
+      return Promise.resolve({
+        outboundSent: false,
+        target,
+        bodyPreview: createOutboundBodyPreview(`poll: ${poll.question}`, maxLength),
+        reason: "dry-run-no-send",
+        cutoverStage: "shadow",
+        attemptedAt
+      });
+    },
+    sendEmbeds(target, embeds): Promise<INeonOutboundSendResult> {
+      const attemptedAt = (options.now?.() ?? new Date()).toISOString();
+
+      return Promise.resolve({
+        outboundSent: false,
+        target,
+        bodyPreview: createOutboundBodyPreview(`card: ${embeds[0]?.title ?? "embed"}`, maxLength),
+        reason: "dry-run-no-send",
+        cutoverStage: "shadow",
+        attemptedAt
+      });
     }
   };
 }
@@ -385,6 +427,82 @@ export function createNeonCanaryOutboundSender(
       }
 
       const delivered = await transport.postMedia(target, transportBody, attachments);
+
+      return {
+        outboundSent: true,
+        target,
+        bodyPreview,
+        cutoverStage: stage,
+        messageId: delivered.messageId,
+        sentAt: now.toISOString()
+      };
+    },
+
+    async sendPoll(target, poll): Promise<INeonOutboundSendResult> {
+      const now = options.now?.() ?? new Date();
+      const bodyPreview = createOutboundBodyPreview(`poll: ${poll.question}`, maxLength);
+      const facts = resolveGateFacts();
+      const stage = facts.cutoverStage;
+      const channelAllowed =
+        !options.channelAllowlist ||
+        isNeonCanaryChannelEligible(target.channelId, options.channelAllowlist);
+      const gateOpen =
+        isNeonOutboundStage(stage) &&
+        facts.canaryApproved === true &&
+        facts.outboundEnabled === true &&
+        channelAllowed &&
+        Boolean(transport?.postPoll);
+
+      if (!gateOpen || !transport?.postPoll || !isNeonOutboundStage(stage)) {
+        return {
+          outboundSent: false,
+          target,
+          bodyPreview,
+          reason: !channelAllowed ? "canary-channel-not-allowlisted" : "canary-gate-closed",
+          cutoverStage: stage,
+          attemptedAt: now.toISOString()
+        };
+      }
+
+      const delivered = await transport.postPoll(target, poll);
+
+      return {
+        outboundSent: true,
+        target,
+        bodyPreview,
+        cutoverStage: stage,
+        messageId: delivered.messageId,
+        sentAt: now.toISOString()
+      };
+    },
+
+    async sendEmbeds(target, embeds): Promise<INeonOutboundSendResult> {
+      const now = options.now?.() ?? new Date();
+      const bodyPreview = createOutboundBodyPreview(`card: ${embeds[0]?.title ?? "embed"}`, maxLength);
+      const facts = resolveGateFacts();
+      const stage = facts.cutoverStage;
+      const channelAllowed =
+        !options.channelAllowlist ||
+        isNeonCanaryChannelEligible(target.channelId, options.channelAllowlist);
+      const gateOpen =
+        isNeonOutboundStage(stage) &&
+        facts.canaryApproved === true &&
+        facts.outboundEnabled === true &&
+        channelAllowed &&
+        Boolean(transport?.postEmbed);
+
+      if (!gateOpen || !transport?.postEmbed || !isNeonOutboundStage(stage)) {
+        return {
+          outboundSent: false,
+          target,
+          bodyPreview,
+          reason: !channelAllowed ? "canary-channel-not-allowlisted" : "canary-gate-closed",
+          cutoverStage: stage,
+          attemptedAt: now.toISOString()
+        };
+      }
+
+      const delivered = await transport.postEmbed(target, embeds);
 
       return {
         outboundSent: true,

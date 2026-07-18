@@ -1,4 +1,4 @@
-// Neon Transcript Indexer — decision domain types. Shared vocabulary for the
+// Neonika Transcript Indexer — decision domain types. Shared vocabulary for the
 // decision document, the quality gate, the voice detector and the importance
 // scorer. Ported from the battle-tested v3 indexer type set.
 

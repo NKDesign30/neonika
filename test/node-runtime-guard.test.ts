@@ -8,7 +8,7 @@ import {
   parseNeonNodeVersion
 } from "../src/index.js";
 
-describe("Neon Node runtime guard", () => {
+describe("Neonika Node runtime guard", () => {
   it("matches the upstream-supported Node engine range", () => {
     assert.equal(neonSupportedNodeEngine, ">=22.19.0 <23 || >=23.11.0");
     assert.equal(isNeonSupportedNodeVersion("22.18.9"), false);

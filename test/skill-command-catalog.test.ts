@@ -110,7 +110,7 @@ describe("createNeonSkillCommandCatalog", () => {
       ])
     );
 
-    assert.match(report, /Neon Skill Commands: 1 command/);
+    assert.match(report, /Neonika Skill Commands: 1 command/);
     assert.match(report, /\/skill:alpha: active \/ owner alpha@primary \/ collides: alpha@secondary/);
   });
 });
@@ -160,7 +160,7 @@ describe("skill-commands CLI catalog from an inventory snapshot", () => {
 
       assert.equal(catalog.totals.commands, 1);
       assert.equal(catalog.totals.collisions, 1);
-      assert.match(report, /Neon Skill Commands: 1 command/);
+      assert.match(report, /Neonika Skill Commands: 1 command/);
       assert.match(report, /\/skill:alpha: active \/ owner alpha@primary \/ collides: alpha@secondary/);
       assert.doesNotMatch(report, /secret/i);
     } finally {

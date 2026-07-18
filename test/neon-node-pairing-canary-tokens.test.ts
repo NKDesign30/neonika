@@ -19,7 +19,7 @@ import {
   type INeonNodePairingTokenGateSnapshot
 } from "../src/index.js";
 
-describe("Neon Node Pairing Canary Tokens", () => {
+describe("Neonika Node Pairing Canary Tokens", () => {
   it("issues a one-time canary token only when the token gate is ready and keeps raw material out of state", async () => {
     const projectRoot = await createTempProjectRoot();
 
@@ -159,7 +159,7 @@ describe("Neon Node Pairing Canary Tokens", () => {
         })
       );
 
-      assert.match(report, /Neon Node Canary Tokens: issued/u);
+      assert.match(report, /Neonika Node Canary Tokens: issued/u);
       assert.match(report, /secretPersisted=false/u);
       assert.match(report, /rawPersistence=disabled/u);
       assert.doesNotMatch(report, /neon_node_canary_report_secret/u);

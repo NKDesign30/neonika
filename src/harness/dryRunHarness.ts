@@ -19,7 +19,7 @@ async function runDryHarnessTurn(input: ICodexHarnessInput): Promise<ICodexHarne
   const rawEvents: readonly TCodexHarnessEvent[] = [
     {
       kind: "assistant-delta",
-      text: `Neon Codex Harness dry run accepted for ${input.binding.agentId}.`
+      text: `Neonika Codex Harness dry run accepted for ${input.binding.agentId}.`
     },
     {
       kind: "tool-start",

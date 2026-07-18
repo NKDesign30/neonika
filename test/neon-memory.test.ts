@@ -11,7 +11,7 @@ import {
   type TNeonMemoryCommandRunner
 } from "../src/index.js";
 
-describe("Neon Memory attachment", () => {
+describe("Neonika Memory attachment", () => {
   it("parses memory-search output into bounded hits", () => {
     const hits = parseMemorySearchOutput(
       [
@@ -43,7 +43,7 @@ describe("Neon Memory attachment", () => {
 
     assert.equal(attachment.state, "attached");
     assert.equal(attachment.hitCount, 2);
-    assert.match(attachment.note, /Attached 2 Neon Memory hit/);
+    assert.match(attachment.note, /Attached 2 Neonika Memory hit/);
     assert.equal(attachment.excerpts?.length, 2);
     assert.match(attachment.excerpts?.[0]?.text ?? "", /runtime proof/);
   });
@@ -86,7 +86,7 @@ describe("Neon Memory attachment", () => {
     });
 
     assert.equal(attachment.state, "attached");
-    assert.match(attachment.note, /Attached 2 Neon Memory hit/);
+    assert.match(attachment.note, /Attached 2 Neonika Memory hit/);
     assert.match(attachment.note, /profile\/operator, agent\/chaty/);
     assert.doesNotMatch(attachment.note, /ignore previous instructions/i);
   });
@@ -105,7 +105,7 @@ describe("Neon Memory attachment", () => {
 
     assert.equal(attachment.state, "failed");
     assert.equal(attachment.hitCount, 0);
-    assert.match(attachment.note, /Neon Memory search failed/);
+    assert.match(attachment.note, /Neonika Memory search failed/);
   });
 
   it("reads Memory backend status from the provider", async () => {
@@ -130,7 +130,7 @@ describe("Neon Memory attachment", () => {
         stdout: [
           "=== Semantic Memory (1 Treffer) ===",
           "  [agent/chaty] (2026-05-31)",
-          "    - Chaty reads Neon Memory before code."
+          "    - Chaty reads Neonika Memory before code."
         ].join("\n")
       })
     });
@@ -153,7 +153,7 @@ describe("Neon Memory attachment", () => {
         stdout: [
           "=== Semantic Memory (1 Treffer) ===",
           "  [agent/chaty] (2026-05-31)",
-          "    - Chaty reads Neon Memory before code."
+          "    - Chaty reads Neonika Memory before code."
         ].join("\n")
       })
     });
@@ -216,7 +216,7 @@ class FailingMemoryProvider implements INeonMemoryProvider {
   }
 }
 
-describe("Neon Memory writer (gated dry-run)", () => {
+describe("Neonika Memory writer (gated dry-run)", () => {
   function recordingRunner(calls: string[][]): TNeonMemoryCommandRunner {
     return async (command, args) => {
       calls.push([command, ...args]);

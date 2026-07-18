@@ -1,4 +1,4 @@
-// Neon Mission Control entry point.
+// Neonika Mission Control entry point.
 // Phosphor icon-font weights (https://phosphoricons.com) must load before the
 // app so <i class="ph ..."> glyphs render. Then the global design-system CSS,
 // then the root custom element boots the app shell + router.

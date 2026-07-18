@@ -11,7 +11,7 @@ import {
   type INeonTranscriptMessage
 } from "./transcriptExtract.js";
 
-// Neon Transcript Indexer — projection stage. Folds scanned + extracted Claude
+// Neonika Transcript Indexer — projection stage. Folds scanned + extracted Claude
 // Code transcripts into per-session digests and totals. Read-only, deterministic,
 // redaction-first: every preview already passed redactSnapshotText in the extract
 // stage and the source path is path-stripped here. The Neon-native, shadow-safe
@@ -144,7 +144,7 @@ export function renderNeonTranscriptReport(snapshot: INeonTranscriptSnapshot): s
   });
 
   return [
-    `Neon Transcript Indexer: ${snapshot.state}`,
+    `Neonika Transcript Indexer: ${snapshot.state}`,
     `Sessions: ${snapshot.totals.sessions}`,
     `Messages: ${snapshot.totals.messages}`,
     `Projects: ${snapshot.totals.projects} (subagent sessions: ${snapshot.totals.subagentSessions})`,

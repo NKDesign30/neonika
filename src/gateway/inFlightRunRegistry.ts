@@ -262,7 +262,7 @@ export function renderNeonInFlightRunReport(snapshot: INeonInFlightRunSnapshot):
     );
 
   return [
-    "Neon In-Flight Runs",
+    "Neonika In-Flight Runs",
     `Active runs: ${snapshot.activeRuns}`,
     `Busy: ${snapshot.busy}`,
     `Last activity: ${snapshot.lastRunActivityAt ?? "none"}`,

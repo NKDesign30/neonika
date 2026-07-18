@@ -11,7 +11,7 @@ const SUMMARY_MAX_LENGTH = 280;
 
 export interface ISyncNeonWorkboardCardTaskOptions {
   readonly card: INeonWorkboardCard;
-  readonly status: Extract<TNeonTaskStatus, "blocked" | "done">;
+  readonly status: Extract<TNeonTaskStatus, "blocked" | "cancelled" | "done">;
   readonly summary?: string | undefined;
   readonly runId?: string | undefined;
   readonly nowMs: number;

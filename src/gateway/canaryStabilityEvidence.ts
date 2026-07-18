@@ -174,7 +174,7 @@ export async function readNeonCanaryStabilityEvidence(
 
 export function renderNeonCanaryStabilityReport(snapshot: INeonCanaryStabilitySnapshot): string {
   const lines: string[] = [
-    "Neon Canary Stability Evidence",
+    "Neonika Canary Stability Evidence",
     `verdict=${snapshot.verdict} runs=${snapshot.totals.total} approved=${snapshot.totals.approved} acked-done=${snapshot.totals.ackedDone} rejected=${snapshot.totals.rejected} pending-recovery=${snapshot.totals.pendingRecovery}`,
     `primary: ready=${snapshot.primaryReadiness.ready} (${snapshot.primaryReadiness.reason})`,
     ""

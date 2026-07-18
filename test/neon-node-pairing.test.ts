@@ -14,7 +14,7 @@ import {
   verifyNeonNodePairingChallenge
 } from "../src/index.js";
 
-describe("Neon Node Pairing", () => {
+describe("Neonika Node Pairing", () => {
   it("persists pending pairing requests without storing raw public keys or issuing tokens", async () => {
     const projectRoot = await createTempProjectRoot();
 
@@ -160,7 +160,7 @@ describe("Neon Node Pairing", () => {
         })
       );
 
-      assert.match(report, /Neon Node Pairing: ready/);
+      assert.match(report, /Neonika Node Pairing: ready/);
       assert.match(report, /pair-report: pending/);
       assert.match(report, /tokenIssued=false/);
     } finally {

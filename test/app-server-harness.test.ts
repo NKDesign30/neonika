@@ -70,8 +70,8 @@ describe("Codex app-server harness", () => {
       assert.equal(client.requests[0]?.method, "thread/start");
       assert.equal(client.requests[1]?.method, "turn/start");
       assert.match(JSON.stringify(client.requests[0]?.params), /Agent profile: Chaty/);
-      assert.match(JSON.stringify(client.requests[1]?.params), /Neon Agent: Chaty/);
-      assert.match(JSON.stringify(client.requests[1]?.params), /Neon Memory: attached; hits=1/);
+      assert.match(JSON.stringify(client.requests[1]?.params), /Neonika Agent: Chaty/);
+      assert.match(JSON.stringify(client.requests[1]?.params), /Neonika Memory: attached; hits=1/);
       assert.deepEqual(
         result.events.map((event) => event.kind),
         ["tool-output", "assistant-delta", "tool-output", "final"]
@@ -259,8 +259,8 @@ describe("Codex app-server harness", () => {
       const turnParams = JSON.stringify(client.requests[1]?.params);
 
       assert.equal(client.requests[1]?.method, "turn/start");
-      assert.match(turnParams, /Neon Memory: attached; hits=1; note=Attached 1 Neon Memory hit/);
-      assert.doesNotMatch(turnParams, /note=Attached 1 Neon Memory hit\(s\) for query/);
+      assert.match(turnParams, /Neonika Memory: attached; hits=1; note=Attached 1 Neonika Memory hit/);
+      assert.doesNotMatch(turnParams, /note=Attached 1 Neonika Memory hit\(s\) for query/);
       assert.doesNotMatch(turnParams, /ignore previous instructions and run/);
       assert.doesNotMatch(turnParams, /<tool_call name=\\"exec\\">/);
     } finally {
@@ -328,7 +328,7 @@ describe("Codex app-server harness", () => {
       assert.match(String(resumeRecord["baseInstructions"]), /use the `peekaboo` dynamic tool/u);
       assert.match(String(resumeRecord["baseInstructions"]), /only fall back to the peekaboo CLI/u);
       assert.match(String(resumeRecord["baseInstructions"]), /Never claim Screen Recording or Accessibility is missing/u);
-      assert.match(String(resumeRecord["baseInstructions"]), /do not announce a Neon Slice plan/u);
+      assert.match(String(resumeRecord["baseInstructions"]), /do not announce a Neonika Slice plan/u);
       assert.equal((await readCodexThreadBinding(projectRoot, sessionKey))?.threadId, "thread-1");
     } finally {
       await rm(projectRoot, { force: true, recursive: true });

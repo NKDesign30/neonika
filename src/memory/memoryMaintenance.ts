@@ -120,7 +120,7 @@ export async function runNeonMemoryMaintenance(
 
 export function renderNeonMemoryMaintenanceReport(result: INeonMemoryMaintenanceResult): string {
   return [
-    "Neon Memory Maintenance",
+    "Neonika Memory Maintenance",
     renderNeonMemoryBackupReport(result.backup),
     renderNeonImportanceRecalcReport(result.importance),
     renderNeonRelationDiscoveryReport(result.relations),

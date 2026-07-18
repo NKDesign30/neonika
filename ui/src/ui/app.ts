@@ -26,7 +26,7 @@ import "./views/transcript.js";
 import "./views/workboard.js";
 import "./views/placeholder.js";
 
-// Root of Neon Mission Control: owns route/theme/locale state and composes the
+// Root of Neonika Mission Control: owns route/theme/locale state and composes the
 // shell. Views are self-loading custom elements that read live /api/neon-* data.
 export class NeonControlApp extends LitElement {
   @state() private tab: Tab = "overview";

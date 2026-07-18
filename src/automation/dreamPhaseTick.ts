@@ -209,7 +209,7 @@ export async function runNeonDreamPhaseTick(
 
 export function renderNeonDreamTickReport(result: INeonDreamPhaseTickResult): string {
   return [
-    `Neon Dream Tick: ${result.armed ? "armed" : "disabled"} / phase ${result.phase} (${result.gate.reason}, env ${result.gate.envKey})`,
+    `Neonika Dream Tick: ${result.armed ? "armed" : "disabled"} / phase ${result.phase} (${result.gate.reason}, env ${result.gate.envKey})`,
     `Next phase: ${result.nextPhase}`,
     `Proposals: ${result.reflection.proposals.length} (read-only; promotion stays gated)`,
     `Workspace notes: ${result.createdWorkspaceNoteCount} (wrote=${result.safety.wroteWorkspaceNotes})`,

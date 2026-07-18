@@ -159,7 +159,7 @@ export function renderNeonCutoverGateReport(snapshot: INeonCutoverGateSnapshot):
   const activeEvidenceRuns = snapshot.source.activeEvidenceRuns ?? snapshot.source.gatewayRuns;
 
   return [
-    `Neon Cutover Gates: ${snapshot.state}`,
+    `Neonika Cutover Gates: ${snapshot.state}`,
     `Current: ${snapshot.currentStage}`,
     `Next: ${snapshot.nextStage ?? "none"}`,
     `Doctor: ${snapshot.source.doctorState}`,

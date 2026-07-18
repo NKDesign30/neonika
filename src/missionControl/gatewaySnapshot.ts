@@ -8,10 +8,15 @@ import {
   evaluateNeonCanaryLivePreconditions,
   type INeonCanaryLivePreconditions
 } from "../gateway/outboundSender.js";
+import {
+  createUnknownNeonMissionControlDiscordCockpitSnapshot,
+  parseNeonMissionControlDiscordCockpitSnapshot,
+  type INeonMissionControlDiscordCockpitSnapshot
+} from "./discordCockpitSnapshot.js";
 
 export interface INeonMissionControlGatewaySnapshot {
   readonly generatedAt: string;
-  readonly title: "Neon Gateway";
+  readonly title: "Neonika Gateway";
   readonly state: INeonGatewayStatus["state"];
   readonly totals: INeonMissionControlGatewayTotals;
   readonly latestRun?: INeonGatewayRunSummary;
@@ -20,6 +25,8 @@ export interface INeonMissionControlGatewaySnapshot {
   readonly recentEvents: readonly INeonMissionControlGatewayEvent[];
   /** Leak-safe canary outbound readiness (booleans + channel id, never the token). */
   readonly canaryPosture: INeonCanaryLivePreconditions;
+  /** Persisted Discord entry-point truth: tap, active runs, controls, progress and receipts. */
+  readonly discordCockpit: INeonMissionControlDiscordCockpitSnapshot;
   readonly source: INeonMissionControlGatewaySource;
 }
 
@@ -28,6 +35,7 @@ export interface INeonMissionControlGatewayTotals {
   readonly shadowRuns: number;
   readonly completed: number;
   readonly failed: number;
+  readonly cancelled: number;
   readonly running: number;
   readonly deliverySuppressed: number;
 }
@@ -59,6 +67,7 @@ export interface ICreateGatewaySnapshotOptions {
    * `process.env`. Only booleans + the channel id are projected, never the token.
    */
   readonly env?: Readonly<Record<string, string | undefined>>;
+  readonly discordCockpit?: INeonMissionControlDiscordCockpitSnapshot;
 }
 
 export interface IFetchGatewaySnapshotOptions {
@@ -70,6 +79,8 @@ export function createNeonMissionControlGatewaySnapshot(
   runs: readonly INeonGatewayShadowRun[],
   options: ICreateGatewaySnapshotOptions = {}
 ): INeonMissionControlGatewaySnapshot {
+  const generatedAt = (options.now?.() ?? new Date()).toISOString();
+  const env = options.env ?? process.env;
   const recentRuns = runs.map((run) => ({
     runId: run.runId,
     mode: run.mode,
@@ -84,20 +95,25 @@ export function createNeonMissionControlGatewaySnapshot(
   }));
 
   return {
-    generatedAt: (options.now?.() ?? new Date()).toISOString(),
-    title: "Neon Gateway",
+    generatedAt,
+    title: "Neonika Gateway",
     state: status.state,
     totals: {
       runs: status.runCount,
       shadowRuns: status.shadowRunCount,
       completed: status.completedCount,
       failed: status.failedCount,
+      cancelled: status.cancelledCount,
       running: status.runningCount,
       deliverySuppressed: status.deliverySuppressedCount
     },
     recentRuns,
     recentEvents: deriveRecentMissionControlEvents(runs),
-    canaryPosture: evaluateNeonCanaryLivePreconditions(options.env ?? process.env),
+    canaryPosture: evaluateNeonCanaryLivePreconditions(env),
+    discordCockpit: options.discordCockpit ?? createUnknownNeonMissionControlDiscordCockpitSnapshot(
+      env["NEON_DISCORD_ACCOUNT_ID"]?.trim() || "default",
+      generatedAt
+    ),
     source: {
       gatewayStatusPath: "/api/neon-gateway/status",
       gatewayRunsPath: "/api/neon-gateway/runs",
@@ -145,26 +161,34 @@ export function parseNeonMissionControlGatewaySnapshot(
   const recentRuns = parseRunSummaries(value["recentRuns"]);
   const recentEvents = parseRecentMissionControlEvents(value["recentEvents"]);
   const latestRun = parseRunSummary(value["latestRun"]);
+  const discordCockpit = value["discordCockpit"] === undefined
+    ? createUnknownNeonMissionControlDiscordCockpitSnapshot(
+        "default",
+        typeof value["generatedAt"] === "string" ? value["generatedAt"] : new Date(0).toISOString()
+      )
+    : parseNeonMissionControlDiscordCockpitSnapshot(value["discordCockpit"]);
 
   if (
     typeof value["generatedAt"] !== "string" ||
-    value["title"] !== "Neon Gateway" ||
+    value["title"] !== "Neonika Gateway" ||
     value["state"] !== "ready" ||
     !totals ||
     !source ||
-    !recentRuns
+    !recentRuns ||
+    !discordCockpit
   ) {
     return undefined;
   }
 
   return {
     generatedAt: value["generatedAt"],
-    title: "Neon Gateway",
+    title: "Neonika Gateway",
     state: "ready",
     totals,
     recentRuns,
     recentEvents,
     canaryPosture: parseCanaryPosture(value["canaryPosture"]),
+    discordCockpit,
     source,
     ...(latestRun ? { latestRun } : {})
   };
@@ -225,6 +249,7 @@ function parseTotals(value: unknown): INeonMissionControlGatewayTotals | undefin
     shadowRuns: value["shadowRuns"],
     completed: value["completed"],
     failed: value["failed"],
+    cancelled: typeof value["cancelled"] === "number" ? value["cancelled"] : 0,
     running: typeof value["running"] === "number" ? value["running"] : 0,
     deliverySuppressed: value["deliverySuppressed"]
   };
@@ -273,7 +298,10 @@ function parseRunSummary(value: unknown): INeonGatewayRunSummary | undefined {
   if (
     typeof value["runId"] !== "string" ||
     (mode !== "shadow" && mode !== "live") ||
-    (value["status"] !== "completed" && value["status"] !== "failed") ||
+    (value["status"] !== "running" &&
+      value["status"] !== "completed" &&
+      value["status"] !== "failed" &&
+      value["status"] !== "cancelled") ||
     !isNeonChannel(value["channel"]) ||
     typeof value["channelId"] !== "string" ||
     typeof value["agentId"] !== "string" ||

@@ -13,7 +13,7 @@ import {
   resolveNeonGatewayMaxUnauthorizedFrames
 } from "../src/index.js";
 
-describe("Neon Gateway unauthorized-frame flood guard", () => {
+describe("Neonika Gateway unauthorized-frame flood guard", () => {
   it("resolves the limit from env and falls back to the default on junk", () => {
     assert.equal(resolveNeonGatewayMaxUnauthorizedFrames({}), NEON_GATEWAY_DEFAULT_MAX_UNAUTHORIZED_FRAMES);
     assert.equal(resolveNeonGatewayMaxUnauthorizedFrames({ NEON_GATEWAY_MAX_UNAUTHORIZED_FRAMES: "5" }), 5);

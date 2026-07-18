@@ -76,7 +76,7 @@ describe("neon memory maintenance facade", () => {
     assert.ok(result.diagnostics.some((line) => line.includes("plan-only")));
 
     const report = renderNeonMemoryMaintenanceReport(result);
-    assert.match(report, /Neon Memory Maintenance/);
+    assert.match(report, /Neonika Memory Maintenance/);
   });
 
   it("applies prune only with the explicit opt-in", async () => {

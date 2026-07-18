@@ -7,7 +7,7 @@ import { resolveGatewayStatePaths } from "./runStore.js";
 
 /**
  * Operator run-acknowledgement: the FIRST gated `operator.write` mutation in the
- * Neon Gateway (DP-3). It is idempotent by `runId` (a single ack per run, re-acking
+ * Neonika Gateway (DP-3). It is idempotent by `runId` (a single ack per run, re-acking
  * upserts the same key) and side-effect-bounded: it writes one small JSON marker
  * file and never sends, mutates a run, or touches outbound. The note is redacted
  * before persistence so an operator comment can never carry a secret into state.

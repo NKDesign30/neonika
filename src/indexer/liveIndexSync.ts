@@ -216,7 +216,7 @@ export function renderNeonLiveIndexMemorySyncReport(result: INeonLiveIndexMemory
   const blocked = result.writes.filter((write) => write.state === "blocked").length;
 
   return [
-    `Neon Live Index Sync: ${result.state}`,
+    `Neonika Live Index Sync: ${result.state}`,
     `Sources: discord=${result.collection.totals.discord} claude=${result.collection.totals.claude} codex=${result.collection.totals.codex}`,
     `Records: ${result.collection.totals.records}`,
     `Quality: accepted=${result.quality.accepted} rejected=${result.quality.rejected}`,

@@ -1,5 +1,5 @@
 /**
- * Neon Flow data model.
+ * Neonika Flow data model.
  *
  * A flow is a declarative playbook: a trigger plus an ordered list of steps. Each
  * step declares a side-effect class (read/write/send/exec) and whether it is

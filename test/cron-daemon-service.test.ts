@@ -19,7 +19,7 @@ import {
   resolveNeonWorkspaceNotesGate
 } from "../src/index.js";
 
-describe("Neon Cron daemon service", () => {
+describe("Neonika Cron daemon service", () => {
   it("reads store-backed jobs, dedups same windows, and writes terminal shadow run records", async () => {
     const projectRoot = await tempProjectRoot();
     let clockMs = Date.parse("2026-06-02T12:00:00.000Z");

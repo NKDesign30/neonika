@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title></title>
+    <style>
+      :root {
+        --paper: #ffffff;
+        --ink: #1b1c1a;
+        --muted: #656963;
+        --line: #d9ddd8;
+        --accent: #3e6252;
+      }
+
+      * { box-sizing: border-box; }
+
+      @page {
+        size: A4;
+        margin: 18mm 17mm 17mm;
+
+        @bottom-left {
+          content: string(document-section);
+          color: var(--muted);
+          font-size: 7.5pt;
+        }
+
+        @bottom-right {
+          content: counter(page) " / " counter(pages);
+          color: var(--muted);
+          font-size: 7.5pt;
+        }
+      }
+
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: Arial, sans-serif;
+        font-size: 10pt;
+        line-height: 1.48;
+      }
+
+      .document-header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12mm;
+        align-items: end;
+        border-bottom: 0.6pt solid var(--line);
+        padding-bottom: 7mm;
+        margin-bottom: 12mm;
+      }
+
+      .eyebrow {
+        color: var(--accent);
+        font-size: 7.5pt;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1, h2, h3 { break-after: avoid; }
+      h1 { margin: 2mm 0 0; font-size: 28pt; line-height: 1.05; letter-spacing: -0.025em; }
+      h2 { margin: 11mm 0 4mm; font-size: 16pt; string-set: document-section content(); }
+      h3 { margin: 7mm 0 2mm; font-size: 11pt; }
+      p { margin: 0 0 4mm; max-width: 165mm; }
+      ul, ol { margin: 0 0 5mm; padding-left: 5mm; }
+      li { margin-bottom: 1.8mm; }
+
+      table { width: 100%; border-collapse: collapse; margin: 5mm 0 8mm; font-size: 9pt; }
+      th, td { border-bottom: 0.5pt solid var(--line); padding: 3mm 2mm; text-align: left; vertical-align: top; }
+      th { color: var(--muted); font-size: 7.5pt; letter-spacing: 0.04em; text-transform: uppercase; }
+
+      .section { break-inside: avoid-page; }
+      .meta { color: var(--muted); font-size: 8.5pt; }
+      .callout { border-left: 2pt solid var(--accent); padding: 1mm 0 1mm 5mm; margin: 6mm 0; }
+    </style>
+  </head>
+  <body>
+    <!--
+      Startstruktur ohne sichtbare Beispieldaten. Vor dem Build mit freigegebenem
+      Inhalt füllen. Die Quality Lane blockiert leere oder unfertige Dokumente.
+    -->
+    <header class="document-header"></header>
+    <main></main>
+  </body>
+</html>

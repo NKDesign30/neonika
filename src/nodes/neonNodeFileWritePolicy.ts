@@ -155,7 +155,7 @@ export async function writeNeonNodeFile(
 
 export function renderNeonNodeFileWriteReport(result: INeonNodeFileWriteResult): string {
   return [
-    `Neon Node File Write: ${result.state}${result.blockReason ? ` / ${result.blockReason}` : ""} (${result.gate.reason}, env ${result.gate.envKey})`,
+    `Neonika Node File Write: ${result.state}${result.blockReason ? ` / ${result.blockReason}` : ""} (${result.gate.reason}, env ${result.gate.envKey})`,
     `Path: ${result.relativePath ?? "none"}`,
     `Bytes: ${result.bytesWritten ?? 0}`,
     `Preview: ${result.contentPreview}`,

@@ -26,7 +26,7 @@ const botUserId = "900000000000000010";
 const allowedGuildId = "900000000000000001";
 const allowedChannelId = "900000000000000005";
 
-describe("Neon Discord shadow tap", () => {
+describe("Neonika Discord shadow tap", () => {
   it("starts a tap, accepts Discord messages, and persists shadow runs", async () => {
     const projectRoot = await createTempProjectRoot();
     const adapter = new MemoryDiscordTapAdapter();
@@ -814,7 +814,7 @@ describe("Neon Discord shadow tap", () => {
     }
   });
 
-  it("maps discord.js message shape into the Neon Discord envelope", () => {
+  it("maps discord.js message shape into the Neonika Discord envelope", () => {
     const envelope = mapDiscordJsMessageToEnvelope(
       {
         id: "message-1",

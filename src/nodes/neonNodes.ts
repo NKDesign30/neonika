@@ -401,7 +401,7 @@ export function renderNeonNodesReport(snapshot: INeonNodesSnapshot): string {
   const recoveryLines = snapshot.recovery.length > 0 ? snapshot.recovery.map((step) => `- ${step}`) : ["- none"];
 
   return [
-    `Neon Nodes: ${snapshot.state}`,
+    `Neonika Nodes: ${snapshot.state}`,
     `Local: ${snapshot.localNode.displayName} ${snapshot.localNode.nodeId} ${snapshot.localNode.health}`,
     `Gateway: ${snapshot.gatewayUrl ?? "local-runtime"}`,
     `Pairing: ${snapshot.pairing.state} / ${snapshot.pairing.approval} / ttl=${snapshot.pairing.requestTtlMinutes}m`,

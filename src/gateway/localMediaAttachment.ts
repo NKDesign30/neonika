@@ -7,6 +7,13 @@ export interface INeonLocalMediaAttachmentResult {
   readonly text: string;
   readonly attachments: readonly TNeonDiscordMediaAttachment[];
   readonly attachedFilenames: readonly string[];
+  readonly attachedFiles: readonly INeonLocalMediaFile[];
+}
+
+export interface INeonLocalMediaFile {
+  readonly name: string;
+  readonly absolutePath: string;
+  readonly contentType?: string;
 }
 
 export interface ICreateNeonLocalMediaAttachmentsOptions {
@@ -23,6 +30,9 @@ const localMediaExtensions = new Set([
   ".aac",
   ".avi",
   ".bmp",
+  ".csv",
+  ".doc",
+  ".docx",
   ".flac",
   ".gif",
   ".heic",
@@ -39,19 +49,29 @@ const localMediaExtensions = new Set([
   ".mpg",
   ".oga",
   ".ogg",
+  ".odp",
+  ".ods",
+  ".odt",
   ".opus",
   ".pdf",
   ".png",
+  ".ppt",
+  ".pptx",
+  ".rtf",
   ".svg",
   ".tif",
   ".tiff",
+  ".txt",
   ".wav",
   ".webm",
-  ".webp"
+  ".webp",
+  ".xls",
+  ".xlsx",
+  ".zip"
 ]);
 
 const mediaCandidatePattern =
-  /`([^`]+?\.(?:aac|avi|bmp|flac|gif|heic|heif|jpe?g|m4a|m4v|mkv|mov|mp3|mp4|mpeg|mpg|oga|ogg|opus|pdf|png|svg|tiff?|wav|webm|webp))`|((?:\/[^\s`"'<>]+|(?:\.{1,2}\/|state\/)[^\s`"'<>]+?)\.(?:aac|avi|bmp|flac|gif|heic|heif|jpe?g|m4a|m4v|mkv|mov|mp3|mp4|mpeg|mpg|oga|ogg|opus|pdf|png|svg|tiff?|wav|webm|webp))/gi;
+  /`([^`]+?\.(?:aac|avi|bmp|csv|docx?|flac|gif|heic|heif|jpe?g|m4a|m4v|mkv|mov|mp3|mp4|mpeg|mpg|od[pst]|oga|ogg|opus|pdf|png|pptx?|rtf|svg|tiff?|txt|wav|webm|webp|xlsx?|zip))`|((?:\/[^\s`"'<>]+|(?:\.{1,2}\/|state\/)[^\s`"'<>]+?)\.(?:aac|avi|bmp|csv|docx?|flac|gif|heic|heif|jpe?g|m4a|m4v|mkv|mov|mp3|mp4|mpeg|mpg|od[pst]|oga|ogg|opus|pdf|png|pptx?|rtf|svg|tiff?|txt|wav|webm|webp|xlsx?|zip))/gi;
 
 const defaultMaxAttachments = 4;
 
@@ -65,6 +85,7 @@ export async function createNeonLocalMediaAttachmentsFromText(
   const seenPaths = new Set<string>();
   const attachments: TNeonDiscordMediaAttachment[] = [];
   const attachedFilenames: string[] = [];
+  const attachedFiles: INeonLocalMediaFile[] = [];
   let cleanText = text;
 
   for (const candidate of candidates) {
@@ -89,6 +110,11 @@ export async function createNeonLocalMediaAttachmentsFromText(
         ...(contentType !== undefined ? { contentType } : {})
       });
       attachedFilenames.push(filename);
+      attachedFiles.push({
+        name: filename,
+        absolutePath,
+        ...(contentType !== undefined ? { contentType } : {})
+      });
       seenPaths.add(absolutePath);
     } catch {
       // Missing or unreadable local files are not fatal; the reply still stays path-safe.
@@ -98,7 +124,8 @@ export async function createNeonLocalMediaAttachmentsFromText(
   return {
     text: cleanText.trim(),
     attachments,
-    attachedFilenames
+    attachedFilenames,
+    attachedFiles
   };
 }
 
@@ -152,6 +179,32 @@ function resolveContentType(filename: string): string | undefined {
   switch (extension) {
     case ".pdf":
       return "application/pdf";
+    case ".doc":
+      return "application/msword";
+    case ".docx":
+      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    case ".xls":
+      return "application/vnd.ms-excel";
+    case ".xlsx":
+      return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    case ".ppt":
+      return "application/vnd.ms-powerpoint";
+    case ".pptx":
+      return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+    case ".odt":
+      return "application/vnd.oasis.opendocument.text";
+    case ".ods":
+      return "application/vnd.oasis.opendocument.spreadsheet";
+    case ".odp":
+      return "application/vnd.oasis.opendocument.presentation";
+    case ".csv":
+      return "text/csv";
+    case ".txt":
+      return "text/plain";
+    case ".rtf":
+      return "application/rtf";
+    case ".zip":
+      return "application/zip";
     case ".png":
       return "image/png";
     case ".jpg":

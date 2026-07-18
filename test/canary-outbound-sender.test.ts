@@ -61,7 +61,7 @@ function createMockTransport(): {
   };
 }
 
-describe("Neon Canary Outbound Sender", () => {
+describe("Neonika Canary Outbound Sender", () => {
   it("(a) stays no-send by default with no transport and no flags", async () => {
     const sender = createNeonCanaryOutboundSender({ env: {} });
 
@@ -288,7 +288,7 @@ describe("Neon Canary Outbound Sender", () => {
   });
 });
 
-describe("Neon Canary Channel Allowlist", () => {
+describe("Neonika Canary Channel Allowlist", () => {
   it("parses the env allowlist and defaults to empty (nothing eligible)", () => {
     const empty = resolveNeonCanaryChannelAllowlist({});
     assert.equal(empty.configured, false);
@@ -337,7 +337,7 @@ describe("Neon Canary Channel Allowlist", () => {
   });
 });
 
-describe("Neon Canary live preconditions", () => {
+describe("Neonika Canary live preconditions", () => {
   it("is not ready and leaks no token value on an empty env", () => {
     const pre = evaluateNeonCanaryLivePreconditions({});
 

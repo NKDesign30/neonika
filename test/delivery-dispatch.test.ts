@@ -19,7 +19,7 @@ import {
   type INeonOutboundSender
 } from "../src/index.js";
 
-describe("Neon Delivery dispatch", () => {
+describe("Neonika Delivery dispatch", () => {
   it("does not send when the candidate has no matching approval", async () => {
     const candidate = createNeonDeliveryDryRunCandidate(createRun());
     const result = await deliverNeonApprovedCandidate({
@@ -64,7 +64,7 @@ describe("Neon Delivery dispatch", () => {
     assert.equal(result.recoveryState, "none");
     assert.equal(result.messageId, "mock-msg-1");
     assert.equal(calls.length, 1);
-    assert.match(renderNeonDeliveryDispatchReport(result), /Neon Delivery dispatch: delivered/);
+    assert.match(renderNeonDeliveryDispatchReport(result), /Neonika Delivery dispatch: delivered/);
   });
 
   it("protects a terminal candidate from re-sending", async () => {
@@ -179,7 +179,7 @@ describe("Neon Delivery dispatch", () => {
     }
   });
 
-  it("records pending-drain transport errors and blocks blind replay before reconciliation", async () => {
+  it("retries uncertain Discord sends with the same enforced delivery nonce", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "neonika-delivery-dispatch-drain-"));
     const candidate = createNeonDeliveryDryRunCandidate(createRun());
     const failingSender: INeonOutboundSender = {
@@ -207,10 +207,10 @@ describe("Neon Delivery dispatch", () => {
 
       assert.equal(first.outcome, "transport-error");
       assert.equal(first.recoveryState, "pending-drain");
-      assert.equal(replay.outcome, "pending-drain");
-      assert.equal(replay.outboundSent, false);
-      assert.equal(replay.ackState, "working");
-      assert.equal(calls.length, 0);
+      assert.equal(replay.outcome, "delivered");
+      assert.equal(replay.outboundSent, true);
+      assert.equal(replay.ackState, "done");
+      assert.equal(calls.length, 1);
     } finally {
       await rm(projectRoot, { force: true, recursive: true });
     }

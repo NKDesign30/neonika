@@ -322,7 +322,7 @@ export function renderNeonNodePairingReport(snapshot: INeonNodePairingSnapshot):
       : ["- none"];
 
   return [
-    `Neon Node Pairing: ${snapshot.state}`,
+    `Neonika Node Pairing: ${snapshot.state}`,
     `Totals: pending=${snapshot.totals.pending} approvedShadow=${snapshot.totals.approvedShadow} denied=${snapshot.totals.denied} expired=${snapshot.totals.expired}`,
     "Requests:",
     ...requestLines,

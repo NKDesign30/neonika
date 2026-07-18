@@ -1,0 +1,76 @@
+{
+  "version": 2,
+  "slug": "business-brief",
+  "documentVersion": "1.0.0",
+  "audience": "Decision makers who need a concise, evidence-based project overview",
+  "readerDecision": "Decide whether the documented proposal should move into the next review stage",
+  "medium": {
+    "format": "A4",
+    "pageBudget": {
+      "min": 1,
+      "max": 8
+    }
+  },
+  "brand": {
+    "id": "neutral",
+    "source": "Project-specific design brief",
+    "fontAllowlist": [
+      "Arial"
+    ]
+  },
+  "artDirection": {
+    "concept": "A restrained decision document whose visual hierarchy makes evidence easy to scan",
+    "visualTone": [
+      "clear",
+      "confident",
+      "measured"
+    ],
+    "palette": [
+      { "role": "paper", "hex": "#FFFFFF" },
+      { "role": "ink", "hex": "#1B1C1A" },
+      { "role": "muted", "hex": "#656963" },
+      { "role": "accent", "hex": "#3E6252" },
+      { "role": "line", "hex": "#D9DDD8" }
+    ],
+    "typography": [
+      { "role": "display", "family": "Arial", "purpose": "Direct section hierarchy" },
+      { "role": "body", "family": "Arial", "purpose": "Readable evidence and explanation" }
+    ],
+    "layout": {
+      "grid": "Editorial single-column grid with one optional evidence rail",
+      "rhythm": "Generous section openings followed by compact evidence groups",
+      "density": "Moderate density with visible separation between decisions"
+    },
+    "signatureElement": "One document-specific evidence composition derived from the subject matter",
+    "pageArchetypes": [
+      "opening",
+      "evidence",
+      "decision"
+    ],
+    "avoidDefaults": [
+      "decorative gradients without narrative meaning",
+      "generic card grids",
+      "meaningless chapter numbering"
+    ]
+  },
+  "contentSpine": [
+    "Context and decision",
+    "Evidence and recommendation",
+    "Next step and accountable contact"
+  ],
+  "evidenceSources": [
+    "Approved source material supplied with the document request"
+  ],
+  "cta": "Confirm the next review step with the named sender",
+  "subjectMaterials": [
+    "Approved project copy and licensed visual assets"
+  ],
+  "sender": {
+    "name": "Document owner",
+    "role": "Accountable project lead",
+    "contact": "Verified contact from the source material"
+  },
+  "allowedDefaultExceptions": [],
+  "outputProfile": "screen-accessible",
+  "privacyLevel": "internal"
+}

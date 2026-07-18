@@ -231,7 +231,7 @@ export function renderNeonMissionControlFilterReport(
     .map((entry, index) => `${index + 1}. [${entry.status}] ${entry.title} (${entry.agentId})`);
 
   return [
-    "Neon Mission-Control Filter",
+    "Neonika Mission-Control Filter",
     `Criteria: ${criteriaParts.length > 0 ? criteriaParts.join(" ") : "(none)"}`,
     `Visible: ${result.visibleCount}/${result.totalCount}`,
     renderFacetLine("Agents", result.facets.agents),

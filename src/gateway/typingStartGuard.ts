@@ -90,5 +90,5 @@ export function createNeonTypingStartGuard(
 export function renderNeonTypingStartGuardReport(
   outcomes: readonly { readonly label: string; readonly outcome: TNeonTypingStartOutcome }[]
 ): string {
-  return ["Neon Typing Start Guard", ...outcomes.map((o) => `${o.label}: ${o.outcome}`)].join("\n");
+  return ["Neonika Typing Start Guard", ...outcomes.map((o) => `${o.label}: ${o.outcome}`)].join("\n");
 }

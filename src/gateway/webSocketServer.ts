@@ -9,6 +9,7 @@ import { createNeonCutoverGateSnapshot } from "../core/cutoverGate.js";
 import { createNeonMirrorEvidenceSnapshot } from "../core/mirrorEvidence.js";
 import { createNeonDoctorSnapshot } from "../doctor/neonDoctor.js";
 import { createNeonMissionControlGatewaySnapshot } from "../missionControl/gatewaySnapshot.js";
+import { readNeonMissionControlDiscordCockpitSnapshot } from "../missionControl/discordCockpitSnapshot.js";
 import { createNeonOnboardingSnapshot } from "../onboarding/neonOnboarding.js";
 import {
   createNeonExtensionInventorySnapshot,
@@ -378,7 +379,7 @@ async function handleNeonGatewayWebSocketMessage(
   } catch {
     rejectNeonGatewayFrame(webSocket, state, "unknown", {
       code: "NEON_GATEWAY_BAD_FRAME",
-      message: "Invalid Neon Gateway frame",
+      message: "Invalid Neonika Gateway frame",
       retryable: false
     });
     return;
@@ -394,7 +395,7 @@ async function handleNeonGatewayWebSocketMessage(
       if (connectParams.nonce !== state.challengeNonce) {
         rejectNeonGatewayFrame(webSocket, state, frame.id, {
           code: "NEON_GATEWAY_AUTH_DENIED",
-          message: "Neon Gateway connect challenge nonce missing or invalid",
+          message: "Neonika Gateway connect challenge nonce missing or invalid",
           retryable: false
         });
         return;
@@ -410,7 +411,7 @@ async function handleNeonGatewayWebSocketMessage(
       ) {
         rejectNeonGatewayFrame(webSocket, state, frame.id, {
           code: "NEON_GATEWAY_CLIENT_VERSION_MISMATCH",
-          message: `Neon Gateway requires client protocol version >= ${NEON_GATEWAY_MIN_CLIENT_PROTOCOL_VERSION}`,
+          message: `Neonika Gateway requires client protocol version >= ${NEON_GATEWAY_MIN_CLIENT_PROTOCOL_VERSION}`,
           retryable: false
         });
         return;
@@ -443,7 +444,7 @@ async function handleNeonGatewayWebSocketMessage(
         state.authRateLimiter.recordFailure(state.remoteAddress, authNow);
         rejectNeonGatewayFrame(webSocket, state, frame.id, {
           code: "NEON_GATEWAY_AUTH_DENIED",
-          message: "Neon Gateway connect requires a valid credential",
+          message: "Neonika Gateway connect requires a valid credential",
           retryable: false
         });
         return;
@@ -492,7 +493,7 @@ async function handleNeonGatewayWebSocketMessage(
     if (!authorization.allowed) {
       rejectNeonGatewayFrame(webSocket, state, frame.id, {
         code: "NEON_GATEWAY_SCOPE_DENIED",
-        message: `Missing scope for Neon Gateway RPC: ${authorization.missingScope ?? "operator.read"}`,
+        message: `Missing scope for Neonika Gateway RPC: ${authorization.missingScope ?? "operator.read"}`,
         retryable: false
       });
       return;
@@ -507,7 +508,7 @@ async function handleNeonGatewayWebSocketMessage(
       webSocket,
       createNeonGatewayErrorResponseFrame(frame.id, {
         code: "NEON_GATEWAY_RPC_ERROR",
-        message: error instanceof Error ? error.message : "Neon Gateway RPC failed",
+        message: error instanceof Error ? error.message : "Neonika Gateway RPC failed",
         retryable: false
       })
     );
@@ -602,11 +603,15 @@ async function resolveGatewayRpcPayload(
     case "onboarding.status":
       return await createNeonOnboardingSnapshot(options.projectRoot);
     case "missionControl.gateway": {
-      const runs = await readNeonGatewayRuns(options.projectRoot, limit ? { maxRuns: limit } : {});
+      const [runs, discordCockpit] = await Promise.all([
+        readNeonGatewayRuns(options.projectRoot, limit ? { maxRuns: limit } : {}),
+        readNeonMissionControlDiscordCockpitSnapshot(options.projectRoot)
+      ]);
 
       return createNeonMissionControlGatewaySnapshot(
         await readNeonGatewayStatus(options.projectRoot),
-        runs
+        runs,
+        { discordCockpit }
       );
     }
     case "workboard.cards.list":
@@ -620,7 +625,7 @@ async function resolveGatewayRpcPayload(
     case "workboard.cards.dispatch":
       return await runNeonWorkboardGatewayMethod(options.projectRoot, frame.method, frame.params);
     default:
-      throw new Error(`Unsupported Neon Gateway RPC method: ${frame.method}`);
+      throw new Error(`Unsupported Neonika Gateway RPC method: ${frame.method}`);
   }
 }
 

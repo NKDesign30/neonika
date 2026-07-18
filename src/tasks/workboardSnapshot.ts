@@ -8,7 +8,7 @@ import {
 import { readNeonTasks, resolveNeonTaskStatePaths } from "./taskStore.js";
 
 /**
- * Pure, read-only projection of the Neon Task store into a Workboard view.
+ * Pure, read-only projection of the Neonika Task store into a Workboard view.
  *
  * Reads the latest record per taskId, groups them into status columns, and
  * derives totals (open/blocked/done/overdue, per-status and per-priority counts).
@@ -86,7 +86,7 @@ export async function createNeonWorkboardSnapshot(
 
 export function renderNeonWorkboardReport(snapshot: INeonWorkboardSnapshot): string {
   const header = [
-    `Neon Workboard: ${snapshot.state}`,
+    `Neonika Workboard: ${snapshot.state}`,
     `Tasks: ${snapshot.totals.tasks} (open ${snapshot.totals.open} / blocked ${snapshot.totals.blocked} / done ${snapshot.totals.done})`,
     `Overdue: ${snapshot.totals.overdue} · Linked runs: ${snapshot.totals.linkedRuns}`
   ];

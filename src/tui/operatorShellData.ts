@@ -166,6 +166,7 @@ function renderGatewayStatusLines(status: INeonGatewayStatus): readonly string[]
     `Shadow: ${status.shadowRunCount}`,
     `Completed: ${status.completedCount}`,
     `Failed: ${status.failedCount}`,
+    `Cancelled: ${status.cancelledCount}`,
     `Running: ${status.runningCount}`,
     `Delivery suppressed: ${status.deliverySuppressedCount}`,
     `Runs path: ${status.runsPath}`,

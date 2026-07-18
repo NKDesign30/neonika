@@ -76,7 +76,7 @@ describe("mapDiscordJsInteractionToSlashEnvelope", () => {
   });
 });
 
-describe("Neon Discord shadow tap — slash interaction wiring", () => {
+describe("Neonika Discord shadow tap — slash interaction wiring", () => {
   it("dispatches a native interaction through the shadow slash pipeline", async () => {
     const projectRoot = await createTempProjectRoot();
     const adapter = new MemoryTapAdapter();

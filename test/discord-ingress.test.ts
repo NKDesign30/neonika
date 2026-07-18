@@ -30,7 +30,7 @@ const botUserId = "900000000000000010";
 const allowedGuildId = "900000000000000001";
 const allowedChannelId = "900000000000000005";
 
-describe("Neon Discord ingress", () => {
+describe("Neonika Discord ingress", () => {
   it("accepts an allowed guild message when the bot is mentioned", () => {
     const decision = createNeonDiscordIngressDecision(createDiscordEnvelope(), createPolicy());
 

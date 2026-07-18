@@ -21,11 +21,11 @@ async function runCli(args: readonly string[], cwd = process.cwd()): Promise<str
   return result.stdout;
 }
 
-describe("Neon CLI runtime entry points", () => {
+describe("Neonika CLI runtime entry points", () => {
   it("runs mission-control-filter-smoke with flags through the real top-level dispatch", async () => {
     const stdout = await runCli(["mission-control-filter-smoke", "--status", "done"]);
 
-    assert.match(stdout, /Neon Mission-Control Filter/);
+    assert.match(stdout, /Neonika Mission-Control Filter/);
     assert.match(stdout, /Criteria: status=done/);
     assert.match(stdout, /Visible: 5\/5/);
     assert.doesNotMatch(stdout, /ReferenceError/);
@@ -37,7 +37,7 @@ describe("Neon CLI runtime entry points", () => {
     try {
       const stdout = await runCli(["context-pack", "chaty", "discord", "memory"], projectRoot);
 
-      assert.match(stdout, /Neon Context Pack/);
+      assert.match(stdout, /Neonika Context Pack/);
       assert.match(stdout, /Agent: chaty .* channel: discord/);
       assert.doesNotMatch(stdout, /ReferenceError/);
     } finally {
@@ -66,7 +66,7 @@ describe("Neon CLI runtime entry points", () => {
   it("keeps discord-ingress-codex-live-smoke opt-in by default", async () => {
     const stdout = await runCli(["discord-ingress-codex-live-smoke"]);
 
-    assert.match(stdout, /Neon Discord ingress codex live smoke: not-run/);
+    assert.match(stdout, /Neonika Discord ingress codex live smoke: not-run/);
     assert.match(stdout, /NEON_DISCORD_INGRESS_CODEX_LIVE_SMOKE=ready/);
     assert.doesNotMatch(stdout, /ReferenceError/);
   });
@@ -74,7 +74,7 @@ describe("Neon CLI runtime entry points", () => {
   it("keeps discord-ingress-control-live-smoke opt-in by default", async () => {
     const stdout = await runCli(["discord-ingress-control-live-smoke"]);
 
-    assert.match(stdout, /Neon Discord ingress control live smoke: not-run/);
+    assert.match(stdout, /Neonika Discord ingress control live smoke: not-run/);
     assert.match(stdout, /NEON_DISCORD_INGRESS_CONTROL_LIVE_SMOKE=ready/);
     assert.doesNotMatch(stdout, /ReferenceError/);
   });
@@ -82,7 +82,7 @@ describe("Neon CLI runtime entry points", () => {
   it("keeps discord-tap-canary-reply-live-smoke opt-in by default", async () => {
     const stdout = await runCli(["discord-tap-canary-reply-live-smoke"]);
 
-    assert.match(stdout, /Neon Discord tap canary reply live smoke: not-run/);
+    assert.match(stdout, /Neonika Discord tap canary reply live smoke: not-run/);
     assert.match(stdout, /NEON_DISCORD_TAP_CANARY_REPLY_LIVE_SMOKE=ready/);
     assert.doesNotMatch(stdout, /ReferenceError/);
   });

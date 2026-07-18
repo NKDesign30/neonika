@@ -182,7 +182,7 @@ export function renderNeonLiveSessionReadinessReport(
   snapshot: INeonLiveSessionReadinessSnapshot
 ): string {
   const lines: string[] = [
-    "Neon Live-Session Runtime Readiness",
+    "Neonika Live-Session Runtime Readiness",
     `env-gate=${snapshot.envGateEnabled ? "enabled" : "disabled"} live-runtime-ready=${snapshot.liveRuntimeReady} active-runs=${snapshot.runtime.activeRuns} busy=${snapshot.runtime.busy} blocked=${snapshot.totals.blocked} plan-only=${snapshot.totals.planOnly} interrupt-ready=${snapshot.totals.interruptReady} not-modeled=${snapshot.totals.notModeled}`,
     ""
   ];

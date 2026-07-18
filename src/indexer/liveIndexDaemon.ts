@@ -266,7 +266,7 @@ export function renderNeonLiveIndexDaemonReport(snapshot: INeonLiveIndexDaemonSn
   const blocked = snapshot.memoryPromotion.writes.filter((write) => write.state === "blocked").length;
 
   return [
-    "Neon Live Index Daemon",
+    "Neonika Live Index Daemon",
     `Enabled: ${snapshot.enabled}`,
     `Running: ${snapshot.running}`,
     `Interval: ${snapshot.intervalMs}ms`,

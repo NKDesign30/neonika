@@ -1,6 +1,6 @@
 import type { INeonToolInventorySnapshot } from "../tools/neonTools.js";
 
-// Mission Control — server-rendered Neon Tools panel.
+// Mission Control — server-rendered Neonika Tools panel.
 //
 // Self-contained (own HTML escaper, no dependency on the large, concurrently
 // edited gatewayHtml internals) so it can be injected with a single line and
@@ -48,7 +48,7 @@ function renderProviderRows(snapshot: INeonToolInventorySnapshot): string {
 }
 
 /**
- * Render the read-only Neon Tools overview panel. Shows the live-gate posture,
+ * Render the read-only Neonika Tools overview panel. Shows the live-gate posture,
  * per-family availability, and provider readiness — never a secret value. The
  * panel root carries a stable `id="toolsPanel"` that the client hydration never
  * touches, so it is curl-verifiable on the served path.

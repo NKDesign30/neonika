@@ -2,7 +2,7 @@ import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
 import { redactSnapshotText } from "../harness/redaction.js";
 
-// Neon Transcript Indexer — extract stage. Streams one transcript jsonl line by
+// Neonika Transcript Indexer — extract stage. Streams one transcript jsonl line by
 // line (never a full read), isolates user/assistant turns, and folds them into a
 // deterministic digest. The ONLY text that survives is the redacted preview of
 // the last qualifying turn — the raw transcript source is never redacted at rest,

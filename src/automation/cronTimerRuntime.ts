@@ -141,7 +141,7 @@ export function evaluateNeonCronTick(
 
 export function renderNeonCronTickReport(result: INeonCronTickResult): string {
   const lines = [
-    `Neon Cron Timer: ${result.armed ? "armed" : "disabled"} (${result.gate.reason}, env ${result.gate.envKey})`,
+    `Neonika Cron Timer: ${result.armed ? "armed" : "disabled"} (${result.gate.reason}, env ${result.gate.envKey})`,
     `Evaluated: ${result.evaluatedAt}`,
     `Cron jobs evaluated: ${result.intents.length}`,
     `Emitted run intents: ${result.emitted.length}${result.emitted.length ? ` (${result.emitted.join(", ")})` : ""}`,

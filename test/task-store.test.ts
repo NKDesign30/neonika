@@ -12,7 +12,7 @@ import {
   type INeonTaskRecord
 } from "../src/index.js";
 
-describe("Neon Task store", () => {
+describe("Neonika Task store", () => {
   it("writes and reads tasks from a Neon-owned JSONL store", async () => {
     const projectRoot = await createTempProjectRoot();
 

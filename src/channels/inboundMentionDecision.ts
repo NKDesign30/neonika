@@ -124,7 +124,7 @@ export function renderNeonInboundMentionDecisionReport(
       : "none";
 
   return [
-    "Neon Inbound Mention Decision",
+    "Neonika Inbound Mention Decision",
     `Should skip: ${decision.shouldSkip}`,
     `Effective mentioned: ${decision.effectiveWasMentioned}`,
     `Implicit mention: ${decision.implicitMention} (${implicit})`,

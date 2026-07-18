@@ -114,7 +114,7 @@ export function resolveNeonDirectDmAccess(params: {
 
 export function renderNeonDirectDmAccessReport(access: INeonDirectDmAccess): string {
   return [
-    "Neon Direct DM Access",
+    "Neonika Direct DM Access",
     `Decision: ${access.decision}`,
     `Reason: ${access.reasonCode}`
   ].join("\n");

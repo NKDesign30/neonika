@@ -3,7 +3,7 @@ import { readNeonGatewayRuns, resolveGatewayStatePaths } from "../gateway/runSto
 import type { INeonGatewayShadowRun } from "../gateway/types.js";
 import type { TNeonChannel } from "../harness/types.js";
 
-// Neon Live Indexer — slice 1: a read-only projection over the (already
+// Neonika Live Indexer — slice 1: a read-only projection over the (already
 // redacted, terminal-only) Gateway run store. It folds completed shadow runs
 // into per-session decision-signal digests and surfaces "decision candidates"
 // that a later, gated slice could promote into memory via memoryWriteRuntime.
@@ -167,7 +167,7 @@ export function renderNeonIndexerReport(snapshot: INeonIndexerSnapshot): string 
   });
 
   return [
-    `Neon Indexer: ${snapshot.state}`,
+    `Neonika Indexer: ${snapshot.state}`,
     `Sessions: ${snapshot.totals.sessions}`,
     `Runs: ${snapshot.totals.runs}`,
     `Decision candidates: ${snapshot.totals.candidates} (${snapshot.totals.decisionSignals} signal(s))`,

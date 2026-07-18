@@ -13,7 +13,7 @@ import {
   type INeonGatewayShadowRun
 } from "../src/index.js";
 
-describe("Neon Sessions and Activity snapshots", () => {
+describe("Neonika Sessions and Activity snapshots", () => {
   it("groups Gateway runs into durable Neon session rows", async () => {
     const projectRoot = await createTempProjectRoot();
 
@@ -61,7 +61,7 @@ describe("Neon Sessions and Activity snapshots", () => {
       assert.equal(snapshot.sessions[0]?.latestRunId, "run-2");
       assert.equal(snapshot.sessions[0]?.workspaceName.startsWith("/"), false);
       const report = renderNeonSessionsReport(snapshot);
-      assert.match(report, /Neon Sessions: ready/);
+      assert.match(report, /Neonika Sessions: ready/);
       assert.match(report, /status: failed \(latest=failed\)/);
       assert.match(report, /tokens: 22 \(16 in \/ 6 out\)/);
       assert.match(report, /goal: Ship Neonika Discord parity/);
@@ -93,7 +93,7 @@ describe("Neon Sessions and Activity snapshots", () => {
       assert.doesNotMatch(serialized, /sk-test-secret/);
       assert.match(serialized, /\[REDACTED_PATH\]/);
       assert.match(serialized, /\[REDACTED\]/);
-      assert.match(renderNeonActivityReport(snapshot), /Neon Activity: ready/);
+      assert.match(renderNeonActivityReport(snapshot), /Neonika Activity: ready/);
     } finally {
       await rm(projectRoot, { force: true, recursive: true });
     }

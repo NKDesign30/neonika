@@ -38,7 +38,7 @@ describe("neon memory recall seam", () => {
       gate: armedGate,
       input: {
         sourceFile: "destillat/01-decisions.md",
-        content: "Neon Cutover Entscheidung: die neue Memory-DB ist die primäre Heimat.",
+        content: "Neonika Cutover Entscheidung: die neue Memory-DB ist die primäre Heimat.",
         agent: "neo",
         category: "destillat"
       }

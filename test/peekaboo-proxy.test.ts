@@ -15,7 +15,7 @@ import {
   resolveNeonPeekabooProxyTcpUrl
 } from "../src/index.js";
 
-describe("Neon Peekaboo proxy", () => {
+describe("Neonika Peekaboo proxy", () => {
   it("resolves a project-local Unix socket path", () => {
     assert.equal(
       resolveNeonPeekabooProxySocketPath("/tmp/neonika"),

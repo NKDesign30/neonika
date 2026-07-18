@@ -119,7 +119,7 @@ export function renderNeonHeartbeatDaemonStatusReport(
     ? `Daemon: ${daemon.alive ? (snapshot.daemonStale ? "alive (STALE — next tick overdue)" : "alive") : "stopped"} · daemonGate=${daemon.gateEnabled ? "armed" : "disabled"} · pid ${daemon.pid} · ticks ${daemon.tickCount} · lastTick ${daemon.lastTickAt ?? "none"} · nextTick ${daemon.nextTickAt ?? "none"} · dueIntents(lastTick) ${daemon.dueIntentsLastTick} · dueCommitments(lastTick) ${daemon.dueCommitmentsLastTick} · lifecycleCommitments(lastTick) ${daemon.lifecycleCommitmentsLastTick} · createdRuns ${daemon.createdRunsTotal}`
     : "Daemon: not running (no liveness state)";
   const lines = [
-    `Neon Heartbeat Daemon Status: view gate ${snapshot.gate.enabled ? "armed" : "disabled"} (${snapshot.gate.reason}, env ${snapshot.gate.envKey})`,
+    `Neonika Heartbeat Daemon Status: view gate ${snapshot.gate.enabled ? "armed" : "disabled"} (${snapshot.gate.reason}, env ${snapshot.gate.envKey})`,
     daemonLine,
     `Cursor: ${snapshot.cursorPresent ? `present @ ${snapshot.cursorPath} (tick #${snapshot.cursor.ticks}${snapshot.cursor.lastTickAt ? `, last ${snapshot.cursor.lastTickAt}` : ""})` : `absent @ ${snapshot.cursorPath} (never ticked)`}`,
     `Safety: agentExecuted=${snapshot.safety.agentExecuted} outboundSent=${snapshot.safety.outboundSent} wroteLiveRun=${snapshot.safety.wroteLiveRun} (run-records are terminal shadow)`,

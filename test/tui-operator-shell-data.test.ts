@@ -12,7 +12,7 @@ import {
   type INeonGatewayShadowRun
 } from "../src/index.js";
 
-describe("Neon Operator Shell — data loader", () => {
+describe("Neonika Operator Shell — data loader", () => {
   it("aggregates every panel read-only into one dashboard", async () => {
     const projectRoot = await createTempProjectRoot();
 

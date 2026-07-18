@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Client, GatewayIntentBits, type MessageCreateOptions } from "discord.js";
 
 import { Buffer } from "node:buffer";
@@ -20,6 +21,7 @@ import {
   type INeonDiscordPoll
 } from "./discordStickerPollPayload.js";
 import type { INeonDeliveryQueueTarget } from "./deliveryQueue.js";
+import type { INeonMessageEditTransport } from "./messageEditSender.js";
 import type { INeonOutboundTransport } from "./outboundSender.js";
 
 /**
@@ -46,7 +48,7 @@ import type { INeonOutboundTransport } from "./outboundSender.js";
  *   the canary sender, and returns only the Discord message id.
  * - The caller MUST `close()` to destroy the gateway connection.
  */
-export interface INeonDiscordOutboundTransport extends INeonOutboundTransport {
+export interface INeonDiscordOutboundTransport extends INeonOutboundTransport, INeonMessageEditTransport {
   /**
    * Send a validated embed payload to the same gated canary destination as
    * postMessage. Embeds are validated up front (buildNeonDiscordEmbedPayload);
@@ -66,7 +68,8 @@ export interface INeonDiscordOutboundTransport extends INeonOutboundTransport {
   postComponents(
     target: INeonDeliveryQueueTarget,
     content: string,
-    rows: readonly TNeonDiscordActionRow[]
+    rows: readonly TNeonDiscordActionRow[],
+    embeds?: readonly INeonDiscordEmbed[]
   ): Promise<{ readonly messageId: string }>;
   /**
    * Upload media attachments (inline bytes and/or SSRF-guarded url-sourced bytes)
@@ -97,6 +100,13 @@ export interface INeonDiscordOutboundTransport extends INeonOutboundTransport {
     target: INeonDeliveryQueueTarget,
     poll: INeonDiscordPoll
   ): Promise<{ readonly messageId: string }>;
+  editComponents(
+    target: INeonDeliveryQueueTarget,
+    messageId: string,
+    content: string,
+    rows: readonly TNeonDiscordActionRow[],
+    embeds?: readonly INeonDiscordEmbed[]
+  ): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -167,9 +177,17 @@ export function createNeonDiscordOutboundTransport(
         const sendOptions: MessageCreateOptions = {
           content,
           ...(options.suppressEmbeds ? { flags: ["SuppressEmbeds"] } : {}),
-          ...(replyToId ? { reply: { messageReference: replyToId, failIfNotExists: false } } : {})
+          ...(replyToId ? { reply: { messageReference: replyToId, failIfNotExists: false } } : {}),
+          ...(target.deliveryIntentId
+            ? {
+                nonce: createNeonDiscordDeliveryNonce(target.deliveryIntentId, index),
+                enforceNonce: true
+              }
+            : {})
         };
-        const sent = await channel.send(options.suppressEmbeds || replyToId ? sendOptions : content);
+        const sent = await channel.send(
+          options.suppressEmbeds || replyToId || target.deliveryIntentId ? sendOptions : content
+        );
         if (index === 0) {
           firstMessageId = sent.id;
         }
@@ -177,6 +195,45 @@ export function createNeonDiscordOutboundTransport(
       }
 
       return { messageId: firstMessageId };
+    },
+
+    async editMessage(target, messageId, body): Promise<void> {
+      if (body.trim().length === 0) {
+        throw new Error("Refusing to edit a Discord message to an empty body");
+      }
+      await ensureLogin();
+      const message = await fetchNeonDiscordMessage(client, target, messageId);
+      await message.edit({ content: body });
+    },
+
+    async deleteMessage(target, messageId): Promise<void> {
+      await ensureLogin();
+      const message = await fetchNeonDiscordMessage(client, target, messageId);
+      await message.delete();
+    },
+
+    async editComponents(target, messageId, content, rows, embeds): Promise<void> {
+      if (content.trim().length === 0 && (!embeds || embeds.length === 0)) {
+        throw new Error("Refusing to edit Discord components without body text or embed");
+      }
+      const payload =
+        rows.length === 0
+          ? { ok: true as const, components: [] }
+          : buildNeonDiscordComponentPayload(rows);
+      if (!payload.ok) {
+        throw new Error(`Refusing to edit invalid component payload: ${payload.errors.join("; ")}`);
+      }
+      const embedPayload = embeds && embeds.length > 0 ? buildNeonDiscordEmbedPayload(embeds) : undefined;
+      if (embedPayload && !embedPayload.ok) {
+        throw new Error(`Refusing to edit invalid embed payload: ${embedPayload.errors.join("; ")}`);
+      }
+      await ensureLogin();
+      const message = await fetchNeonDiscordMessage(client, target, messageId);
+      await message.edit({
+        content: content.trim().length > 0 ? content : null,
+        ...(embedPayload ? { embeds: [...embedPayload.embeds] } : {}),
+        components: [...payload.components]
+      });
     },
 
     async postEmbed(
@@ -211,16 +268,21 @@ export function createNeonDiscordOutboundTransport(
     async postComponents(
       target: INeonDeliveryQueueTarget,
       content: string,
-      rows: readonly TNeonDiscordActionRow[]
+      rows: readonly TNeonDiscordActionRow[],
+      embeds?: readonly INeonDiscordEmbed[]
     ): Promise<{ readonly messageId: string }> {
       // Validate before any side effect: an invalid component set never logs in
-      // or sends. A V1 component message also needs body text, so reject empty.
-      if (content.trim().length === 0) {
-        throw new Error("Refusing to send components without body text (Discord rejects an empty message)");
+      // or sends. A V1 component message needs body text OR an embed.
+      if (content.trim().length === 0 && (!embeds || embeds.length === 0)) {
+        throw new Error("Refusing to send components without body text or embed (Discord rejects an empty message)");
       }
       const payload = buildNeonDiscordComponentPayload(rows);
       if (!payload.ok) {
         throw new Error(`Refusing to send invalid component payload: ${payload.errors.join("; ")}`);
+      }
+      const embedPayload = embeds && embeds.length > 0 ? buildNeonDiscordEmbedPayload(embeds) : undefined;
+      if (embedPayload && !embedPayload.ok) {
+        throw new Error(`Refusing to send invalid embed payload: ${embedPayload.errors.join("; ")}`);
       }
       await ensureLogin();
 
@@ -233,13 +295,20 @@ export function createNeonDiscordOutboundTransport(
         throw new Error(`Canary channel ${destinationId} is not a sendable text channel`);
       }
 
-      const sent = target.replyToMessageId
-        ? await channel.send({
-            content,
-            components: [...payload.components],
-            reply: { messageReference: target.replyToMessageId, failIfNotExists: false }
-          })
-        : await channel.send({ content, components: [...payload.components] });
+      const sent = await channel.send({
+        ...(content.trim().length > 0 ? { content } : {}),
+        ...(embedPayload ? { embeds: [...embedPayload.embeds] } : {}),
+        components: [...payload.components],
+        ...(target.replyToMessageId
+          ? { reply: { messageReference: target.replyToMessageId, failIfNotExists: false } }
+          : {}),
+        ...(target.deliveryIntentId
+          ? {
+              nonce: createNeonDiscordDeliveryNonce(target.deliveryIntentId, 0),
+              enforceNonce: true
+            }
+          : {})
+      });
       return { messageId: sent.id };
     },
 
@@ -285,6 +354,12 @@ export function createNeonDiscordOutboundTransport(
         ...(replyText !== undefined ? { content: replyText } : {}),
         ...(target.replyToMessageId
           ? { reply: { messageReference: target.replyToMessageId, failIfNotExists: false } }
+          : {}),
+        ...(target.deliveryIntentId
+          ? {
+              nonce: createNeonDiscordDeliveryNonce(target.deliveryIntentId, 0),
+              enforceNonce: true
+            }
           : {})
       });
       return { messageId: sent.id };
@@ -347,4 +422,31 @@ export function createNeonDiscordOutboundTransport(
       }
     }
   };
+}
+
+export function createNeonDiscordDeliveryNonce(intentId: string, part: number): string {
+  const normalizedIntentId = intentId.trim();
+  if (normalizedIntentId.length === 0) {
+    throw new Error("Discord delivery intent id must not be empty");
+  }
+  if (!Number.isSafeInteger(part) || part < 0) {
+    throw new Error("Discord delivery nonce part must be a non-negative integer");
+  }
+  return `neon-${createHash("sha256").update(`${normalizedIntentId}:${part}`).digest("hex").slice(0, 20)}`;
+}
+
+async function fetchNeonDiscordMessage(
+  client: Client,
+  target: INeonDeliveryQueueTarget,
+  messageId: string
+) {
+  const destinationId = target.threadId ?? target.channelId;
+  const channel = await client.channels.fetch(destinationId);
+  if (!channel) {
+    throw new Error(`Canary channel ${destinationId} not found or not visible to the bot`);
+  }
+  if (!channel.isTextBased()) {
+    throw new Error(`Canary channel ${destinationId} is not a text channel with message history`);
+  }
+  return await channel.messages.fetch(messageId);
 }

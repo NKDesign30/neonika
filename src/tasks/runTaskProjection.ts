@@ -2,7 +2,7 @@ import { redactText } from "../harness/redaction.js";
 import type { INeonGatewayShadowRun } from "../gateway/types.js";
 import type { INeonTaskRecord } from "./taskModel.js";
 
-// Read-only projection: lift a terminal (completed/failed) gateway run into a task
+// Read-only projection: lift a terminal gateway run into a task
 // record for the operator "runs as tasks" surface (parity gap row 454).
 //
 // This NEVER persists (no writeNeonTask) and NEVER spawns a run — it is a pure
@@ -24,7 +24,7 @@ function deriveRunTaskTitle(run: INeonGatewayShadowRun): string {
 export function mapNeonGatewayRunToTask(run: INeonGatewayShadowRun): INeonTaskRecord | undefined {
   // Only terminal runs project. Shadow runs are always terminal; the explicit guard
   // keeps the no-live-spawn contract visible and future-proofs a live "running" status.
-  if (run.status !== "completed" && run.status !== "failed") {
+  if (run.status === "running") {
     return undefined;
   }
 
@@ -39,7 +39,7 @@ export function mapNeonGatewayRunToTask(run: INeonGatewayShadowRun): INeonTaskRe
     channel: run.request.channel,
     ...(run.request.channelId ? { channelId: run.request.channelId } : {}),
     ownerAgentId: run.request.agentId,
-    status: run.status === "completed" ? "done" : "blocked",
+    status: run.status === "completed" ? "done" : run.status === "cancelled" ? "cancelled" : "blocked",
     priority: run.status === "failed" ? "high" : "normal",
     labels: ["run", run.status],
     links: [{ type: "run", ref: run.runId }],
@@ -56,6 +56,7 @@ export interface INeonRunTaskProjection {
   readonly taskCount: number;
   readonly doneCount: number;
   readonly blockedCount: number;
+  readonly cancelledCount: number;
   readonly tasks: readonly INeonTaskRecord[];
 }
 
@@ -72,6 +73,7 @@ export function createNeonRunTaskProjection(
     taskCount: tasks.length,
     doneCount: tasks.filter((task) => task.status === "done").length,
     blockedCount: tasks.filter((task) => task.status === "blocked").length,
+    cancelledCount: tasks.filter((task) => task.status === "cancelled").length,
     tasks
   };
 }
@@ -84,7 +86,7 @@ export function renderNeonRunTaskProjectionReport(projection: INeonRunTaskProjec
   }
   const lines = [
     `Neon run-tasks: ${projection.taskCount} task(s) from terminal runs ` +
-      `(${projection.doneCount} done / ${projection.blockedCount} blocked) · read-only, no spawn`
+      `(${projection.doneCount} done / ${projection.blockedCount} blocked / ${projection.cancelledCount} cancelled) · read-only, no spawn`
   ];
   for (const task of projection.tasks) {
     lines.push(`  · [${task.status}] ${task.title} <${task.channel}/${task.ownerAgentId}> (${task.taskId})`);

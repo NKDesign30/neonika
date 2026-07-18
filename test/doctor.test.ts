@@ -19,7 +19,7 @@ import {
   type INeonMemoryProvider
 } from "../src/index.js";
 
-describe("Neon Doctor", () => {
+describe("Neonika Doctor", () => {
   it("reports pass when gateway runs prove memory, delivery, agents, and secrets health", async () => {
     const projectRoot = await createTempProjectRoot();
 
@@ -73,7 +73,7 @@ describe("Neon Doctor", () => {
       assert.ok(snapshot.checks.some((check) => check.id === "secret-refs" && check.state === "pass"));
       assert.ok(snapshot.checks.some((check) => check.id === "external-content" && check.state === "pass"));
       assert.ok(snapshot.checks.some((check) => check.id === "device-pairing" && check.state === "pass"));
-      assert.match(report, /Neon Doctor: pass/);
+      assert.match(report, /Neonika Doctor: pass/);
       assert.match(report, /PASS Memory/);
       assert.match(report, /PASS Node Runtime/);
       assert.match(report, /PASS Channel Auth/);
@@ -768,7 +768,7 @@ describe("Neon Doctor", () => {
       const snapshot = await createNeonDoctorSnapshot(projectRoot);
       const report = renderNeonDoctorExplainReport(snapshot);
 
-      assert.match(report, /Neon Doctor Explain: fail/);
+      assert.match(report, /Neonika Doctor Explain: fail/);
       assert.match(report, /Mode: read-only; no repair/);
       assert.match(report, /FAIL Config Files/);
       assert.match(report, /remediation=chmod 600/);

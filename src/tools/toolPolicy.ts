@@ -10,7 +10,7 @@ import {
   type TNeonToolSideEffect
 } from "./toolCapabilities.js";
 
-// Neon Tools Runtime — policy/gate layer.
+// Neonika Tools Runtime — policy/gate layer.
 //
 // Two pure functions, no I/O, no execution:
 //  - planNeonToolInvocation: decides dry-run vs gated-live for a tool WITHOUT

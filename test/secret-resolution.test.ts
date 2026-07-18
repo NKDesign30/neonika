@@ -9,7 +9,7 @@ import {
   type TNeonOpRunner
 } from "../src/index.js";
 
-const ref = "op://Automation/Neon Discord Bot/credential";
+const ref = "op://Automation/Neonika Discord Bot/credential";
 const fakeSecret = "fake-secret-value-1234567890-abcdef";
 const armedGate: INeonSecretResolutionGate = {
   enabled: true,
@@ -113,6 +113,6 @@ describe("Neon secret-ref resolution (DP-13)", () => {
 
   it("redacts the ref to vault/item/field shape without the value", async () => {
     const result = await resolveNeonSecretRef({ ref, gate: armedGate, runOp: okRunner });
-    assert.equal(result.refRedacted, "op://Automation/Neon Discord Bot/credential");
+    assert.equal(result.refRedacted, "op://Automation/Neonika Discord Bot/credential");
   });
 });

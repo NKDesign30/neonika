@@ -10,6 +10,7 @@ import type {
   INeonMissionControlGatewayEvent,
   INeonMissionControlGatewaySnapshot
 } from "./gatewaySnapshot.js";
+import type { INeonMissionControlDiscordCockpitSnapshot } from "./discordCockpitSnapshot.js";
 import { renderNeonMissionControlGatePosturePanel } from "./gatePosturePanel.js";
 import { createNeonBlockedRowReadinessSnapshot } from "./blockedRowReadiness.js";
 import { renderNeonMissionControlBlockedReadinessPanel } from "./blockedRowReadinessPanel.js";
@@ -18,8 +19,10 @@ import {
   type INeonLiveSessionReadinessSnapshot
 } from "../gateway/liveSessionReadiness.js";
 import { renderNeonMissionControlLiveSessionReadinessPanel } from "./liveSessionReadinessPanel.js";
+import { renderNeonMissionControlRoundtableRoomsPanel } from "./roundtableRoomsPanel.js";
 import { renderNeonMissionControlToolsPanel } from "./toolsPanel.js";
 import { renderNeonMissionControlWorkboardPanel } from "./workboardPanel.js";
+import type { INeonRoundtableRoomsSnapshot } from "../roundtable/roundtableRoomsSnapshot.js";
 import type { INeonWorkboardSnapshot } from "../tasks/workboardSnapshot.js";
 import {
   renderNeonMissionControlCronDaemonStatusPanel,
@@ -55,7 +58,7 @@ export type TNeonMissionControlView = (typeof neonMissionControlViewNames)[numbe
 
 export interface INeonMissionControlHtmlOptions {
   readonly initialView?: TNeonMissionControlView;
-  /** Live Neon Workboard snapshot for the server-rendered workboard view. Omit to render the empty/loading state. */
+  /** Live Neonika Workboard snapshot for the server-rendered workboard view. Omit to render the empty/loading state. */
   readonly workboard?: INeonWorkboardSnapshot;
   /** Live cron daemon status (gate/cursor/jobs) for the server-rendered cron view. Omit to render the empty/not-loaded state. */
   readonly cronDaemon?: INeonCronDaemonStatusSnapshot;
@@ -67,6 +70,8 @@ export interface INeonMissionControlHtmlOptions {
    * controls. Omit to fall back to the architectural (no-runtime) snapshot.
    */
   readonly liveSessionReadiness?: INeonLiveSessionReadinessSnapshot;
+  /** Live Neonika Roundtable rooms projection (running/last round + redacted turn log) for the server-rendered overview. Omit to render the not-loaded state. */
+  readonly roundtable?: INeonRoundtableRoomsSnapshot;
 }
 
 const neonMissionControlViewSet = new Set<string>(neonMissionControlViewNames);
@@ -320,6 +325,58 @@ function renderCanaryPosturePanel(posture: INeonCanaryLivePreconditions): string
         </article>`;
 }
 
+function renderDiscordCockpitPanel(cockpit: INeonMissionControlDiscordCockpitSnapshot): string {
+  const activeRuns = cockpit.activeRuns.length === 0
+    ? '<div class="muted">keine aktiven Discord-Läufe</div>'
+    : cockpit.activeRuns.map((run) => {
+        const runtime = run.runtime
+          ? [run.runtime.provider, run.runtime.model ?? run.runtime.runtime, run.runtime.effort].filter(Boolean).join(" / ")
+          : run.harnessId;
+        return `<div class="route-step"><div class="route-copy"><strong>${escapeMissionControlHtml(
+          run.runId
+        )}</strong><span>${escapeMissionControlHtml(runtime)} / ${escapeMissionControlHtml(
+          run.threadId ?? run.channelId
+        )}</span><span class="tag ${run.scope === "allowed" ? "ok" : "shadow"}">${escapeMissionControlHtml(
+          run.scope
+        )}</span></div></div>`;
+      }).join("");
+  const receipts = cockpit.delivery.recentReceipts.length === 0
+    ? '<div class="muted">keine Delivery Receipts</div>'
+    : cockpit.delivery.recentReceipts.slice(0, 4).map((receipt) =>
+        `<div class="route-step"><div class="route-copy"><strong>${escapeMissionControlHtml(
+          `${receipt.kind}:${receipt.state}`
+        )}</strong><span>${escapeMissionControlHtml(receipt.runId)} / attempts ${receipt.attempts}</span><span class="tag ${
+          receipt.scope === "allowed" ? "ok" : "shadow"
+        }">${escapeMissionControlHtml(receipt.scope)}</span></div></div>`
+      ).join("");
+  const allowedChannels = cockpit.scope.allowedChannelIds.join(", ") || "nicht konfiguriert";
+
+  return `<article class="panel" id="discordCockpitPanel">
+          <div class="panel-header">
+            <h2 class="panel-title">Discord/PDF Cockpit</h2>
+            <span class="tag ${cockpit.state === "live" ? "ok" : "shadow"}" id="discordCockpitState">${escapeMissionControlHtml(
+              cockpit.state
+            )}</span>
+          </div>
+          <div class="panel-body stack">
+            <div class="line"><strong>Tap</strong> <span id="discordCockpitTap">${cockpit.tap.running ? "running" : "not running"} / accepted ${cockpit.tap.accepted} / errors ${cockpit.tap.errors}</span></div>
+            <div class="line"><strong>Scope</strong> <span id="discordCockpitScope">${escapeMissionControlHtml(
+              allowedChannels
+            )} / violations ${cockpit.scope.violations}</span></div>
+            <div class="line"><strong>Aktive Runs</strong> <span id="discordCockpitActiveCount">${cockpit.activeRuns.length} / stale ${cockpit.staleRunningRuns}</span></div>
+            <div class="stack" id="discordCockpitRuns">${activeRuns}</div>
+            <div class="line"><strong>Progress</strong> <span id="discordCockpitProgress">cards ${cockpit.progress.cardsStarted} / updates ${cockpit.progress.updates} / errors ${cockpit.progress.errors}</span></div>
+            <div class="line"><strong>Controls</strong> <span id="discordCockpitControls">accepted ${cockpit.controls.accepted} / dropped ${cockpit.controls.dropped} / last ${escapeMissionControlHtml(
+              cockpit.controls.lastState ?? "none"
+            )}</span></div>
+            <div class="line"><strong>Recovery</strong> <span id="discordCockpitRecovery">cards ${cockpit.recovery.cardsStarted} / errors ${cockpit.recovery.errors}</span></div>
+            <div class="line"><strong>Delivery</strong> <span id="discordCockpitDelivery">receipts ${cockpit.delivery.totals.receipts} / delivered ${cockpit.delivery.totals.delivered} / uncertain ${cockpit.delivery.totals.uncertain}</span></div>
+            <div class="stack" id="discordCockpitReceipts">${receipts}</div>
+            <div class="line"><strong>Sources</strong> <span id="discordCockpitSources">tap ${cockpit.sources.tap} / runs ${cockpit.sources.runs} / receipts ${cockpit.sources.deliveryReceipts}</span></div>
+          </div>
+        </article>`;
+}
+
 /**
  * Server-rendered Channels panel. Reads the static channel manifest catalog
  * (`channels/channelManifest.ts`) — Discord live, every other platform a gated
@@ -375,7 +432,7 @@ export function renderNeonMissionControlGatewayHtml(
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Neon Mission Control</title>
+  <title>Neonika Mission Control</title>
   <style>
     :root {
       color-scheme: dark;
@@ -386,12 +443,12 @@ export function renderNeonMissionControlGatewayHtml(
       --surface-muted: rgba(255, 255, 255, 0.048);
       --surface-input: rgba(10, 11, 10, 0.44);
       --stroke-hairline: rgba(255, 255, 255, 0.11);
-      --stroke-strong: rgba(46, 171, 115, 0.52);
+      --stroke-strong: rgba(242, 138, 75, 0.52);
       --text-primary: rgba(255, 255, 255, 0.94);
       --text-secondary: rgba(255, 255, 255, 0.66);
       --text-tertiary: rgba(255, 255, 255, 0.43);
-      --brand-primary: #2EAB73;
-      --brand-bright: #42C987;
+      --brand-primary: #F28A4B;
+      --brand-bright: #F4A574;
       --accent-amber: #FFB340;
       --accent-red: #D95C53;
       --accent-blue: #7C8AFF;
@@ -414,11 +471,7 @@ export function renderNeonMissionControlGatewayHtml(
     body {
       margin: 0;
       min-height: 100vh;
-      background:
-        linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-        linear-gradient(0deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-        var(--surface-background);
-      background-size: 56px 56px, 56px 56px, auto;
+      background: var(--surface-background);
       color: var(--text-primary);
       letter-spacing: 0;
     }
@@ -463,7 +516,7 @@ export function renderNeonMissionControlGatewayHtml(
       border: 1px solid var(--stroke-strong);
       display: grid;
       place-items: center;
-      background: rgba(46, 171, 115, 0.09);
+      background: rgba(242, 138, 75, 0.09);
       box-shadow: var(--shadow-soft);
       flex: 0 0 auto;
     }
@@ -508,9 +561,9 @@ export function renderNeonMissionControlGatewayHtml(
 
     .sidebar-new-session {
       min-height: 38px;
-      border: 1px solid rgba(46, 171, 115, 0.34);
+      border: 1px solid rgba(242, 138, 75, 0.34);
       border-radius: var(--radius-md);
-      background: rgba(46, 171, 115, 0.12);
+      background: rgba(242, 138, 75, 0.12);
       color: var(--text-primary);
       display: flex;
       align-items: center;
@@ -553,8 +606,8 @@ export function renderNeonMissionControlGatewayHtml(
 
     .recent-session.active {
       color: var(--text-primary);
-      background: rgba(46, 171, 115, 0.1);
-      border-color: rgba(46, 171, 115, 0.3);
+      background: rgba(242, 138, 75, 0.1);
+      border-color: rgba(242, 138, 75, 0.3);
     }
 
     .recent-dot {
@@ -566,7 +619,7 @@ export function renderNeonMissionControlGatewayHtml(
 
     .recent-session.active .recent-dot {
       background: var(--brand-primary);
-      box-shadow: 0 0 0 4px rgba(46, 171, 115, 0.12);
+      box-shadow: 0 0 0 4px rgba(242, 138, 75, 0.12);
     }
 
     .recent-copy {
@@ -628,8 +681,8 @@ export function renderNeonMissionControlGatewayHtml(
 
     .nav a[aria-current="page"] {
       color: var(--text-primary);
-      background: rgba(46, 171, 115, 0.11);
-      border-color: rgba(46, 171, 115, 0.3);
+      background: rgba(242, 138, 75, 0.11);
+      border-color: rgba(242, 138, 75, 0.3);
     }
 
     .panel,
@@ -716,7 +769,7 @@ export function renderNeonMissionControlGatewayHtml(
       height: 7px;
       border-radius: 999px;
       background: var(--brand-primary);
-      box-shadow: 0 0 18px rgba(46, 171, 115, 0.72);
+      box-shadow: 0 0 18px rgba(242, 138, 75, 0.72);
     }
 
     .workspace {
@@ -790,10 +843,12 @@ export function renderNeonMissionControlGatewayHtml(
       padding: 0 14px;
     }
 
+    /* auto-fit statt fester Spalten: die Mindestbreiten summierten sich auf
+       über 640px und schoben die Zeile aus schmalen Fenstern heraus. */
     .control-row {
       grid-column: 1 / -1;
       display: grid;
-      grid-template-columns: minmax(280px, 0.95fr) minmax(180px, 0.5fr) minmax(180px, 0.5fr) auto;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 8px;
       align-items: center;
     }
@@ -825,16 +880,41 @@ export function renderNeonMissionControlGatewayHtml(
       width: var(--button-height);
       padding: 0;
       color: var(--brand-bright);
-      border-color: rgba(46, 171, 115, 0.35);
+      border-color: rgba(242, 138, 75, 0.35);
       border-radius: 999px;
     }
 
+    /* Die rohen API-Endpunkte sind Werkzeug, nicht Navigation: zugeklappt,
+       damit der Kopfbereich nicht als Testharness liest. */
     .api-strip {
       grid-column: 1 / -1;
+    }
+
+    .api-strip > summary {
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+      list-style: none;
+      padding: 4px 0;
+    }
+
+    .api-strip > summary::-webkit-details-marker { display: none; }
+    .api-strip > summary::before { content: "▸"; font-size: 9px; }
+    .api-strip[open] > summary::before { content: "▾"; }
+    .api-strip > summary:hover { color: var(--text-secondary); }
+
+    .api-strip__links {
       display: flex;
       align-items: center;
       gap: 8px;
       flex-wrap: wrap;
+      padding-top: 8px;
     }
 
     .title-stack {
@@ -895,15 +975,15 @@ export function renderNeonMissionControlGatewayHtml(
 
     .button.primary {
       border-color: var(--stroke-strong);
-      background: rgba(46, 171, 115, 0.15);
+      background: rgba(242, 138, 75, 0.15);
       color: var(--brand-bright);
     }
 
     .button.replay-inline {
       min-height: 26px;
       padding: 0 9px;
-      border-color: rgba(46, 171, 115, 0.35);
-      background: rgba(46, 171, 115, 0.08);
+      border-color: rgba(242, 138, 75, 0.35);
+      background: rgba(242, 138, 75, 0.08);
       color: var(--brand-bright);
       font-size: 11px;
     }
@@ -1046,7 +1126,8 @@ export function renderNeonMissionControlGatewayHtml(
     .snapshot-grid,
     .metrics {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      /* auto-fit statt fester Spaltenzahl: sechs Karten brechen sonst 4+2. */
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
       gap: 10px;
     }
 
@@ -1082,9 +1163,9 @@ export function renderNeonMissionControlGatewayHtml(
 
     .callout {
       margin-top: 12px;
-      border: 1px solid rgba(46, 171, 115, 0.22);
+      border: 1px solid rgba(242, 138, 75, 0.22);
       border-radius: var(--radius-md);
-      background: rgba(46, 171, 115, 0.075);
+      background: rgba(242, 138, 75, 0.075);
       padding: 11px;
       color: var(--text-secondary);
       font-size: 12px;
@@ -1117,8 +1198,8 @@ export function renderNeonMissionControlGatewayHtml(
       border-radius: 999px;
       display: grid;
       place-items: center;
-      background: rgba(46, 171, 115, 0.09);
-      border: 1px solid rgba(46, 171, 115, 0.28);
+      background: rgba(242, 138, 75, 0.09);
+      border: 1px solid rgba(242, 138, 75, 0.28);
       color: var(--brand-bright);
       font-family: var(--font-mono);
       font-size: 11px;
@@ -1147,7 +1228,7 @@ export function renderNeonMissionControlGatewayHtml(
     .terminal {
       min-height: 152px;
       border-radius: var(--radius-md);
-      border: 1px solid rgba(46, 171, 115, 0.2);
+      border: 1px solid rgba(242, 138, 75, 0.2);
       background: rgba(0, 0, 0, 0.22);
       padding: 12px;
       display: grid;
@@ -1219,7 +1300,7 @@ export function renderNeonMissionControlGatewayHtml(
     .tag.pass,
     .tag.ready {
       color: var(--brand-bright);
-      border-color: rgba(46, 171, 115, 0.42);
+      border-color: rgba(242, 138, 75, 0.42);
     }
 
     .tag.failed,
@@ -1352,7 +1433,7 @@ export function renderNeonMissionControlGatewayHtml(
 
     .recent-events-filter-chips .tag[aria-pressed="true"] {
       color: var(--brand-bright);
-      border-color: rgba(46, 171, 115, 0.42);
+      border-color: rgba(242, 138, 75, 0.42);
     }
 
     .recent-events-filter-summary {
@@ -1415,8 +1496,8 @@ export function renderNeonMissionControlGatewayHtml(
     }
 
     .chat-conversation.active {
-      border-color: rgba(46, 171, 115, 0.38);
-      background: rgba(46, 171, 115, 0.09);
+      border-color: rgba(242, 138, 75, 0.38);
+      background: rgba(242, 138, 75, 0.09);
     }
 
     .chat-conversation strong {
@@ -1492,8 +1573,8 @@ export function renderNeonMissionControlGatewayHtml(
     }
 
     .chat-message.agent .chat-bubble {
-      border-color: rgba(46, 171, 115, 0.26);
-      background: rgba(46, 171, 115, 0.055);
+      border-color: rgba(242, 138, 75, 0.26);
+      background: rgba(242, 138, 75, 0.055);
     }
 
     .chat-message.user .chat-bubble {
@@ -1741,12 +1822,18 @@ export function renderNeonMissionControlGatewayHtml(
       <div class="brand">
         <div class="mark" aria-hidden="true">
           <svg viewBox="0 0 64 64" role="img">
-            <path d="M13 43V21l19-8 19 8v22l-19 8-19-8Z" fill="none" stroke="#2EAB73" stroke-width="4" />
-            <path d="M22 26h20M22 35h20M32 14v36" stroke="#FFB340" stroke-width="4" stroke-linecap="round" />
+            <mask id="brand-waves">
+              <rect width="64" height="64" fill="#fff" />
+              <path d="M0 36 Q8 34.3 16 36 Q24 37.7 32 36 Q40 34.3 48 36 Q56 37.7 64 36 L64 38 Q56 39.7 48 38 Q40 36.3 32 38 Q24 39.7 16 38 Q8 36.3 0 38 Z" />
+              <path d="M0 40.2 Q8 39 16 40.2 Q24 41.4 32 40.2 Q40 39 48 40.2 Q56 41.4 64 40.2 L64 41.9 Q56 43.1 48 41.9 Q40 40.7 32 41.9 Q24 43.1 16 41.9 Q8 40.7 0 41.9 Z" />
+              <path d="M0 43.6 Q8 42.8 16 43.6 Q24 44.4 32 43.6 Q40 42.8 48 43.6 Q56 44.4 64 43.6 L64 45.05 Q56 45.85 48 45.05 Q40 44.25 32 45.05 Q24 45.85 16 45.05 Q8 44.25 0 45.05 Z" />
+              <path d="M0 46.3 Q8 45.85 16 46.3 Q24 46.75 32 46.3 Q40 45.85 48 46.3 Q56 46.75 64 46.3 L64 47.5 Q56 47.95 48 47.5 Q40 47.05 32 47.5 Q24 47.95 16 47.5 Q8 47.05 0 47.5 Z" />
+            </mask>
+            <circle cx="32" cy="32" r="19" fill="var(--brand-primary)" mask="url(#brand-waves)" />
           </svg>
         </div>
         <div>
-          <p class="eyebrow">NEON CORE</p>
+          <p class="eyebrow">NEONIKA</p>
           <h1>Mission Control</h1>
         </div>
       </div>
@@ -1805,7 +1892,9 @@ export function renderNeonMissionControlGatewayHtml(
           <div class="select-like">Inherited: Medium</div>
           <div class="usage-pill">Nutzung <span id="metricRunsHero">0</span></div>
         </div>
-        <div class="api-strip">
+        <details class="api-strip">
+          <summary>API-Endpunkte</summary>
+          <div class="api-strip__links">
           <a class="button" href="/api/neon-mission-control/gateway">Gateway API</a>
           <a class="button" href="/api/neon-gateway/lifecycle">Lifecycle API</a>
           <a class="button" href="/api/neon-gateway/events">Events Stream</a>
@@ -1821,7 +1910,8 @@ export function renderNeonMissionControlGatewayHtml(
           <a class="button" href="/api/neon-skills">Skills API</a>
           <a class="button" href="/api/neon-extensions">Extensions API</a>
           <a class="button" href="/api/neon-doctor">Doctor API</a>
-        </div>
+          </div>
+        </details>
       </header>
 
       <section class="view" id="view-overview" data-view="overview"${viewHidden("overview")}>
@@ -1913,21 +2003,23 @@ export function renderNeonMissionControlGatewayHtml(
           <div class="panel-body stack">
             <div class="route-step"><div class="node">01</div><div class="route-copy"><strong>Channel Ingress</strong><span id="latestChannel">none</span></div></div>
             <div class="connector"></div>
-            <div class="route-step"><div class="node">02</div><div class="route-copy"><strong>Neon Gateway</strong><span id="sourcePath"></span></div></div>
+            <div class="route-step"><div class="node">02</div><div class="route-copy"><strong>Neonika Gateway</strong><span id="sourcePath"></span></div></div>
             <div class="connector"></div>
-            <div class="route-step"><div class="node">03</div><div class="route-copy"><strong>Neon Agent</strong><span id="latestAgent">none</span></div></div>
+            <div class="route-step"><div class="node">03</div><div class="route-copy"><strong>Neonika Agent</strong><span id="latestAgent">none</span></div></div>
             <div class="connector"></div>
-            <div class="route-step"><div class="node">04</div><div class="route-copy"><strong>Neon Memory</strong><span id="latestMemory">none</span></div></div>
+            <div class="route-step"><div class="node">04</div><div class="route-copy"><strong>Neonika Memory</strong><span id="latestMemory">none</span></div></div>
           </div>
         </article>
 
         ${renderRecentEventsPanel(snapshot.recentEvents)}
         ${renderRecentRunsPanel(snapshot.recentRuns)}
+        ${renderDiscordCockpitPanel(snapshot.discordCockpit)}
         ${renderCanaryPosturePanel(snapshot.canaryPosture)}
         ${renderNeonMissionControlGatePosturePanel(resolveNeonGatedSideEffectPosture(process.env))}
         ${renderNeonMissionControlBlockedReadinessPanel(createNeonBlockedRowReadinessSnapshot({ env: process.env }))}
         ${renderNeonMissionControlLiveSessionReadinessPanel(options.liveSessionReadiness ?? createNeonLiveSessionReadinessSnapshot({ env: process.env }))}
         ${renderNeonMissionControlChannelsPanel()}
+        ${renderNeonMissionControlRoundtableRoomsPanel(options.roundtable)}
         ${renderNeonMissionControlToolsPanel(createNeonToolInventorySnapshot({ env: process.env }))}
       </section>
       </section>
@@ -1943,7 +2035,7 @@ export function renderNeonMissionControlGatewayHtml(
             </div>
             <section class="chat-session-list" id="chatRows" aria-label="Conversations"></section>
           </aside>
-          <section class="chat-stage" aria-label="Neon Chat">
+          <section class="chat-stage" aria-label="Neonika Chat">
             <section class="chat-thread" id="chatMessageRows" aria-label="Chat Messages"></section>
             <form class="composer" id="chatComposer">
               <textarea aria-label="Message Chaty Lab" rows="1"></textarea>
@@ -1970,7 +2062,7 @@ export function renderNeonMissionControlGatewayHtml(
       <section class="view" id="view-activity" data-view="activity"${viewHidden("activity")}>
       <article class="panel" id="activity">
         <div class="panel-header">
-            <h2 class="panel-title">Neon Aktivität</h2>
+            <h2 class="panel-title">Neonika Aktivität</h2>
           <span class="label" id="activitySummary">waiting</span>
         </div>
         <div class="panel-body">
@@ -2016,7 +2108,7 @@ export function renderNeonMissionControlGatewayHtml(
       <section class="view" id="view-instances" data-view="instances"${viewHidden("instances")}>
       <article class="panel" id="mirror">
         <div class="panel-header">
-            <h2 class="panel-title">Neon Instanzen</h2>
+            <h2 class="panel-title">Neonika Instanzen</h2>
           <span class="label" id="mirrorSummary">waiting</span>
         </div>
         <div class="panel-body">
@@ -2034,7 +2126,7 @@ export function renderNeonMissionControlGatewayHtml(
       <section class="view" id="view-usage" data-view="usage"${viewHidden("usage")}>
       <article class="panel" id="cutover">
         <div class="panel-header">
-            <h2 class="panel-title">Neon Nutzung</h2>
+            <h2 class="panel-title">Neonika Nutzung</h2>
           <span class="label" id="cutoverSummary">waiting</span>
         </div>
         <div class="panel-body">
@@ -2052,7 +2144,7 @@ export function renderNeonMissionControlGatewayHtml(
       <section class="view" id="view-sessions" data-view="sessions"${viewHidden("sessions")}>
       <article class="panel" id="runs">
         <div class="panel-header">
-            <h2 class="panel-title">Neon Sitzungen</h2>
+            <h2 class="panel-title">Neonika Sitzungen</h2>
           <span class="label" id="sessionSummary">live aus runs.jsonl</span>
         </div>
         <div class="session-filterbar" aria-label="Session Filter">
@@ -2115,7 +2207,7 @@ export function renderNeonMissionControlGatewayHtml(
       <section class="view" id="view-skills" data-view="skills"${viewHidden("skills")}>
       <article class="panel" id="skills">
         <div class="panel-header">
-            <h2 class="panel-title">Neon Skills & Extensions</h2>
+            <h2 class="panel-title">Neonika Skills & Extensions</h2>
           <span class="label" id="skillsSummary">waiting</span>
         </div>
         <div class="panel-body">
@@ -2132,7 +2224,7 @@ export function renderNeonMissionControlGatewayHtml(
       </article>
       <article class="panel" id="plugins">
         <div class="panel-header">
-            <h2 class="panel-title">Neon Plugins</h2>
+            <h2 class="panel-title">Neonika Plugins</h2>
           <span class="label" id="pluginsSummary">waiting</span>
         </div>
         <div class="panel-body">
@@ -2151,7 +2243,7 @@ export function renderNeonMissionControlGatewayHtml(
       <section class="view" id="view-agents" data-view="agents"${viewHidden("agents")}>
       <article class="panel" id="agents">
         <div class="panel-header">
-          <h2 class="panel-title">Neon Agents</h2>
+          <h2 class="panel-title">Neonika Agents</h2>
           <span class="label" id="agentsSummary">registry</span>
         </div>
         <div class="panel-body">
@@ -2163,7 +2255,7 @@ export function renderNeonMissionControlGatewayHtml(
       <section class="view" id="view-nodes" data-view="nodes"${viewHidden("nodes")}>
       <article class="panel" id="nodes">
         <div class="panel-header">
-          <h2 class="panel-title">Neon Geräte</h2>
+          <h2 class="panel-title">Neonika Geräte</h2>
           <span class="label" id="nodesSummary">local gateway</span>
         </div>
         <div class="panel-body">
@@ -2210,7 +2302,7 @@ export function renderNeonMissionControlGatewayHtml(
       <section class="view narrow" id="view-dreams" data-view="dreams"${viewHidden("dreams")}>
       <article class="panel" id="dreams">
         <div class="panel-header">
-          <h2 class="panel-title">Neon Träume</h2>
+          <h2 class="panel-title">Neonika Träume</h2>
           <span class="label" id="dreamsSummary">memory stream</span>
         </div>
         <div class="panel-body">
@@ -2229,7 +2321,7 @@ export function renderNeonMissionControlGatewayHtml(
       <section class="view" id="view-config" data-view="config"${viewHidden("config")}>
       <article class="panel" id="config">
         <div class="panel-header">
-          <h2 class="panel-title">Neon Einstellungen</h2>
+          <h2 class="panel-title">Neonika Einstellungen</h2>
           <span class="label" id="configSummary">audit</span>
         </div>
         <div class="panel-body">
@@ -2346,6 +2438,60 @@ export function renderNeonMissionControlGatewayHtml(
       text("accessState", snapshot.state || "unknown");
       text("stateLabel", snapshot.state || "unknown");
     };
+    const renderDiscordCockpitRows = (containerId, rows) => {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      container.textContent = "";
+      if (rows.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "muted";
+        empty.textContent = containerId === "discordCockpitRuns"
+          ? "keine aktiven Discord-Läufe"
+          : "keine Delivery Receipts";
+        container.appendChild(empty);
+        return;
+      }
+      for (const entry of rows) {
+        const row = document.createElement("div");
+        row.className = "route-step";
+        const copy = document.createElement("div");
+        copy.className = "route-copy";
+        const title = document.createElement("strong");
+        title.textContent = entry.title;
+        const detail = document.createElement("span");
+        detail.textContent = entry.detail;
+        const scope = document.createElement("span");
+        scope.className = "tag " + (entry.scope === "allowed" ? "ok" : "shadow");
+        scope.textContent = entry.scope;
+        copy.append(title, detail, scope);
+        row.appendChild(copy);
+        container.appendChild(row);
+      }
+    };
+    const renderDiscordCockpit = (cockpit) => {
+      if (!cockpit) return;
+      text("discordCockpitState", cockpit.state);
+      text("discordCockpitTap", (cockpit.tap.running ? "running" : "not running") + " / accepted " + cockpit.tap.accepted + " / errors " + cockpit.tap.errors);
+      text("discordCockpitScope", (cockpit.scope.allowedChannelIds.join(", ") || "nicht konfiguriert") + " / violations " + cockpit.scope.violations);
+      text("discordCockpitActiveCount", String(cockpit.activeRuns.length) + " / stale " + String(cockpit.staleRunningRuns));
+      text("discordCockpitProgress", "cards " + cockpit.progress.cardsStarted + " / updates " + cockpit.progress.updates + " / errors " + cockpit.progress.errors);
+      text("discordCockpitControls", "accepted " + cockpit.controls.accepted + " / dropped " + cockpit.controls.dropped + " / last " + (cockpit.controls.lastState || "none"));
+      text("discordCockpitRecovery", "cards " + cockpit.recovery.cardsStarted + " / errors " + cockpit.recovery.errors);
+      text("discordCockpitDelivery", "receipts " + cockpit.delivery.totals.receipts + " / delivered " + cockpit.delivery.totals.delivered + " / uncertain " + cockpit.delivery.totals.uncertain);
+      text("discordCockpitSources", "tap " + cockpit.sources.tap + " / runs " + cockpit.sources.runs + " / receipts " + cockpit.sources.deliveryReceipts);
+      renderDiscordCockpitRows("discordCockpitRuns", cockpit.activeRuns.map((run) => ({
+        title: run.runId,
+        detail: run.runtime
+          ? [run.runtime.provider, run.runtime.model || run.runtime.runtime, run.runtime.effort].filter(Boolean).join(" / ") + " / " + (run.threadId || run.channelId)
+          : run.harnessId + " / " + (run.threadId || run.channelId),
+        scope: run.scope
+      })));
+      renderDiscordCockpitRows("discordCockpitReceipts", cockpit.delivery.recentReceipts.slice(0, 4).map((receipt) => ({
+        title: receipt.kind + ":" + receipt.state,
+        detail: receipt.runId + " / attempts " + receipt.attempts,
+        scope: receipt.scope
+      })));
+    };
     const renderGateway = (snapshot) => {
       text("generatedAt", "Snapshot " + snapshot.generatedAt);
       text("stateLabel", snapshot.state);
@@ -2379,6 +2525,7 @@ export function renderNeonMissionControlGatewayHtml(
       text("dreamDelivery", snapshot.latestRun ? snapshot.latestRun.deliveryState : "suppressed");
       text("dreamSource", snapshot.source.runsPath);
       text("nodesGateway", formatGatewayWsUrl());
+      renderDiscordCockpit(snapshot.discordCockpit);
     };
     const renderAgents = (snapshot) => {
       text("navAgents", String(snapshot.agents.length));

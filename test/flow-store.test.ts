@@ -13,7 +13,7 @@ import {
   type INeonFlowDefinition
 } from "../src/index.js";
 
-describe("Neon Flow store", () => {
+describe("Neonika Flow store", () => {
   it("writes and reads flow definitions from a Neon-owned JSONL store", async () => {
     const projectRoot = await createTempProjectRoot();
 

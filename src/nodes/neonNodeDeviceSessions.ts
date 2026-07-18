@@ -279,7 +279,7 @@ export function renderNeonNodeDeviceSessionReport(snapshot: INeonNodeDeviceSessi
   );
 
   return [
-    `Neon Node Device Sessions: ${snapshot.state}`,
+    `Neonika Node Device Sessions: ${snapshot.state}`,
     `Totals: sessions=${snapshot.totals.sessions} active=${snapshot.totals.active} expired=${snapshot.totals.expired}`,
     `Policy: rawToken=${snapshot.policy.rawTokenPersistence} sessionSecret=${snapshot.policy.sessionSecretPersistence} file=${snapshot.policy.actionPolicy.fileTransfer} browser=${snapshot.policy.actionPolicy.browser} command=${snapshot.policy.actionPolicy.commandExecution}`,
     "Sessions:",

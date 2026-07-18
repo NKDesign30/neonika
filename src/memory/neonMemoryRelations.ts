@@ -185,7 +185,7 @@ function result(
 
 export function renderNeonRelationDiscoveryReport(result: INeonRelationDiscoveryResult): string {
   return [
-    `Neon Memory Relation Discovery: ${result.state}`,
+    `Neonika Memory Relation Discovery: ${result.state}`,
     `Scanned embeddings: ${result.scanned}  Candidates: ${result.candidates}  Inserted: ${result.inserted}`,
     `Threshold: ${result.threshold}`,
     `Safety: targetedRealMemoryDb=${result.safety.targetedRealMemoryDb}`,

@@ -84,7 +84,7 @@ describe("Neon blocked-row readiness", () => {
     );
 
     const report = renderNeonBlockedRowReadinessReport(snapshot);
-    assert.match(report, /Neon Blocked-Row Readiness/);
+    assert.match(report, /Neonika Blocked-Row Readiness/);
     assert.match(report, /handleSendChat/);
     assert.match(report, /verify: node dist\/src\/cli\.js/);
   });

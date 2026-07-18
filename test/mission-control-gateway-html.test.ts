@@ -16,7 +16,7 @@ import {
   type INeonInFlightRunRecord
 } from "../src/index.js";
 
-describe("Neon Mission Control Gateway HTML", () => {
+describe("Neonika Mission Control Gateway HTML", () => {
   it("renders a Mission Control HTML surface from a real snapshot", () => {
     const snapshot = createNeonMissionControlGatewaySnapshot(
       createStatus(),
@@ -28,8 +28,8 @@ describe("Neon Mission Control Gateway HTML", () => {
     const html = renderNeonMissionControlGatewayHtml(snapshot);
 
     assert.match(html, /<!doctype html>/);
-    assert.match(html, /Neon Mission Control/);
-    assert.match(html, /NEON CORE/);
+    assert.match(html, /Neonika Mission Control/);
+    assert.match(html, /NEONIKA/);
     assert.match(html, /data-view="chat"/);
     assert.match(html, /data-view="overview"/);
     assert.match(html, /data-view="activity"/);
@@ -47,18 +47,18 @@ describe("Neon Mission Control Gateway HTML", () => {
     assert.match(html, /New session/);
     assert.match(html, /Chaty Lab/);
     assert.match(html, /Gateway Zugang/);
-    assert.match(html, /Neon Chat/);
+    assert.match(html, /Neonika Chat/);
     assert.match(html, /WebSocket URL/);
     assert.match(html, /Gateway Snapshot/);
-    assert.match(html, /Neon Aktivität/);
-    assert.match(html, /Neon Instanzen/);
-    assert.match(html, /Neon Nutzung/);
-    assert.match(html, /Neon Agents/);
+    assert.match(html, /Neonika Aktivität/);
+    assert.match(html, /Neonika Instanzen/);
+    assert.match(html, /Neonika Nutzung/);
+    assert.match(html, /Neonika Agents/);
     assert.match(html, /Cron-Aufgaben/);
-    assert.match(html, /Neon Skills/);
-    assert.match(html, /Neon Geräte/);
-    assert.match(html, /Neon Träume/);
-    assert.match(html, /Neon Einstellungen/);
+    assert.match(html, /Neonika Skills/);
+    assert.match(html, /Neonika Geräte/);
+    assert.match(html, /Neonika Träume/);
+    assert.match(html, /Neonika Einstellungen/);
     // Blocked-row readiness panel is wired into the server-rendered dashboard.
     assert.match(html, /Blocked-Row Readiness/);
     assert.match(html, /\/api\/neon-blocked-readiness/);
@@ -348,7 +348,7 @@ describe("Neon Mission Control Gateway HTML", () => {
 
         assert.equal(response.status, 200);
         assert.match(response.headers.get("content-type") ?? "", /text\/html/);
-        assert.match(html, /Neon Mission Control/);
+        assert.match(html, /Neonika Mission Control/);
         assert.match(html, /Gateway Zugang/);
         assert.match(html, /run-html-1/);
         // Served-path proof: the live Recent Events panel reaches the browser.
@@ -380,7 +380,7 @@ describe("Neon Mission Control Gateway HTML", () => {
 
         assert.equal(response.status, 200);
         assert.match(response.headers.get("content-type") ?? "", /text\/html/);
-        assert.match(html, /Neon Mission Control/);
+        assert.match(html, /Neonika Mission Control/);
         assert.match(html, /initialSnapshot/);
       } finally {
         await handle.close();
@@ -591,6 +591,7 @@ function createStatus(): INeonGatewayStatus {
     completedCount: 1,
     failedCount: 0,
     runningCount: 0,
+    cancelledCount: 0,
     deliverySuppressedCount: 1,
     latestRun: {
       runId: "run-html-1",

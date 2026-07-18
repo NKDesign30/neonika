@@ -7,7 +7,7 @@ import { isPathInside, realpathOrNull, statOrNull } from "../skills/neonSkillFs.
  * Filesystem source for plugin manifests.
  *
  * This reads `openclaw.plugin.json` manifests as raw JSON records and hands them
- * to the Neon Plugin SDK ({@link ../plugin-sdk/manifest.ts}) for parsing. It is
+ * to the Neonika Plugin SDK ({@link ../plugin-sdk/manifest.ts}) for parsing. It is
  * the rich, descriptor-grade counterpart to the legacy count-summary scanner in
  * `skills/neonSkillExtensions.ts`: same directory layout and path-safety
  * (symlink-resolved, no traversal escape, size-capped), but it returns the raw

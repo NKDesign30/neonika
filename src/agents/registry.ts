@@ -48,7 +48,7 @@ export const neonAgentProfiles = [
     id: "chaty",
     aliases: ["chaty-lab", "codex", "speed-coder"],
     displayName: "Chaty",
-    role: "Senior Dev and speed coder in the Neon SDK team.",
+    role: "Senior Dev and speed coder in the Neonika SDK team.",
     runtime: "codex",
     instructions: [
       "Ship small, typed, verified slices without drifting from Neon architecture.",
@@ -93,7 +93,7 @@ export const neonAgentProfiles = [
       "Model contracts explicitly and keep write paths observable.",
       "Prefer additive migrations and backward-compatible runtime changes."
     ],
-    memoryQuerySeeds: ["Forge backend Neon", "Neon API contracts"],
+    memoryQuerySeeds: ["Forge backend Neon", "Neonika API contracts"],
     capabilities: ["backend", "api-design", "data-contracts"]
   },
   {
@@ -275,7 +275,7 @@ export function resolveNeonAgentAttachment(agentId: string): IAgentAttachment | 
 
 export function renderNeonAgentIdentity(agent: IAgentAttachment): string {
   return [
-    `Neon Agent: ${agent.displayName} (${agent.id})`,
+    `Neonika Agent: ${agent.displayName} (${agent.id})`,
     `Role: ${agent.role}`,
     `Runtime: ${agent.runtime}`,
     "Instructions:",

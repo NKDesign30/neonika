@@ -1,6 +1,9 @@
 /* ──────────────────────────────────────────────────────────────────
-   Neon Design System — Foundations
-   Forest Emerald · Warm Dark · Editorial Display
+   Neonika Design System — Foundations
+   Solar · Warm Dark · Editorial Display
+
+   Solar trägt die Marke, Emerald bleibt Erfolgszustand — grün als Statusfarbe
+   ist eine Konvention, keine Markenaussage, und wird deshalb nicht mitgedreht.
    ────────────────────────────────────────────────────────────────── */
 
 /* ── Webfonts ─────────────────────────────────────────────────────── */
@@ -45,23 +48,23 @@
 
 /* ── Light theme (DEFAULT off — dark mode is the brand default) ──── */
 :root, .neon-light {
-  /* Brand */
-  --brand-primary: #1F8E5C;
-  --brand-bright:  #34C788;
-  --brand-faint:   rgba(31,142,92,0.10);
-  --brand-muted:   rgba(31,142,92,0.22);
+  /* Brand — Solar. 4,99:1 auf #FAFAF9, trägt Fließtext. */
+  --brand-primary: #B84A1B;
+  --brand-bright:  #E0711F;
+  --brand-faint:   rgba(184,74,27,0.10);
+  --brand-muted:   rgba(184,74,27,0.22);
 
-  /* Neon scale */
-  --neon-50:  #E8F5EE;
-  --neon-100: #C7E6D5;
-  --neon-200: #9FD4B6;
-  --neon-300: #6FBC93;
-  --neon-400: #3FA678;
-  --neon-500: #2EAB73;
-  --neon-600: #1F8E5C;
-  --neon-700: #177248;
-  --neon-800: #115638;
-  --neon-900: #0B3A26;
+  /* Solar scale */
+  --solar-50:  #FDF1E8;
+  --solar-100: #FADCC6;
+  --solar-200: #F7C39D;
+  --solar-300: #F4A574;
+  --solar-400: #F28A4B;
+  --solar-500: #E0711F;
+  --solar-600: #B84A1B;
+  --solar-700: #933916;
+  --solar-800: #6E2B11;
+  --solar-900: #481C0B;
 
   /* Warm neutrals */
   --neutral-0:  #FFFFFF;
@@ -109,7 +112,7 @@
   --stroke-hairline: rgba(0,0,0,0.10);
   --stroke-default:  rgba(0,0,0,0.14);
   --stroke-strong:   rgba(0,0,0,0.22);
-  --stroke-brand:    rgba(31,142,92,0.60);
+  --stroke-brand:    rgba(184,74,27,0.60);
 
   /* Shadows */
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.06);
@@ -120,10 +123,11 @@
 
 /* ── Dark theme (DEFAULT for Neon products) ──────────────────────── */
 :root, .neon-dark, [data-theme="dark"] {
-  --brand-primary: #2EAB73;
-  --brand-bright:  #34C788;
-  --brand-faint:   rgba(46,171,115,0.10);
-  --brand-muted:   rgba(46,171,115,0.22);
+  /* Solar auf warmem Dunkel: 7,07:1. */
+  --brand-primary: #F28A4B;
+  --brand-bright:  #F4A574;
+  --brand-faint:   rgba(242,138,75,0.10);
+  --brand-muted:   rgba(242,138,75,0.22);
 
   --surface-background: #1A1A18;     /* warm dark, never #000 */
   --surface-card:       rgba(255,255,255,0.04);
@@ -147,7 +151,7 @@
   --stroke-hairline: rgba(255,255,255,0.08);
   --stroke-default:  rgba(255,255,255,0.14);
   --stroke-strong:   rgba(255,255,255,0.22);
-  --stroke-brand:    rgba(46,171,115,0.60);
+  --stroke-brand:    rgba(242,138,75,0.60);
 
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.20);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.30);

@@ -275,7 +275,7 @@ export function renderNeonWorkboardAutoDispatchReport(
   result: INeonWorkboardAutoDispatchBatchResult
 ): string {
   const lines = [
-    `Neon Workboard autopilot: ${result.state}`,
+    `Neonika Workboard autopilot: ${result.state}`,
     `Owner: ${result.ownerId}`,
     `Ready checked: ${result.checked}`,
     `Processed: ${result.processed} (done ${result.completed} / blocked ${result.blocked} / skipped ${result.skipped})`
@@ -372,7 +372,7 @@ function renderWorkboardGatewayContent(card: INeonWorkboardCard): string {
     : "operator";
 
   return [
-    "Process this Neon Workboard card.",
+    "Process this Neonika Workboard card.",
     "Do the work in the configured workspace and return concise completion proof.",
     `Card ID: ${card.id}`,
     `Title: ${card.title}`,

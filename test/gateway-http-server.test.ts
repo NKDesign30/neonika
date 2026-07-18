@@ -65,7 +65,7 @@ import {
   type INeonSessionsSnapshot,
 } from "../src/index.js";
 
-describe("Neon Gateway HTTP server", () => {
+describe("Neonika Gateway HTTP server", () => {
   it("serves persisted gateway status over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
@@ -126,7 +126,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves the Neon Gateway lifecycle snapshot over HTTP", async () => {
+  it("serves the Neonika Gateway lifecycle snapshot over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -155,7 +155,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves the Neon Gateway protocol contract over HTTP", async () => {
+  it("serves the Neonika Gateway protocol contract over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -230,7 +230,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves the Neon Gateway route inspection over HTTP", async () => {
+  it("serves the Neonika Gateway route inspection over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -258,7 +258,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves Neon Chat conversations over HTTP", async () => {
+  it("serves Neonika Chat conversations over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -289,7 +289,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves filtered Neon Chat conversations over HTTP", async () => {
+  it("serves filtered Neonika Chat conversations over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -338,7 +338,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves Neon Sessions over HTTP", async () => {
+  it("serves Neonika Sessions over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -368,7 +368,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves Neon Activity over HTTP", async () => {
+  it("serves Neonika Activity over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -398,7 +398,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves filtered Neon Replay over HTTP without exposing secrets", async () => {
+  it("serves filtered Neonika Replay over HTTP without exposing secrets", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -684,7 +684,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves Neon Cutover gates over HTTP", async () => {
+  it("serves Neonika Cutover gates over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -712,7 +712,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves Neon Mirror evidence over HTTP", async () => {
+  it("serves Neonika Mirror evidence over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -739,7 +739,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves the Neon Agents registry over HTTP", async () => {
+  it("serves the Neonika Agents registry over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -767,7 +767,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves the Neon Automation catalog over HTTP", async () => {
+  it("serves the Neonika Automation catalog over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -798,7 +798,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves local Neon Nodes over HTTP", async () => {
+  it("serves local Neonika Nodes over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -840,7 +840,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves Neon Node Pairing over HTTP", async () => {
+  it("serves Neonika Node Pairing over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -868,7 +868,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves Neon Node Pairing Token Gate over HTTP", async () => {
+  it("serves Neonika Node Pairing Token Gate over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -919,7 +919,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves redacted Neon Node Canary Tokens over HTTP", async () => {
+  it("serves redacted Neonika Node Canary Tokens over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -950,7 +950,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves redacted Neon Node Device Sessions over HTTP", async () => {
+  it("serves redacted Neonika Node Device Sessions over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -982,7 +982,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves redacted Neon Node Action Requests over HTTP", async () => {
+  it("serves redacted Neonika Node Action Requests over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -1019,7 +1019,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves Neon Node Transport over HTTP", async () => {
+  it("serves Neonika Node Transport over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -1057,7 +1057,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves Neon Node Runner over HTTP", async () => {
+  it("serves Neonika Node Runner over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -1087,7 +1087,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves Neon Node Runner Service over HTTP", async () => {
+  it("serves Neonika Node Runner Service over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -1118,7 +1118,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves Neon Node Runner Service canary readiness over HTTP", async () => {
+  it("serves Neonika Node Runner Service canary readiness over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -1150,7 +1150,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves and records Neon Node Runner Service actions over HTTP without executing them", async () => {
+  it("serves and records Neonika Node Runner Service actions over HTTP without executing them", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -1212,7 +1212,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves authenticated Neon Node transport polls over HTTP", async () => {
+  it("serves authenticated Neonika Node transport polls over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -1284,7 +1284,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("accepts authenticated Neon Node transport result submissions over HTTP", async () => {
+  it("accepts authenticated Neonika Node transport result submissions over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -1378,7 +1378,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves the Neon Doctor snapshot over HTTP", async () => {
+  it("serves the Neonika Doctor snapshot over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -1408,7 +1408,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves the Neon Onboarding snapshot over HTTP", async () => {
+  it("serves the Neonika Onboarding snapshot over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
@@ -1435,7 +1435,7 @@ describe("Neon Gateway HTTP server", () => {
     }
   });
 
-  it("serves Neon Skills and Extensions inventory over HTTP", async () => {
+  it("serves Neonika Skills and Extensions inventory over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
     // The reference checkout is a fixture, not a host assumption: this test used
     // to pass only on a machine that happened to have a reference checkout at the

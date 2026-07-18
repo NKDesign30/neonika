@@ -11,7 +11,7 @@ import {
   type INeonTaskRecord
 } from "../src/index.js";
 
-describe("Neon Workboard snapshot", () => {
+describe("Neonika Workboard snapshot", () => {
   it("reports an empty board when no tasks exist", async () => {
     const projectRoot = await createTempProjectRoot();
 
@@ -108,7 +108,7 @@ describe("Neon Workboard snapshot", () => {
 
       assert.doesNotMatch(JSON.stringify(snapshot), /sk-live-0123456789abcdefghij/);
       assert.doesNotMatch(report, /sk-live-0123456789abcdefghij/);
-      assert.match(report, /Neon Workboard: ready/);
+      assert.match(report, /Neonika Workboard: ready/);
       assert.match(report, /In Progress \(1\)/);
     } finally {
       await rm(projectRoot, { force: true, recursive: true });

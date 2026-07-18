@@ -26,7 +26,7 @@ const disabledGate: INeonCronTimerGate = {
   envKey: "NEON_CRON_TIMER_ENABLED"
 };
 
-describe("Neon Cron daemon tick driver", () => {
+describe("Neonika Cron daemon tick driver", () => {
   it("does nothing and writes no cursor when the gate is closed (default-off)", async () => {
     const cursorPath = await tempCursorPath();
 

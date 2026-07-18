@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { redactHarnessEvent, redactText } from "../harness/redaction.js";
 import { isNeonHarnessId } from "../harness/types.js";
 import type {
+  INeonHarnessRuntimeMetadata,
   TCodexHarnessEvent,
   THarnessRunMode,
   TMemoryAttachmentState,
@@ -59,6 +60,7 @@ export interface INeonGatewayStatus {
   readonly shadowRunCount: number;
   readonly completedCount: number;
   readonly failedCount: number;
+  readonly cancelledCount: number;
   readonly runningCount: number;
   readonly deliverySuppressedCount: number;
   readonly latestRun?: INeonGatewayRunSummary;
@@ -159,6 +161,7 @@ export async function readNeonGatewayStatus(projectRoot: string): Promise<INeonG
     shadowRunCount: runs.filter((run) => run.mode === "shadow").length,
     completedCount: runs.filter((run) => run.status === "completed").length,
     failedCount: runs.filter((run) => run.status === "failed").length,
+    cancelledCount: runs.filter((run) => run.status === "cancelled").length,
     runningCount: runs.filter((run) => run.status === "running").length,
     deliverySuppressedCount: runs.filter((run) => run.delivery.state === "suppressed").length,
     ...(latestRunSummary ? { latestRun: latestRunSummary } : {})
@@ -322,6 +325,7 @@ function parseGatewayRun(value: unknown): INeonGatewayShadowRun | undefined {
   const request = parseGatewayRunRequest(value["request"]);
   const delivery = parseGatewayDelivery(value["delivery"]);
   const events = parseHarnessEvents(value["events"]);
+  const runtime = parseHarnessRuntimeMetadata(value["runtime"]);
 
   if (
     typeof value["runId"] !== "string" ||
@@ -346,6 +350,7 @@ function parseGatewayRun(value: unknown): INeonGatewayShadowRun | undefined {
     status: value["status"],
     request,
     harnessId: value["harnessId"],
+    ...(runtime ? { runtime } : {}),
     harnessSessionKey: value["harnessSessionKey"],
     memoryState: value["memoryState"],
     events,
@@ -354,6 +359,39 @@ function parseGatewayRun(value: unknown): INeonGatewayShadowRun | undefined {
     startedAt: value["startedAt"],
     completedAt: value["completedAt"]
   });
+}
+
+function parseHarnessRuntimeMetadata(value: unknown): INeonHarnessRuntimeMetadata | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const provider = value["provider"] === "openai" || value["provider"] === "anthropic"
+    ? value["provider"]
+    : undefined;
+  const runtime = value["runtime"] === "codex" || value["runtime"] === "claude"
+    ? value["runtime"]
+    : undefined;
+  const lane = isNeonHarnessId(value["lane"]) ? value["lane"] : undefined;
+  const model = parseBoundedRuntimeField(value["model"], 100);
+  const effort = parseBoundedRuntimeField(value["effort"], 32);
+  if (!provider || !runtime || !lane || !model || !effort) {
+    return undefined;
+  }
+  if (
+    (runtime === "codex" && (provider !== "openai" || lane !== "codex-app-server")) ||
+    (runtime === "claude" && (provider !== "anthropic" || lane !== "claude-cli"))
+  ) {
+    return undefined;
+  }
+  return { provider, runtime, lane, model, effort };
+}
+
+function parseBoundedRuntimeField(value: unknown, maxLength: number): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim();
+  return normalized.length > 0 && normalized.length <= maxLength ? normalized : undefined;
 }
 
 function parseGatewayRunRequest(value: unknown): INeonGatewayRunRequest | undefined {
@@ -587,7 +625,7 @@ function isGatewayDeliveryState(value: unknown): value is TNeonGatewayDeliverySt
 }
 
 function isGatewayRunStatus(value: unknown): value is TNeonGatewayRunStatus {
-  return value === "running" || value === "completed" || value === "failed";
+  return value === "running" || value === "completed" || value === "failed" || value === "cancelled";
 }
 
 function isNeonChannel(value: unknown): value is TNeonChannel {

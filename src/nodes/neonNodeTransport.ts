@@ -628,7 +628,7 @@ export function renderNeonNodeTransportReport(snapshot: INeonNodeTransportSnapsh
       : ["- none"];
 
   return [
-    `Neon Node Transport: ${snapshot.state}`,
+    `Neonika Node Transport: ${snapshot.state}`,
     `Policy: ${snapshot.policy.mode} / ${snapshot.policy.approval} / mutation=${snapshot.policy.mutationAllowed}`,
     `Dispatches: ${snapshot.totals.dispatches}`,
     `Blockers: ${snapshot.totals.blockers}`,

@@ -20,7 +20,7 @@ const baseBinding: ICodexSessionBinding = {
   mode: "read-only"
 };
 
-describe("Neon Codex Harness foundation", () => {
+describe("Neonika Codex Harness foundation", () => {
   it("derives stable session keys without leaking the workspace path", () => {
     const key = deriveCodexSessionKey(baseBinding);
 

@@ -1,9 +1,9 @@
 import type { TNeonChannel } from "../harness/types.js";
 
 /**
- * Neon Tasks data model.
+ * Neonika Tasks data model.
  *
- * A task is the unit of visible work on the Neon Workboard. The shape mirrors the
+ * A task is the unit of visible work on the Neonika Workboard. The shape mirrors the
  * goal contract fields (taskId, source, channel, owner agent, status, priority,
  * due, links, runIds) plus the minimal bookkeeping needed to project a board
  * (title, timestamps, labels). This module is pure: it owns the types and the

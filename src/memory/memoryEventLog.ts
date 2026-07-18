@@ -180,7 +180,7 @@ export async function readNeonMemoryEvents(options: {
 
 export function renderNeonMemoryEventLogReport(result: INeonMemoryEventAppendResult): string {
   return [
-    `Neon Memory Event Log: ${result.state} (${result.gate.reason}, env ${result.gate.envKey})`,
+    `Neonika Memory Event Log: ${result.state} (${result.gate.reason}, env ${result.gate.envKey})`,
     `Store: ${result.storePath ?? "none (isolated store required)"}`,
     `Event: ${result.event?.type ?? "none"}`,
     ...result.diagnostics.map((diagnostic) => `- ${diagnostic}`)

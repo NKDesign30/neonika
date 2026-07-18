@@ -80,7 +80,7 @@ function createFakeDiscordClient(opts: { channelFound?: boolean; sendable?: bool
   return { client: fake as unknown as Client, state };
 }
 
-describe("Neon Discord outbound transport (gated live-side-effect module)", () => {
+describe("Neonika Discord outbound transport (gated live-side-effect module)", () => {
   it("logs in once, sends the verbatim body, and returns only the message id", async () => {
     const { client, state } = createFakeDiscordClient();
     const transport = createNeonDiscordOutboundTransport({

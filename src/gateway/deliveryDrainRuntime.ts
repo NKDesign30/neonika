@@ -177,7 +177,7 @@ export function renderNeonDeliveryDrainPlanReport(plan: INeonDeliveryDrainPlan):
     );
 
   return [
-    "Neon Delivery Drain Plan",
+    "Neonika Delivery Drain Plan",
     `State: ${plan.state} (${plan.reason})`,
     `Gate: ${plan.gate.envKey}=${plan.gate.enabled ? "enabled" : "disabled"}`,
     `Pending-drain: ${plan.totals.pendingDrain} (eligible ${plan.totals.eligible} · expired ${plan.totals.expired} · already-done ${plan.totals.alreadyDone})`,

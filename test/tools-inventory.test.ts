@@ -12,7 +12,7 @@ const fixedNow = new Date("2026-06-02T12:00:00.000Z");
 describe("Neon tool inventory snapshot", () => {
   it("reports the closed gate and dry-run posture by default", () => {
     const snapshot = createNeonToolInventorySnapshot({ now: () => fixedNow, env: {} });
-    assert.equal(snapshot.title, "Neon Tools");
+    assert.equal(snapshot.title, "Neonika Tools");
     assert.equal(snapshot.gate.enabled, false);
     assert.ok(snapshot.tools.length > 0);
     // No tool may be in live mode while the gate is closed.
@@ -73,7 +73,7 @@ describe("Neon tool inventory snapshot", () => {
       env: { TAVILY_API_KEY: "tvly-leakcheck-value" }
     });
     const report = renderNeonToolInventoryReport(snapshot);
-    assert.match(report, /Neon Tools/);
+    assert.match(report, /Neonika Tools/);
     assert.match(report, /Live gate: closed/);
     assert.match(report, /web-search/);
     assert.doesNotMatch(report, /tvly-leakcheck-value/);

@@ -11,7 +11,7 @@ import {
 } from "./flowModel.js";
 
 /**
- * Append-only Neon Flow store.
+ * Append-only Neonika Flow store.
  *
  * Flow definitions are internal bookkeeping (like tasks and shadow runs) and are
  * written freely to `state/flows/flows.jsonl`. Persisting a flow is not

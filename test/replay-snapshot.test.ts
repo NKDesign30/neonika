@@ -13,7 +13,7 @@ import {
   type INeonGatewayShadowRun
 } from "../src/index.js";
 
-describe("Neon Replay snapshot", () => {
+describe("Neonika Replay snapshot", () => {
   it("builds a redacted run replay from Gateway history", async () => {
     const projectRoot = await createTempProjectRoot();
 
@@ -252,7 +252,7 @@ describe("Neon Replay snapshot", () => {
   });
 });
 
-describe("Neon Replay event pagination", () => {
+describe("Neonika Replay event pagination", () => {
   it("walks the full event stream with a stable messageSeq cursor", async () => {
     const projectRoot = await createTempProjectRoot();
 

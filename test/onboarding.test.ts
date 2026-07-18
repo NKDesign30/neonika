@@ -9,7 +9,7 @@ import {
   renderNeonOnboardingReport
 } from "../src/index.js";
 
-describe("Neon Onboarding", () => {
+describe("Neonika Onboarding", () => {
   it("renders a no-secret config preview that is ready for Discord smoke", async () => {
     const projectRoot = await createTempProjectRoot();
     const memoryCommandPath = join(projectRoot, "bin", "memory-search");

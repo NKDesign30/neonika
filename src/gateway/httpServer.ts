@@ -100,6 +100,7 @@ import { createNeonUsageSnapshot } from "./usageSnapshot.js";
 import { createNeonRunTaskProjection } from "../tasks/runTaskProjection.js";
 import { extractNeonDocument, type INeonDocExtractProvider, type INeonDocExtractRequest } from "../tools/documentExtract.js";
 import { createNeonPdfExtractProvider } from "../tools/pdfExtractProvider.js";
+import { createNeonRoundtableRoomsSnapshot } from "../roundtable/roundtableRoomsSnapshot.js";
 import { createNeonWorkboardSnapshot } from "../tasks/workboardSnapshot.js";
 import { createNeonFlowsSnapshot, planNeonFlowExecution } from "../tasks/flowPlan.js";
 import { readNeonFlow } from "../tasks/flowStore.js";
@@ -117,6 +118,7 @@ import {
   type INeonGatewayWebSocketServerHandle
 } from "./webSocketServer.js";
 import { createNeonMissionControlGatewaySnapshot } from "../missionControl/gatewaySnapshot.js";
+import { readNeonMissionControlDiscordCockpitSnapshot } from "../missionControl/discordCockpitSnapshot.js";
 import { createNeonCronDaemonStatusSnapshot } from "../missionControl/cronDaemonStatusPanel.js";
 import { createNeonHeartbeatDaemonStatusSnapshot } from "../missionControl/heartbeatDaemonStatusPanel.js";
 import {
@@ -253,7 +255,7 @@ export async function listenNeonGatewayHttpServer(
 
   if (!address || typeof address === "string") {
     await closeServer(server);
-    throw new Error("Neon Gateway HTTP server did not expose a TCP address");
+    throw new Error("Neonika Gateway HTTP server did not expose a TCP address");
   }
 
   const handle = {
@@ -466,6 +468,11 @@ async function handleGatewayRequest(
   try {
     if (requestUrl.pathname === "/api/neon-gateway/status") {
       await handleGatewayStatus(context);
+      return;
+    }
+
+    if (requestUrl.pathname === "/api/neon-roundtable") {
+      await handleNeonRoundtable(context);
       return;
     }
 
@@ -805,6 +812,14 @@ function authorizeHttpMutation(context: IRouteContext): boolean {
 
 async function handleGatewayStatus(context: IRouteContext): Promise<void> {
   writeJson(context.response, 200, await readNeonGatewayStatus(context.projectRoot));
+}
+
+// Read-only Neonika Roundtable rooms projection (spec #15, ticket #22): the
+// running (or last) round with a bounded, redacted turn log. Leak-safe by
+// construction — the snapshot carries no filesystem paths and every turn is
+// re-run through the redaction seam.
+async function handleNeonRoundtable(context: IRouteContext): Promise<void> {
+  writeJson(context.response, 200, await createNeonRoundtableRoomsSnapshot(context.projectRoot));
 }
 
 async function handleGatewayRuns(context: IRouteContext): Promise<void> {
@@ -1732,14 +1747,19 @@ async function handleNeonMirrorEvidence(context: IRouteContext): Promise<void> {
 
 async function handleMissionControlGateway(context: IRouteContext): Promise<void> {
   const limit = readLimit(context.requestUrl) ?? 10;
-  const [status, runs] = await Promise.all([
+  const [status, runs, discordCockpit] = await Promise.all([
     readNeonGatewayStatus(context.projectRoot),
     readNeonGatewayRuns(context.projectRoot, {
       maxRuns: limit
-    })
+    }),
+    readNeonMissionControlDiscordCockpitSnapshot(context.projectRoot)
   ]);
 
-  writeJson(context.response, 200, createNeonMissionControlGatewaySnapshot(status, runs));
+  writeJson(
+    context.response,
+    200,
+    createNeonMissionControlGatewaySnapshot(status, runs, { discordCockpit })
+  );
 }
 
 // The built control UI lives in dist/control-ui (vite build, base "/control-ui/").
@@ -1834,18 +1854,20 @@ async function handleMissionControlGatewayHtml(
   }
 
   const limit = readLimit(context.requestUrl) ?? 8;
-  const [status, runs, workboard, cronDaemon, heartbeatDaemon] = await Promise.all([
+  const [status, runs, discordCockpit, workboard, cronDaemon, heartbeatDaemon, roundtable] = await Promise.all([
     readNeonGatewayStatus(context.projectRoot),
     readNeonGatewayRuns(context.projectRoot, {
       maxRuns: limit
     }),
+    readNeonMissionControlDiscordCockpitSnapshot(context.projectRoot),
     createNeonWorkboardSnapshot(context.projectRoot, { maxRecords: 200 }),
     createNeonCronDaemonStatusSnapshot(context.projectRoot),
     createNeonHeartbeatDaemonStatusSnapshot(context.projectRoot, {
       agents: resolveNeonHeartbeatAgentsFromEnv(process.env)
-    })
+    }),
+    createNeonRoundtableRoomsSnapshot(context.projectRoot)
   ]);
-  const snapshot = createNeonMissionControlGatewaySnapshot(status, runs);
+  const snapshot = createNeonMissionControlGatewaySnapshot(status, runs, { discordCockpit });
   const initialView = resolveNeonMissionControlViewFromPathname(context.requestUrl.pathname) ?? "chat";
   // Wire the real run-control registry into the server-rendered live-session
   // panel so active runningRunIds + Stop/Abort controls reflect the live
@@ -1863,6 +1885,7 @@ async function handleMissionControlGatewayHtml(
       cronDaemon,
       heartbeatDaemon,
       liveSessionReadiness,
+      roundtable,
     })
   );
 }

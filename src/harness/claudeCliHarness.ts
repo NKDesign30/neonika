@@ -6,8 +6,15 @@ import {
   type TClaudeStreamCompletion
 } from "./claudeStreamProtocol.js";
 import { redactHarnessEvent, redactText } from "./redaction.js";
+import {
+  NEON_DISCORD_BUTTONS_MARKER_INSTRUCTION,
+  NEON_DISCORD_CARD_MARKER_INSTRUCTION,
+  NEON_DISCORD_FILE_DELIVERY_INSTRUCTION,
+  NEON_DISCORD_POLL_MARKER_INSTRUCTION
+} from "./codexAppServerHarness.js";
 import { deriveCodexSessionKey } from "./sessionKey.js";
 import { wrapUntrustedExternalContent } from "../security/externalContent.js";
+import { resolveNeonDiscordWorkGovernanceInstruction } from "../gateway/discordPlanApproval.js";
 import type { IClaudeStreamTransport } from "./claudeStreamTransport.js";
 import type {
   ICodexHarness,
@@ -185,7 +192,7 @@ async function runClaudeCliHarnessTurn(
 
       recordHarnessEvent(events, { kind: "final", text: message }, input.onEvent);
 
-      return finalizeResult(sessionKey, input, events, message);
+      return finalizeResult(sessionKey, input, events, message, true);
     }
 
     const message = redactText(error instanceof Error ? error.message : "Claude CLI harness failed");
@@ -320,7 +327,7 @@ function recordHarnessEvent(
 function buildClaudePrompt(input: ICodexHarnessInput): string {
   return [
     ...renderAgentPrompt(input.agent),
-    `Neon Memory: ${input.memory.state}; hits=${input.memory.hitCount}; note=${input.memory.note}`,
+    `Neonika Memory: ${input.memory.state}; hits=${input.memory.hitCount}; note=${input.memory.note}`,
     ...renderMemoryExcerpts(input.memory),
     "",
     input.prompt
@@ -338,7 +345,7 @@ function renderMemoryExcerpts(memory: ICodexHarnessInput["memory"]): readonly st
     return [`${index + 1}. [${excerpt.source}]`, wrapped.text];
   });
 
-  return ["Neon Memory excerpts:", ...renderedExcerpts];
+  return ["Neonika Memory excerpts:", ...renderedExcerpts];
 }
 
 function renderAgentPrompt(agent: ICodexHarnessInput["agent"]): readonly string[] {
@@ -347,7 +354,7 @@ function renderAgentPrompt(agent: ICodexHarnessInput["agent"]): readonly string[
   }
 
   return [
-    `Neon Agent: ${agent.displayName} (${agent.id})`,
+    `Neonika Agent: ${agent.displayName} (${agent.id})`,
     `Role: ${agent.role}`,
     `Runtime: ${agent.runtime}`,
     "Agent instructions:",
@@ -368,7 +375,16 @@ function buildClaudeBaseInstructions(input: ICodexHarnessInput): string {
     "For Discord numbered points, use real newline-separated Markdown list items like `1. ...`; never leave bare inline numbers after a colon such as `Kernidee: 1. ... 2. ...`.",
     "For German and English words, use normal Latin characters only; do not emit Cyrillic homoglyphs such as `Gemerk\u0442`.",
     "Do not include source links, raw URLs, or citation-style link text unless the user explicitly asks for sources or a link is necessary.",
-    "For ordinary chat, do not announce a Neon Slice plan, do not print acceptance criteria, and do not run project planning workflows. Act directly and then answer with the result.",
+    "For ordinary chat, do not announce a Neonika Slice plan, do not print acceptance criteria, and do not run project planning workflows. Act directly and then answer with the result.",
+    ...(input.binding.channel === "discord"
+      ? [
+          NEON_DISCORD_POLL_MARKER_INSTRUCTION,
+          NEON_DISCORD_CARD_MARKER_INSTRUCTION,
+          NEON_DISCORD_BUTTONS_MARKER_INSTRUCTION,
+          NEON_DISCORD_FILE_DELIVERY_INSTRUCTION,
+          resolveNeonDiscordWorkGovernanceInstruction(input.binding.channelId)
+        ]
+      : []),
     "You may invoke credential CLIs such as op (1Password) when a task genuinely needs a credential (for example a deploy token); never print or disclose the secret values themselves.",
     "Do not disclose secrets."
   ].join("\n");
@@ -378,7 +394,8 @@ function finalizeResult(
   sessionKey: string,
   input: ICodexHarnessInput,
   events: readonly TCodexHarnessEvent[],
-  finalText: string
+  finalText: string,
+  cancelled = false
 ): ICodexHarnessResult {
   const redactedEvents = events.map(redactHarnessEvent);
 
@@ -386,6 +403,7 @@ function finalizeResult(
     sessionKey,
     memoryState: input.memory.state,
     events: redactedEvents,
-    finalText: redactText(finalText)
+    finalText: redactText(finalText),
+    ...(cancelled ? { cancelled: true } : {})
   };
 }

@@ -1,6 +1,6 @@
 import type { INeonWorkboardSnapshot } from "../tasks/workboardSnapshot.js";
 
-// Mission Control — server-rendered Neon Workboard panel.
+// Mission Control — server-rendered Neonika Workboard panel.
 //
 // Self-contained (own HTML escaper, no dependency on the large, concurrently
 // edited gatewayHtml internals) so it can be injected with a single line and
@@ -77,7 +77,7 @@ export function renderNeonMissionControlWorkboardPanel(
   if (!snapshot) {
     return `<article class="panel" id="workboard">
           <div class="panel-header">
-            <h2 class="panel-title">Neon Arbeitsbereich</h2>
+            <h2 class="panel-title">Neonika Arbeitsbereich</h2>
             <span class="tag" id="workboardStatus" data-workboard-state="loading">lädt</span>
           </div>
           <div class="panel-body">
@@ -92,7 +92,7 @@ export function renderNeonMissionControlWorkboardPanel(
 
   return `<article class="panel" id="workboard">
           <div class="panel-header">
-            <h2 class="panel-title">Neon Arbeitsbereich</h2>
+            <h2 class="panel-title">Neonika Arbeitsbereich</h2>
             <span class="tag" id="workboardStatus" data-workboard-state="${escapeWorkboardPanelHtml(
               snapshot.state
             )}">${totals.tasks} Aufgabe(n)</span>

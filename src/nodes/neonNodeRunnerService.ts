@@ -457,7 +457,7 @@ export function renderNeonNodeRunnerServiceReport(snapshot: INeonNodeRunnerServi
   const commandLines = snapshot.commands.map((command) => `- ${command.id}: ${command.command}`);
 
   return [
-    `Neon Node Runner Service: ${snapshot.state}`,
+    `Neonika Node Runner Service: ${snapshot.state}`,
     `Manager: ${snapshot.manager}`,
     `Install: ${snapshot.installState}`,
     `Runner: ${snapshot.runner.state} / control=${snapshot.runner.control.desiredState}`,
@@ -480,7 +480,7 @@ export function renderNeonNodeRunnerServiceCanaryReport(snapshot: INeonNodeRunne
       : ["- none"];
 
   return [
-    `Neon Node Runner Service Canary: ${snapshot.state}`,
+    `Neonika Node Runner Service Canary: ${snapshot.state}`,
     `Service: ${snapshot.serviceState} / install=${snapshot.serviceInstallState}`,
     `Credentials: ${snapshot.credentialsSource}`,
     `Runner control: ${snapshot.runnerControl}`,
@@ -542,15 +542,15 @@ export async function approveNeonNodeRunnerServiceAction(
   const request = requests.find((entry) => entry.actionRequestId === normalized.actionRequestId);
 
   if (!request) {
-    throw new Error("Neon Node Runner service action request not found");
+    throw new Error("Neonika Node Runner service action request not found");
   }
 
   if (request.state !== "approval-required") {
-    throw new Error("Neon Node Runner service action request is not queued for operator approval");
+    throw new Error("Neonika Node Runner service action request is not queued for operator approval");
   }
 
   if (approvals.some((approval) => approval.actionRequestId === request.actionRequestId)) {
-    throw new Error("Neon Node Runner service action request already has an approval record");
+    throw new Error("Neonika Node Runner service action request already has an approval record");
   }
 
   const createdAt = (options.now?.() ?? new Date()).toISOString();
@@ -605,17 +605,17 @@ export async function executeNeonNodeRunnerServiceAction(
   const approval = approvals.find((entry) => entry.approvalId === normalized.approvalId);
 
   if (!approval) {
-    throw new Error("Neon Node Runner service action approval not found");
+    throw new Error("Neonika Node Runner service action approval not found");
   }
 
   if (executions.some((execution) => execution.approvalId === approval.approvalId)) {
-    throw new Error("Neon Node Runner service action approval already has an execution record");
+    throw new Error("Neonika Node Runner service action approval already has an execution record");
   }
 
   const request = requests.find((entry) => entry.actionRequestId === approval.actionRequestId);
 
   if (!request) {
-    throw new Error("Neon Node Runner service action request not found");
+    throw new Error("Neonika Node Runner service action request not found");
   }
 
   const executedAt = now().toISOString();
@@ -1047,7 +1047,7 @@ async function decideServiceActionExecution(
     {
       desiredState: "running",
       operatorId: input.operatorId,
-      reason: "Approved Neon Node Runner service start action."
+      reason: "Approved Neonika Node Runner service start action."
     },
     {
       now: () => new Date(input.executedAt)
@@ -1425,7 +1425,7 @@ function parseServiceActionKind(value: unknown): TNeonNodeRunnerServiceActionKin
   const action = parseOptionalServiceActionKind(value);
 
   if (!action) {
-    throw new Error("Unsupported Neon Node Runner service action");
+    throw new Error("Unsupported Neonika Node Runner service action");
   }
 
   return action;
@@ -1441,7 +1441,7 @@ function parseServiceActionDecision(value: unknown): TNeonNodeRunnerServiceActio
   const decision = parseOptionalServiceActionDecision(value);
 
   if (!decision) {
-    throw new Error("Unsupported Neon Node Runner service action decision");
+    throw new Error("Unsupported Neonika Node Runner service action decision");
   }
 
   return decision;

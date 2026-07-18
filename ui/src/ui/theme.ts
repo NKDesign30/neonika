@@ -3,10 +3,10 @@ export type ThemeName = "dark" | "light";
 const THEME_KEY = "neon.control.theme";
 const ACCENT_KEY = "neon.control.accent";
 const DEFAULT_THEME: ThemeName = "dark";
-const DEFAULT_ACCENT = "#2EAB73"; // Forest Emerald — Neon master green.
+const DEFAULT_ACCENT = "#F28A4B"; // Solar — Neonika brand.
 
 // Accent options offered by the Tweaks panel (brand + sub-brand accents).
-export const ACCENT_OPTIONS = ["#2EAB73", "#409CFF", "#FFB340", "#7C8AFF", "#D4845A"] as const;
+export const ACCENT_OPTIONS = ["#F28A4B", "#2EAB73", "#409CFF", "#FFB340", "#7C8AFF"] as const;
 export type Density = "regular" | "compact";
 
 function read(key: string): string | null {

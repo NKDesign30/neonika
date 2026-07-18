@@ -13,7 +13,7 @@ import {
   type INeonGatewayShadowRun
 } from "../src/index.js";
 
-describe("Neon Gateway run-store rescue", () => {
+describe("Neonika Gateway run-store rescue", () => {
   it("is a dry-run by default and never mutates the store", async () => {
     const projectRoot = await createTempProjectRoot();
 

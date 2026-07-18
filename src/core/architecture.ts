@@ -19,10 +19,10 @@ export const neonikaArchitecture: INeonikaArchitecture = {
       "Normalize channel envelopes",
       "Preserve account, guild, channel, thread, and user identity"
     ],
-    sourceOfTruth: "Neon Gateway adapters"
+    sourceOfTruth: "Neonika Gateway adapters"
   },
   gateway: {
-    name: "Neon Gateway",
+    name: "Neonika Gateway",
     responsibilities: [
       "Pair channels and devices",
       "Apply allowlists and trust policies",
@@ -35,14 +35,14 @@ export const neonikaArchitecture: INeonikaArchitecture = {
     name: "Neonika",
     responsibilities: [
       "Run agents",
-      "Attach targeted Neon Memory",
+      "Attach targeted Neonika Memory",
       "Manage sessions, tasks, approvals, tools, and skills",
       "Expose runtime state for Mission Control"
     ],
     sourceOfTruth: "Neon run store and policy layer"
   },
   controlPlane: {
-    name: "Neon Mission Control",
+    name: "Neonika Mission Control",
     responsibilities: [
       "Show live gateway, channel, run, memory, and doctor state",
       "Provide onboarding and repair flows",

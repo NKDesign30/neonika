@@ -132,7 +132,7 @@ export async function resolveNeonSecretRef(
 
 export function renderNeonSecretResolutionReport(result: INeonSecretResolutionResult): string {
   return [
-    `Neon Secret Resolution: ${result.state}${result.blockReason ? ` / ${result.blockReason}` : ""} (${result.gate.reason}, env ${result.gate.envKey})`,
+    `Neonika Secret Resolution: ${result.state}${result.blockReason ? ` / ${result.blockReason}` : ""} (${result.gate.reason}, env ${result.gate.envKey})`,
     `Ref: ${result.refRedacted}`,
     `Value length: ${result.valueLength ?? "n/a"}`,
     `Value fingerprint: ${result.valueFingerprint ?? "n/a"}`,

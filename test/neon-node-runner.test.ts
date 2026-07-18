@@ -17,7 +17,7 @@ import {
   type TNeonNodeRunnerFetch
 } from "../src/index.js";
 
-describe("Neon Node Runner", () => {
+describe("Neonika Node Runner", () => {
   it("executes bounded file dispatches without workspace escape or raw secret output", async () => {
     const projectRoot = await createTempProjectRoot();
 
@@ -66,7 +66,7 @@ describe("Neon Node Runner", () => {
       const cdpPayload = JSON.stringify([
         {
           type: "page",
-          title: "Neon Mission Control",
+          title: "Neonika Mission Control",
           url: "http://localhost:8788/mission-control?token=secret-query-token"
         },
         { type: "page", title: "GitHub", url: "https://github.com/neondev/neonika" },
@@ -97,7 +97,7 @@ describe("Neon Node Runner", () => {
       assert.equal(result.tabs?.length, 3);
       assert.equal(result.totalEntries, 3);
       assert.deepEqual(result.tabs, [
-        { title: "Neon Mission Control", host: "localhost:8788" },
+        { title: "Neonika Mission Control", host: "localhost:8788" },
         { title: "GitHub", host: "github.com" },
         { title: "App Tab", host: "app.example.com" }
       ]);

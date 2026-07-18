@@ -15,7 +15,7 @@ import { evaluateNeonSummaryQuality } from "./summaryQualityGate.js";
 import type { INeonTranscriptMessage } from "./transcriptExtract.js";
 import type { INeonTranscriptSessionDigest } from "./transcriptSnapshot.js";
 
-// Neon Transcript Indexer — gated summary + decision passes (S3). Both stack the
+// Neonika Transcript Indexer — gated summary + decision passes (S3). Both stack the
 // S2 LLM invoker on top of an S1 session digest and emit *proposals only*: no
 // memory write happens here (that is S4). With the default dry-run invoker the
 // invoker never calls a model, so proposals stay "planned". Only an armed gate +
@@ -544,5 +544,5 @@ export function renderNeonTranscriptProposalReport(
     ].join("\n");
   });
 
-  return [`Neon Transcript Proposals: ${proposals.length}`, ...lines].join("\n");
+  return [`Neonika Transcript Proposals: ${proposals.length}`, ...lines].join("\n");
 }

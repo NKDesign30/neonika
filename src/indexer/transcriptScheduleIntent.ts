@@ -1,6 +1,6 @@
 import { resolveNeonCronTimerGate, type INeonCronTimerGate } from "../automation/cronTimerRuntime.js";
 
-// Neon Transcript Indexer — gated scheduler intent (S5). This is the smallest
+// Neonika Transcript Indexer — gated scheduler intent (S5). This is the smallest
 // honest scheduler slice: it DESCRIBES the cron job that would run the read-only
 // transcript projection, gated by the existing cron-timer gate, and starts
 // nothing. There is no setInterval, no daemon, no cron-store write. Even when the
@@ -61,7 +61,7 @@ export function renderNeonTranscriptScheduleIntentReport(
   intent: INeonTranscriptScheduleIntent
 ): string {
   return [
-    `Neon Transcript Schedule Intent: ${intent.jobId}`,
+    `Neonika Transcript Schedule Intent: ${intent.jobId}`,
     `Cadence: every ${intent.cadenceMinutes} min`,
     `Command: ${intent.command}`,
     `Gate: ${intent.gateReason} (env ${intent.gateEnvKey}), would-emit: ${intent.wouldEmit}`,

@@ -68,7 +68,7 @@ export function renderNeonNodeExecPolicyReport(snapshot: INeonNodeExecPolicySnap
   );
 
   return [
-    `Neon Node Exec Policy: ${snapshot.state}`,
+    `Neonika Node Exec Policy: ${snapshot.state}`,
     `Execution enabled: ${snapshot.executionEnabled} / allowlist: ${snapshot.allowlist.length}`,
     "Decisions:",
     ...decisionLines

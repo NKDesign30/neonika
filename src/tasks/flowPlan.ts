@@ -9,7 +9,7 @@ import {
 import { readNeonFlows, resolveNeonFlowStatePaths } from "./flowStore.js";
 
 /**
- * Neon Flow planning + projection.
+ * Neonika Flow planning + projection.
  *
  * The planner is the only way a flow "runs": it produces a descriptive dry-run
  * execution plan and executes nothing. Every step is classified as either
@@ -133,7 +133,7 @@ export function planNeonFlowExecution(
 
 export function renderNeonFlowPlanReport(plan: INeonFlowExecutionPlan): string {
   const header = [
-    `Neon Flow plan: ${plan.name} (${plan.flowId})`,
+    `Neonika Flow plan: ${plan.name} (${plan.flowId})`,
     `Mode: ${plan.mode} · executable: ${plan.executable} · status: ${plan.status}`,
     `Trigger: ${plan.trigger.kind}${plan.trigger.match ? ` (${plan.trigger.match})` : ""}`,
     `Steps: ${plan.totals.steps} · plannable: ${plan.totals.plannable} · blocked: ${plan.totals.blocked} · ` +
@@ -215,7 +215,7 @@ export async function createNeonFlowsSnapshot(
 
 export function renderNeonFlowsReport(snapshot: INeonFlowsSnapshot): string {
   const header = [
-    `Neon Flows: ${snapshot.state}`,
+    `Neonika Flows: ${snapshot.state}`,
     `Flows: ${snapshot.totals.flows} (armed ${snapshot.totals.armed}) · gated steps: ${snapshot.totals.gatedSteps}`
   ];
 

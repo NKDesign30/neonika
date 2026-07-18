@@ -11,7 +11,8 @@ export type TNeonDeliveryQueueState = "queued-dry-run" | "blocked";
 export type TNeonDeliveryQueueReason =
   | "primary-dry-run"
   | "empty-final-text"
-  | "run-failed";
+  | "run-failed"
+  | "run-cancelled";
 export type TNeonDeliveryApprovalDecision = "approve-canary" | "reject";
 export type TNeonDeliveryAckState = "queued" | "working" | "done";
 export type TNeonDeliveryRecoveryState = "none" | "pending-drain";
@@ -32,6 +33,8 @@ export interface INeonDeliveryQueueTarget {
   readonly guildId?: string;
   readonly threadId?: string;
   readonly replyToMessageId?: string;
+  /** Stable opaque id used to derive Discord's enforced create-message nonce. */
+  readonly deliveryIntentId?: string;
 }
 
 export interface INeonDeliveryQueueSafety {
@@ -329,7 +332,7 @@ export function renderNeonDeliveryQueueReport(snapshot: INeonDeliveryQueueSnapsh
   );
 
   return [
-    "Neon Delivery Queue",
+    "Neonika Delivery Queue",
     `State: ${snapshot.state}`,
     `Candidates: ${snapshot.totals.candidates}`,
     `Queued dry-runs: ${snapshot.totals.queuedDryRuns}`,
@@ -347,7 +350,7 @@ function resolveCandidateState(
   run: INeonGatewayShadowRun,
   finalTextPreview: string
 ): TNeonDeliveryQueueState {
-  if (run.status === "failed" || finalTextPreview.length === 0) {
+  if (run.status === "failed" || run.status === "cancelled" || finalTextPreview.length === 0) {
     return "blocked";
   }
 
@@ -360,6 +363,10 @@ function resolveCandidateReason(
 ): TNeonDeliveryQueueReason {
   if (run.status === "failed") {
     return "run-failed";
+  }
+
+  if (run.status === "cancelled") {
+    return "run-cancelled";
   }
 
   if (finalTextPreview.length === 0) {

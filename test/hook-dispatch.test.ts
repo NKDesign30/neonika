@@ -166,7 +166,7 @@ describe("Neon internal hook dispatch (DP-9)", () => {
       dispatchNeonInternalHook({ event: "gateway:startup", gate: closedGate, now: () => fixedNow })
     );
 
-    assert.match(report, /Neon Hook Dispatch: disabled/);
+    assert.match(report, /Neonika Hook Dispatch: disabled/);
     assert.match(report, /mutated=false outboundSent=false/);
   });
 });

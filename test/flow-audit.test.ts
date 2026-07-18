@@ -46,7 +46,7 @@ test("listNeonFlowAuditFindings is clean for read-only/armed and side-effecting/
 
   const summary = summarizeNeonFlowAuditFindings(findings);
   assert.equal(summary.total, 0);
-  assert.match(renderNeonFlowAuditReport(findings, summary), /Neon Flow Audit: clean/);
+  assert.match(renderNeonFlowAuditReport(findings, summary), /Neonika Flow Audit: clean/);
 });
 
 test("armed-empty fires for an armed flow without steps", () => {

@@ -1,5 +1,5 @@
 /**
- * Per-connection unauthorized-frame flood guard for the Neon Gateway WebSocket.
+ * Per-connection unauthorized-frame flood guard for the Neonika Gateway WebSocket.
  *
  * A client can send any number of rejected frames before (or after) connect —
  * bad JSON, wrong nonce, RPC-before-connect, or missing scope. Each rejection

@@ -1,5 +1,5 @@
 /**
- * Neon Operator Shell — interactive REPL.
+ * Neonika Operator Shell — interactive REPL.
  *
  * The imperative entry point: a line-oriented loop that reads operator input,
  * routes it through the pure `operatorShell` router, and prints read-only panel

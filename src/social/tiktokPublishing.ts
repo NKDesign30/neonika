@@ -314,7 +314,7 @@ export function createNeonDiscordTikTokVideoWorkflow(
 
 export function renderNeonTikTokDiscordVideoWorkflow(workflow: INeonTikTokDiscordVideoWorkflow): string {
   const lines = [
-    `Neon TikTok Discord Video Pipeline: ${workflow.state}`,
+    `Neonika TikTok Discord Video Pipeline: ${workflow.state}`,
     `Mode: ${workflow.mode}`,
     `Scope: ${workflow.scope}`,
     `Transfer: ${workflow.transferMethod}`,

@@ -23,7 +23,7 @@ import {
   renderNeonGatewayProtocolReport
 } from "../src/index.js";
 
-describe("Neon Gateway protocol", () => {
+describe("Neonika Gateway protocol", () => {
   it("builds an upstream-shaped hello contract with Neon policy", () => {
     const runtime = createNeonGatewayRuntimeController("/tmp/neonika", {
       heartbeatMs: 2_500,
@@ -56,7 +56,7 @@ describe("Neon Gateway protocol", () => {
     assert.ok(snapshot.features.methods.includes("delivery.queue"));
     assert.ok(snapshot.features.methods.includes("replay.get"));
     assert.ok(snapshot.features.events.includes("connect.challenge"));
-    assert.match(renderNeonGatewayProtocolReport(snapshot), /Neon Gateway Protocol/);
+    assert.match(renderNeonGatewayProtocolReport(snapshot), /Neonika Gateway Protocol/);
   });
 
   it("parses request, response, and event frames without widening to loose shapes", () => {

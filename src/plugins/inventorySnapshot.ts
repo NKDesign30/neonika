@@ -175,7 +175,7 @@ export async function createNeonPluginInventorySnapshot(
 
 export function renderNeonPluginsReport(snapshot: INeonPluginInventorySnapshot): string {
   const lines = [
-    `Neon Plugins Inventory: ${snapshot.state}`,
+    `Neonika Plugins Inventory: ${snapshot.state}`,
     `Host version: ${snapshot.hostVersion}`,
     `Install gate: ${snapshot.installGate.enabled ? "enabled" : "disabled"} (${snapshot.installGate.flag}, ${snapshot.installGate.source})`,
     `Plugins: ${snapshot.totals.plugins} (${snapshot.totals.referenceOnly} reference-only / ${snapshot.totals.allowlisted} allowlisted / ${snapshot.totals.blocked} blocked)`,
@@ -377,7 +377,7 @@ export async function resolveNeonPluginInstallPlan(
 export function renderNeonPluginInstallPlanReport(result: INeonPluginInstallPlanResult): string {
   if (!result.found || !result.plan) {
     return [
-      `Neon Plugin Install Plan: ${result.pluginId}`,
+      `Neonika Plugin Install Plan: ${result.pluginId}`,
       `Action: ${result.action}`,
       `Result: not found`,
       result.issue ? `Issue: ${result.issue}` : ""
@@ -388,7 +388,7 @@ export function renderNeonPluginInstallPlanReport(result: INeonPluginInstallPlan
 
   const plan = result.plan;
   const lines = [
-    `Neon Plugin Install Plan: ${plan.pluginId}`,
+    `Neonika Plugin Install Plan: ${plan.pluginId}`,
     `Action: ${plan.action}`,
     `Decision: ${plan.decision} (executed=${plan.executed}, autoLoadHonored=${plan.autoLoadHonored})`,
     `Install gate: ${result.installGate.enabled ? "enabled" : "disabled"} (${result.installGate.flag})`,

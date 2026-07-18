@@ -116,10 +116,11 @@ describe("createNeonRunTaskProjection", () => {
     assert.equal(projection.taskCount, 2);
     assert.equal(projection.doneCount, 1);
     assert.equal(projection.blockedCount, 1);
+    assert.equal(projection.cancelledCount, 0);
     assert.equal(projection.tasks[0]?.taskId, "run:newer", "newest-updated task sorts first");
 
     const report = renderNeonRunTaskProjectionReport(projection);
-    assert.match(report, /2 task\(s\) from terminal runs \(1 done \/ 1 blocked\)/);
+    assert.match(report, /2 task\(s\) from terminal runs \(1 done \/ 1 blocked \/ 0 cancelled\)/);
     assert.match(report, /read-only, no spawn/);
   });
 });

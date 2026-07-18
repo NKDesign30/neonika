@@ -1,0 +1,7 @@
+interface:
+  display_name: "neon-pdf"
+  short_description: "Business PDFs with art direction and visual approval."
+  brand_color: "#2EAB73"
+  default_prompt: "Use $neon-pdf to create a CI-correct PDF. Complete the version-2 art direction before HTML, render a preview, inspect every page image, fill the bound visual review, and publish only the approved artifact."
+policy:
+  allow_implicit_invocation: true

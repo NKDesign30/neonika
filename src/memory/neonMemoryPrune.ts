@@ -173,7 +173,7 @@ function result(
 
 export function renderNeonPruneReport(result: INeonPruneResult): string {
   return [
-    `Neon Memory Prune: ${result.state}`,
+    `Neonika Memory Prune: ${result.state}`,
     `Scanned: ${result.scanned}  Candidates: ${result.candidates}  Archived: ${result.archived}`,
     `Max score: ${result.maxScore}`,
     `Safety: targetedRealMemoryDb=${result.safety.targetedRealMemoryDb}`,

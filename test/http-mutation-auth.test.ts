@@ -6,7 +6,7 @@ import {
   NEON_GATEWAY_HTTP_MUTATION_TOKEN_ENV
 } from "../src/index.js";
 
-describe("Neon HTTP mutation auth", () => {
+describe("Neonika HTTP mutation auth", () => {
   it("allows loopback mutations without a configured token for local dashboard compatibility", () => {
     const decision = authorizeNeonHttpMutation({
       env: {},

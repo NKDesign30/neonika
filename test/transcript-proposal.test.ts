@@ -51,7 +51,7 @@ function decisionJson(overrides: Record<string, unknown> = {}): string {
   });
 }
 
-describe("Neon Transcript proposal runtime (S3)", () => {
+describe("Neonika Transcript proposal runtime (S3)", () => {
   it("plans (no call, no write) with the default dry-run invoker", async () => {
     const proposal = await runNeonTranscriptSummaryProposal({
       session: SESSION,

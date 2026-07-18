@@ -148,7 +148,7 @@ export function renderNeonSlashCommandRegistrationPlanReport(
   plan: INeonSlashCommandRegistrationPlan
 ): string {
   return [
-    "Neon Slash Command Registration Plan",
+    "Neonika Slash Command Registration Plan",
     `Scope: ${plan.scope}`,
     `Guilds: ${plan.guildIds.length}`,
     `Blocked: ${plan.blocked}`,

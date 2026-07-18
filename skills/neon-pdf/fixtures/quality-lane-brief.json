@@ -1,0 +1,73 @@
+{
+  "version": 2,
+  "slug": "quality-lane-proof",
+  "documentVersion": "1.0.0",
+  "audience": "Neonika maintainers reviewing the PDF build contract",
+  "readerDecision": "Accept or reject the technical PDF quality lane based on reproducible evidence",
+  "medium": {
+    "format": "A4",
+    "pageBudget": {
+      "min": 1,
+      "max": 2
+    }
+  },
+  "brand": {
+    "id": "neutral",
+    "source": "Neonika PDF quality-lane test fixture",
+    "fontAllowlist": [
+      "Arial"
+    ]
+  },
+  "artDirection": {
+    "concept": "Quiet technical evidence with one strong editorial opening",
+    "visualTone": [
+      "precise",
+      "calm",
+      "decisive"
+    ],
+    "palette": [
+      { "role": "paper", "hex": "#FFFFFF" },
+      { "role": "ink", "hex": "#20231F" },
+      { "role": "muted", "hex": "#656963" },
+      { "role": "accent", "hex": "#315C49" }
+    ],
+    "typography": [
+      { "role": "display", "family": "Arial", "purpose": "Compact evidence-led headings" },
+      { "role": "body", "family": "Arial", "purpose": "Readable technical explanation" }
+    ],
+    "layout": {
+      "grid": "Single editorial column with a restrained evidence rail",
+      "rhythm": "Large opening interval followed by compact proof blocks",
+      "density": "Low density with one concise evidence cluster"
+    },
+    "signatureElement": "A compact proof ledger that connects each gate to its artifact",
+    "pageArchetypes": [
+      "editorial-proof"
+    ],
+    "avoidDefaults": [
+      "decorative gradients",
+      "generic card grids",
+      "meaningless chapter numbering"
+    ]
+  },
+  "contentSpine": [
+    "Purpose of the quality lane",
+    "Automated evidence",
+    "Release decision"
+  ],
+  "evidenceSources": [
+    "Generated qpdf, pdfinfo, pdffonts, page raster, contact sheet and SHA-256 manifest"
+  ],
+  "cta": "Review the manifest and approve the lane only when every check passed",
+  "subjectMaterials": [
+    "Repository-owned HTML and brief fixtures"
+  ],
+  "sender": {
+    "name": "Neonika",
+    "role": "PDF quality-lane owner",
+    "contact": "Repository test evidence"
+  },
+  "allowedDefaultExceptions": [],
+  "outputProfile": "screen-accessible",
+  "privacyLevel": "internal"
+}

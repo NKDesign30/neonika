@@ -101,7 +101,7 @@ describe("Neon cron timer runtime (DP-8)", () => {
       })
     );
 
-    assert.match(report, /Neon Cron Timer: disabled/);
+    assert.match(report, /Neonika Cron Timer: disabled/);
     assert.match(report, /executed=false outboundSent=false/);
   });
 });

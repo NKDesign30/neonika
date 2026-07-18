@@ -21,7 +21,7 @@ import {
   type TNeonNodeDeviceSessionState
 } from "../src/index.js";
 
-describe("Neon Node Transport", () => {
+describe("Neonika Node Transport", () => {
   it("creates poll-only dispatch envelopes for approved read-only actions", async () => {
     const projectRoot = await createTempProjectRoot();
 
@@ -78,7 +78,7 @@ describe("Neon Node Transport", () => {
       assert.equal(snapshot.dispatches[0]?.safety.rawTokenExposed, false);
       assert.equal(snapshot.dispatches[0]?.safety.sessionSecretExposed, false);
       assert.doesNotMatch(JSON.stringify(snapshot), /session-secret-unit/u);
-      assert.match(renderNeonNodeTransportReport(snapshot), /Neon Node Transport: ready/u);
+      assert.match(renderNeonNodeTransportReport(snapshot), /Neonika Node Transport: ready/u);
     } finally {
       await rm(projectRoot, { force: true, recursive: true });
     }

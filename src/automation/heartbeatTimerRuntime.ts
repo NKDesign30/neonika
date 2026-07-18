@@ -289,7 +289,7 @@ export function evaluateNeonHeartbeatTick(
 
 export function renderNeonHeartbeatTickReport(result: INeonHeartbeatTickResult): string {
   const lines = [
-    `Neon Heartbeat Timer: ${result.armed ? "armed" : "disabled"} (${result.gate.reason}, env ${result.gate.envKey})`,
+    `Neonika Heartbeat Timer: ${result.armed ? "armed" : "disabled"} (${result.gate.reason}, env ${result.gate.envKey})`,
     `Evaluated: ${result.evaluatedAt}`,
     `Emitted wake intents: ${result.emitted.length}${result.emitted.length ? ` (${result.emitted.join(", ")})` : ""}`,
     `Deferred: ${result.deferred.length}${result.deferred.length ? ` (${result.deferred.map((entry) => `${entry.agentId}:${entry.reason}`).join(", ")})` : ""}`,

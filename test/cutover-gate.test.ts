@@ -17,7 +17,7 @@ import {
   type INeonGatewayShadowRun
 } from "../src/index.js";
 
-describe("Neon Cutover gates", () => {
+describe("Neonika Cutover gates", () => {
   it("keeps mirror and later stages locked without shadow runtime evidence", async () => {
     const projectRoot = await createTempProjectRoot();
 

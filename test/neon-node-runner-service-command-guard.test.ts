@@ -18,7 +18,7 @@ import {
   type INeonCutoverGateSnapshot
 } from "../src/index.js";
 
-describe("Neon Node Runner Service — command injection guard", () => {
+describe("Neonika Node Runner Service — command injection guard", () => {
   it("blocks execution and never spawns when the persisted command is tampered after approval", async () => {
     const projectRoot = await createTempProjectRoot();
     const commands: string[] = [];

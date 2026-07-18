@@ -319,7 +319,7 @@ export async function writeNeonMemoryDbEntry(
 
 export function renderNeonMemoryDbWriteReport(result: INeonMemoryDbWriteResult): string {
   return [
-    `Neon Memory DB Write: ${result.state}`,
+    `Neonika Memory DB Write: ${result.state}`,
     `Inserted: ${result.inserted}  Updated: ${result.updated}  Embedded: ${result.embedded}`,
     `Entry id: ${result.entryId ?? "none"}`,
     `Content hash: ${result.contentHash ?? "none"}`,

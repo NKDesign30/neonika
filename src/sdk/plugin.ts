@@ -1,4 +1,4 @@
-// Neon SDK — Plugin surface.
+// Neonika SDK — Plugin surface.
 //
 // Curated, stable contract for plugin/extension/skill authors: skill + extension
 // discovery and inventory shapes, the per-agent enable/deny policy resolver, and

@@ -19,7 +19,7 @@ import {
   type TNeonToolInvocationDecision
 } from "./toolPolicy.js";
 
-// Neon Tools Runtime — read-only inventory snapshot + report (entry-point glue).
+// Neonika Tools Runtime — read-only inventory snapshot + report (entry-point glue).
 //
 // Composes the capability model + catalog + policy into one truth object that
 // the CLI, the /api/neon-tools route, Doctor, and Mission Control all read. No
@@ -69,7 +69,7 @@ export interface INeonToolInventoryTotals {
 
 export interface INeonToolInventorySnapshot {
   readonly generatedAt: string;
-  readonly title: "Neon Tools";
+  readonly title: "Neonika Tools";
   readonly gate: INeonToolsLiveGate;
   readonly totals: INeonToolInventoryTotals;
   readonly families: readonly INeonToolFamilySnapshot[];
@@ -138,7 +138,7 @@ function resolveProviderReadiness(
 }
 
 /**
- * Build the full read-only Neon Tools inventory: the live gate, every provider's
+ * Build the full read-only Neonika Tools inventory: the live gate, every provider's
  * readiness (by ref count, never value), each tool's availability + dry-run/live
  * decision, and per-family totals. Performs no execution and no secret read.
  */
@@ -212,7 +212,7 @@ export function createNeonToolInventorySnapshot(
 
   return {
     generatedAt,
-    title: "Neon Tools",
+    title: "Neonika Tools",
     gate,
     totals: {
       tools: tools.length,

@@ -166,7 +166,7 @@ describe("createNeonPluginInventorySnapshot", () => {
     const snapshot = await createNeonPluginInventorySnapshot(workspace, { referenceRoot, env: {} });
     const report = renderNeonPluginsReport(snapshot);
 
-    assert.match(report, /Neon Plugins Inventory: ready/);
+    assert.match(report, /Neonika Plugins Inventory: ready/);
     assert.match(report, /Install gate: disabled/);
     assert.match(report, /- discord: reference-only/);
     assert.match(report, /package=needs-package-json/);

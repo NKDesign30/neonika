@@ -18,7 +18,7 @@ import {
   type INeonNodeDeviceSessionSnapshot
 } from "../src/index.js";
 
-describe("Neon Node Action Requests", () => {
+describe("Neonika Node Action Requests", () => {
   it("records heartbeat, file, and browser requests without executing side effects", async () => {
     const projectRoot = await createTempProjectRoot();
 
@@ -595,7 +595,7 @@ describe("Neon Node Action Requests", () => {
         })
       );
 
-      assert.match(report, /Neon Node Action Requests: needs-approval/u);
+      assert.match(report, /Neonika Node Action Requests: needs-approval/u);
       assert.match(report, /execution=not-executed/u);
       assert.match(report, /sideEffect=false/u);
       assert.match(report, /Approval records: 0/u);

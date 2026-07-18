@@ -124,7 +124,7 @@ export function renderNeonChannelRegistryReport(
   });
 
   return [
-    `Neon Channel Registry: ${snapshot.state}`,
+    `Neonika Channel Registry: ${snapshot.state}`,
     `Channels: total=${snapshot.totals.total} live=${snapshot.totals.live} gated=${snapshot.totals.gated} suppressed=${snapshot.totals.suppressed}`,
     "Routes:",
     ...lines

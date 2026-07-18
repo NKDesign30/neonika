@@ -30,7 +30,7 @@ const gatewayMessage: INeonGatewayInboundMessage = {
   createdAt: "2026-05-31T14:30:00.000Z"
 };
 
-describe("Neon Gateway shadow", () => {
+describe("Neonika Gateway shadow", () => {
   it("maps a Discord-style inbound message into a harness input", () => {
     const input = createHarnessInputFromGatewayMessage({
       message: gatewayMessage,
@@ -51,7 +51,7 @@ describe("Neon Gateway shadow", () => {
     assert.ok(agent);
     assert.equal(agent.id, "chaty");
     assert.match(agent.role, /Senior Dev/);
-    assert.match(input.prompt, /Neon Gateway inbound message/);
+    assert.match(input.prompt, /Neonika Gateway inbound message/);
     assert.match(input.prompt, /Bitte Shadow testen/);
   });
 

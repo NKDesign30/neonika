@@ -41,7 +41,7 @@ describe("neonNodeExecPolicy", () => {
     assert.ok(snapshot.decisions.every((decision) => decision.executed === false));
 
     const report = renderNeonNodeExecPolicyReport(snapshot);
-    assert.match(report, /Neon Node Exec Policy: read-only/);
+    assert.match(report, /Neonika Node Exec Policy: read-only/);
     assert.match(report, /system\.run: blocked/);
   });
 

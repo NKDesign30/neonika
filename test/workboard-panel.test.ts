@@ -15,7 +15,7 @@ describe("Mission Control Workboard panel", () => {
   it("renders the loading state when no snapshot is supplied", () => {
     const html = renderNeonMissionControlWorkboardPanel();
 
-    assert.match(html, /Neon Arbeitsbereich/);
+    assert.match(html, /Neonika Arbeitsbereich/);
     assert.match(html, /data-workboard-state="loading"/);
   });
 

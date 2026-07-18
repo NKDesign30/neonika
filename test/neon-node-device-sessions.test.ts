@@ -23,7 +23,7 @@ import {
   type INeonNodePairingTokenGateSnapshot
 } from "../src/index.js";
 
-describe("Neon Node Device Sessions", () => {
+describe("Neonika Node Device Sessions", () => {
   it("opens a scoped session from an active canary token without persisting raw secrets", async () => {
     const projectRoot = await createTempProjectRoot();
 
@@ -171,7 +171,7 @@ describe("Neon Node Device Sessions", () => {
         })
       );
 
-      assert.match(report, /Neon Node Device Sessions: active/u);
+      assert.match(report, /Neonika Node Device Sessions: active/u);
       assert.match(report, /secretPersisted=false/u);
       assert.match(report, /browser.control \/ approval-required/u);
       assert.doesNotMatch(report, /neon_node_canary_session_unit_secret/u);

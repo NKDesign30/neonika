@@ -30,7 +30,7 @@ const surfaceAnchors: Record<string, readonly string[]> = {
   plugin: ["parseNeonPluginManifest", "resolveAgentSkillPolicy", "scanNeonSkillSource"]
 };
 
-describe("Neon SDK umbrella surface", () => {
+describe("Neonika SDK umbrella surface", () => {
   it("exposes exactly the four namespaced contract surfaces", () => {
     for (const surface of neonSdkSurfaces) {
       resolveNamespace(surface.namespace);
@@ -74,7 +74,7 @@ describe("Neon SDK umbrella surface", () => {
 
   it("renders a manifest report naming every surface and its namespace", () => {
     const report = renderNeonSdkManifest();
-    assert.match(report, /Neon SDK v0\.1\.0/);
+    assert.match(report, /Neonika SDK v0\.1\.0/);
     for (const surface of neonSdkSurfaces) {
       assert.ok(report.includes(surface.title), `report missing title ${surface.title}`);
       assert.ok(

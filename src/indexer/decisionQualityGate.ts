@@ -1,4 +1,4 @@
-// Neon Transcript Indexer — decision quality gate. Port of the v3 reject-class
+// Neonika Transcript Indexer — decision quality gate. Port of the v3 reject-class
 // gate: a decision must have a real title (no bug-fix prefixes), a non-tautological
 // rationale, honest alternatives (not a mere negation of the decision), a
 // promotable scope, and must not be an unconfirmed subagent report. Rejected

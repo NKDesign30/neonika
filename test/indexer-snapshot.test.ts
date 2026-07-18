@@ -12,7 +12,7 @@ import {
   type INeonGatewayShadowRun
 } from "../src/index.js";
 
-describe("Neon Indexer snapshot", () => {
+describe("Neonika Indexer snapshot", () => {
   it("folds runs into per-session decision-signal digests + candidates", async () => {
     const projectRoot = await createTempProjectRoot();
 
@@ -105,7 +105,7 @@ describe("Neon Indexer snapshot", () => {
 
     const report = renderNeonIndexerReport(snapshot);
 
-    assert.match(report, /Neon Indexer: ready/);
+    assert.match(report, /Neonika Indexer: ready/);
     assert.match(report, /Sessions: 1/);
     assert.match(report, /Decision candidates: 1/);
   });

@@ -1,6 +1,7 @@
 import type {
   IAgentAttachment,
   ICodexHarnessResult,
+  INeonHarnessRuntimeMetadata,
   IMemoryAttachment,
   TCodexHarnessEvent,
   THarnessRunMode,
@@ -35,7 +36,7 @@ export interface INeonGatewayPersistedFinding {
  * cutover stage. Historical shadow audit records keep `shadow`.
  */
 export type TNeonGatewayRunMode = "shadow" | "live";
-export type TNeonGatewayRunStatus = "running" | "completed" | "failed";
+export type TNeonGatewayRunStatus = "running" | "completed" | "failed" | "cancelled";
 /**
  * Delivery outcome on the persisted run. `suppressed` means nothing went out
  * (the shadow default). `delivered` means the reply was actually sent and a
@@ -125,6 +126,7 @@ export interface INeonGatewayShadowRun {
   readonly status: TNeonGatewayRunStatus;
   readonly request: INeonGatewayRunRequest;
   readonly harnessId: TNeonHarnessId;
+  readonly runtime?: INeonHarnessRuntimeMetadata;
   readonly harnessSessionKey: string;
   readonly memoryState: IMemoryAttachment["state"];
   readonly events: readonly TCodexHarnessEvent[];

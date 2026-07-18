@@ -300,7 +300,7 @@ export async function createNeonExtensionInventorySnapshot(
 
 export function renderNeonSkillInventoryReport(snapshot: INeonSkillInventorySnapshot): string {
   const lines = [
-    `Neon Skills Inventory: ${snapshot.state}`,
+    `Neonika Skills Inventory: ${snapshot.state}`,
     `Generated: ${snapshot.generatedAt}`,
     `Content hash: ${snapshot.contentHash.slice(0, 12)}`,
     `Roots: ${snapshot.totals.readableRoots}/${snapshot.totals.roots} readable`,
@@ -344,7 +344,7 @@ export function renderNeonSkillInventoryReport(snapshot: INeonSkillInventorySnap
 
 export function renderNeonExtensionsReport(snapshot: INeonExtensionInventorySnapshot): string {
   const lines = [
-    `Neon Extensions Inventory: ${snapshot.state}`,
+    `Neonika Extensions Inventory: ${snapshot.state}`,
     `Generated: ${snapshot.generatedAt}`,
     `Extension manifests: ${snapshot.totals.extensionManifests}`,
     `Reference-only: ${snapshot.totals.referenceExtensions}`,

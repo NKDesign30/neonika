@@ -12,7 +12,7 @@ import {
   resolveNeonDiscordInboundReplayPath
 } from "../src/gateway/discordInboundReplayGuard.js";
 
-describe("Neon Discord inbound replay guard", () => {
+describe("Neonika Discord inbound replay guard", () => {
   it("claims a fresh key and flags the second claim as duplicate", () => {
     const guard = createNeonDiscordInboundReplayGuard({ now: () => 1000 });
     assert.equal(guard.claim("a"), "claimed");

@@ -7,7 +7,7 @@ import {
   type INeonGatedSideEffectPosture
 } from "../src/index.js";
 
-describe("Neon Mission-Control gate posture panel", () => {
+describe("Neonika Mission-Control gate posture panel", () => {
   it("renders a fully-shadowed badge and a row per gate", () => {
     const posture = resolveNeonGatedSideEffectPosture({});
     const html = renderNeonMissionControlGatePosturePanel(posture);

@@ -4,7 +4,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import type { ChatInputCommandInteraction, Message } from "discord.js";
+import { ThreadAutoArchiveDuration, type ChatInputCommandInteraction, type Message } from "discord.js";
 import WebSocket, { type RawData as WsRawData } from "ws";
 
 import {
@@ -14,6 +14,9 @@ import {
   createClaudeCliHarness,
   createClaudeProcessTransport,
   createCodexAppServerHarness,
+  createNeonDiscordCapacityFingerprint,
+  createNeonDiscordCapacityGate,
+  NEON_DISCORD_ACCENT_COLOR,
   createCodexStdioTransport,
   createDiscordJsShadowTapAdapter,
   createDryRunHarness,
@@ -145,6 +148,24 @@ import {
   renderNeonTypingStartGuardReport,
   resolveNeonDeliveryDrainGate,
   createNeonInFlightRunRegistry,
+  createNeonSessionActorQueue,
+  createNeonDiscordRunControl,
+  createNeonDiscordProgressCardRuntime,
+  createNeonDiscordRecoveryRuntime,
+  createNeonDiscordAgentButtonsRuntime,
+  createNeonDiscordPlanApprovalRuntime,
+  createNeonDiscordSessionRuntimePicker,
+  isNeonDiscordAgentButtonsActionType,
+  isNeonDiscordPlanApprovalActionType,
+  neonDiscordClaudeRuntimePresets,
+  type INeonDiscordAgentButtonsRuntime,
+  type INeonDiscordPlanApprovalRuntime,
+  createNeonDiscordThreadWorkspaceRuntime,
+  createNeonPdfReviewRuntime,
+  deliverNeonCanaryReplyForRun,
+  isNeonPdfReviewActionType,
+  isNeonDiscordRecoveryActionType,
+  isNeonDiscordSessionRuntimeActionType,
   planNeonRunLifecycleAction,
   renderNeonInFlightRunReport,
   renderNeonGatedSideEffectPostureReport,
@@ -160,6 +181,10 @@ import {
   resolveNeonDeliveryQueuePaths,
   type INeonDeliveryQueueCandidate,
   createNeonDiscordOutboundTransport,
+  createNeonDiscordComponentActionRegistry,
+  resolveNeonDiscordComponentActionStatePath,
+  createSessionBindingFromGatewayMessage,
+  deriveCodexSessionKey,
   createNeonDiscordReactionTransport,
   createNeonDiscordTypingTransport,
   buildNeonDiscordEmbedPayload,
@@ -327,6 +352,7 @@ import {
   renderNeonRetireRoundTripReport,
   verifyNeonRetireRoundTrip,
   readNeonGatewayRuns,
+  readCodexThreadBinding,
   renderNeonDoctorExplainReport,
   renderNeonDoctorReport,
   renderNeonGatewayRouteInspectionReport,
@@ -376,13 +402,18 @@ import {
   runNeonNodeRunnerOnce,
   writeNeonNodeRunnerControl,
   runNeonGatewayShadow,
+  createNeonDiscordIngressDecision,
   runNeonDiscordShadowIngress,
   runNeonDiscordSlashInteractionShadow,
   resolveNeonSlashCommandRegistrationPlan,
   renderNeonSlashCommandRegistrationPlanReport,
   submitNeonChatSend,
   renderNeonChatSendReport,
+  isNeonDiscordCapacityActionType,
+  markNeonGatewayRunDelivered,
+  neonDiscordCapacityRuntimes,
   redactText,
+  resolveNeonDiscordCapacityDecision,
   resolveNeonDiscordVoiceReplyOptionsFromEnv,
   resolveNeonDiscordVoiceTranscriptionOptionsFromEnv,
   createNeonDiscordTikTokVideoWorkflow,
@@ -398,6 +429,13 @@ import {
   type TClaudeCliEffort,
   type TClaudeCliPermissionMode,
   type ICodexHarness,
+  type INeonDiscordCapacityGate,
+  type INeonDiscordCapacityRuntime,
+  type INeonHarnessRuntimeMetadata,
+  type INeonDiscordRuntimeOption,
+  type INeonDiscordRecoveryRuntime,
+  type INeonDiscordSessionRuntimePicker,
+  type INeonDiscordSessionRuntimeSelection,
   type ICodexAppServerClient,
   type ICodexAppServerNotification,
   type ICodexAppServerStartOptions,
@@ -409,6 +447,7 @@ import {
   type INeonGatewayHttpServerHandle,
   type INeonGatewayInboundMessage,
   type INeonGatewayShadowRun,
+  type INeonPdfReviewRuntime,
   type INeonChannelRegistrySnapshot,
   type INeonGatewayRouteInspectionSnapshot,
   type INeonGatewayRuntimeEventFrame,
@@ -524,7 +563,7 @@ const commands: Record<string, ICommand> = {
     run: renderProductManifest
   },
   sdk: {
-    description: "Print the Neon SDK surface manifest (gateway-client / channel / tool / plugin).",
+    description: "Print the Neonika SDK surface manifest (gateway-client / channel / tool / plugin).",
     run: renderNeonSdkManifest
   },
   architecture: {
@@ -565,7 +604,7 @@ const commands: Record<string, ICommand> = {
     run: runCutoverRetireSmoke
   },
   automation: {
-    description: "Print read-only Neon Automation jobs, hooks, and dreams.",
+    description: "Print read-only Neonika Automation jobs, hooks, and dreams.",
     run: runAutomationReport
   },
   "cron-list": {
@@ -577,7 +616,7 @@ const commands: Record<string, ICommand> = {
     run: runCronGet
   },
   "automation-smoke": {
-    description: "Start a local API server and verify Neon Automation inventory.",
+    description: "Start a local API server and verify Neonika Automation inventory.",
     run: runAutomationSmoke
   },
   "cron-timer-smoke": {
@@ -712,21 +751,21 @@ const commands: Record<string, ICommand> = {
     run: runDreamingReflectSmoke
   },
   "agents-smoke": {
-    description: "Print the Neon Agents registry and selected agent identity.",
+    description: "Print the Neonika Agents registry and selected agent identity.",
     run: runAgentsSmoke
   },
   "harness-smoke": {
-    description: "Run a local dry Neon Codex Harness turn.",
+    description: "Run a local dry Neonika Codex Harness turn.",
     run: runHarnessSmoke
   },
   "claude-harness-smoke": {
     description:
-      "Run a local Neon Claude CLI harness turn against a scripted stream-json transport (no real claude binary).",
+      "Run a local Neonika Claude CLI harness turn against a scripted stream-json transport (no real claude binary).",
     run: runClaudeHarnessSmoke
   },
   "claude-harness-live-smoke": {
     description:
-      "Opt-in live smoke: spawn the real `claude` binary in stream-json mode and run one read-only Neon Claude harness turn. Requires NEON_CLAUDE_HARNESS_LIVE_SMOKE=ready.",
+      "Opt-in live smoke: spawn the real `claude` binary in stream-json mode and run one read-only Neonika Claude harness turn. Requires NEON_CLAUDE_HARNESS_LIVE_SMOKE=ready.",
     run: runClaudeHarnessLiveSmoke
   },
   "binding-resume-smoke": {
@@ -743,7 +782,7 @@ const commands: Record<string, ICommand> = {
     run: runThreadSmoke
   },
   "gateway-shadow-smoke": {
-    description: "Run a Neon Gateway shadow message without outbound delivery.",
+    description: "Run a Neonika Gateway shadow message without outbound delivery.",
     run: runGatewayShadowSmoke
   },
   "shadow-run": {
@@ -752,11 +791,11 @@ const commands: Record<string, ICommand> = {
     run: runShadowRun
   },
   "memory-smoke": {
-    description: "Search Neon Memory and render the bounded attachment payload.",
+    description: "Search Neonika Memory and render the bounded attachment payload.",
     run: runMemorySmoke
   },
   "memory-write": {
-    description: "Plan a Neon Memory write in gated dry-run mode (no productive write).",
+    description: "Plan a Neonika Memory write in gated dry-run mode (no productive write).",
     run: runMemoryWriteDryRun
   },
   "memory-write-productive-smoke": {
@@ -800,16 +839,16 @@ const commands: Record<string, ICommand> = {
     run: runMemoryEventLogSmoke
   },
   "gateway-memory-shadow-smoke": {
-    description: "Run a Neon Gateway shadow message with read-only Neon Memory context.",
+    description: "Run a Neonika Gateway shadow message with read-only Neonika Memory context.",
     run: runGatewayMemoryShadowSmoke
   },
   "agent-recall-smoke": {
     description:
-      "Scope a read-only Neon Memory recall to one agent: agent-recall-smoke <agentId> \"query\". Folds the agent's profile seeds into the query and prints redacted, agent-tagged excerpts.",
+      "Scope a read-only Neonika Memory recall to one agent: agent-recall-smoke <agentId> \"query\". Folds the agent's profile seeds into the query and prints redacted, agent-tagged excerpts.",
     run: runAgentRecallSmoke
   },
   "discord-shadow-smoke": {
-    description: "Run a Discord-shaped inbound message through Neon Gateway shadow mode.",
+    description: "Run a Discord-shaped inbound message through Neonika Gateway shadow mode.",
     run: runDiscordShadowSmoke
   },
   "discord-shadow-tap": {
@@ -833,12 +872,12 @@ const commands: Record<string, ICommand> = {
   },
   "peekaboo-proxy": {
     description:
-      "Run the local Neon Peekaboo proxy from an interactive, TCC-granted context. The Discord app-server shim uses this instead of direct headless Peekaboo.",
+      "Run the local Neonika Peekaboo proxy from an interactive, TCC-granted context. The Discord app-server shim uses this instead of direct headless Peekaboo.",
     run: runPeekabooProxy
   },
   "peekaboo-proxy-client": {
     description:
-      "Internal entrypoint used by the generated Peekaboo shim. Proxies argv to the local Neon Peekaboo proxy socket.",
+      "Internal entrypoint used by the generated Peekaboo shim. Proxies argv to the local Neonika Peekaboo proxy socket.",
     run: runPeekabooProxyClient
   },
   "delivery-queue": {
@@ -1035,7 +1074,7 @@ const commands: Record<string, ICommand> = {
     run: runDeliveryDispatchSmoke
   },
   "gateway-status": {
-    description: "Print persisted Neon Gateway run status.",
+    description: "Print persisted Neonika Gateway run status.",
     run: runGatewayStatus
   },
   "gateway-run-store-rescue": {
@@ -1044,23 +1083,23 @@ const commands: Record<string, ICommand> = {
     run: runGatewayRunStoreRescue
   },
   "gateway-api-smoke": {
-    description: "Start a local Neon Gateway API server and fetch status.",
+    description: "Start a local Neonika Gateway API server and fetch status.",
     run: runGatewayApiSmoke
   },
   "lifecycle-smoke": {
-    description: "Verify Neon Gateway lifecycle snapshot and event stream.",
+    description: "Verify Neonika Gateway lifecycle snapshot and event stream.",
     run: runLifecycleSmoke
   },
   "gateway-protocol": {
-    description: "Print the Neon Gateway WebSocket RPC/event protocol contract.",
+    description: "Print the Neonika Gateway WebSocket RPC/event protocol contract.",
     run: runGatewayProtocolReport
   },
   "gateway-protocol-smoke": {
-    description: "Verify the Neon Gateway protocol endpoint and frame parser.",
+    description: "Verify the Neonika Gateway protocol endpoint and frame parser.",
     run: runGatewayProtocolSmoke
   },
   "gateway-websocket-smoke": {
-    description: "Verify the Neon Gateway WebSocket challenge, hello, event, and RPC path.",
+    description: "Verify the Neonika Gateway WebSocket challenge, hello, event, and RPC path.",
     run: runGatewayWebSocketSmoke
   },
   "route-inspect": {
@@ -1080,11 +1119,11 @@ const commands: Record<string, ICommand> = {
     run: runChannelRegistrySmoke
   },
   workboard: {
-    description: "Print the Neon Workboard (tasks grouped into status columns) from the task store.",
+    description: "Print the Neonika Workboard (tasks grouped into status columns) from the task store.",
     run: runWorkboardReport
   },
   "workboard-smoke": {
-    description: "Write seed tasks to a temp project and verify the Neon Workboard API and columns.",
+    description: "Write seed tasks to a temp project and verify the Neonika Workboard API and columns.",
     run: runWorkboardSmoke
   },
   "workboard-autopilot-once": {
@@ -1140,7 +1179,7 @@ const commands: Record<string, ICommand> = {
     run: runCommitmentHintsImportSmoke
   },
   flows: {
-    description: "Print stored Neon Flows (trigger + steps + gated-step counts) from the flow store.",
+    description: "Print stored Neonika Flows (trigger + steps + gated-step counts) from the flow store.",
     run: runFlowsReport
   },
   "flow-plan": {
@@ -1148,7 +1187,7 @@ const commands: Record<string, ICommand> = {
     run: runFlowPlanReport
   },
   "flows-smoke": {
-    description: "Write seed flows to a temp project and verify the Neon Flows API and the gated dry-run plan.",
+    description: "Write seed flows to a temp project and verify the Neonika Flows API and the gated dry-run plan.",
     run: runFlowsSmoke
   },
   "context-pack": {
@@ -1160,35 +1199,35 @@ const commands: Record<string, ICommand> = {
     run: runContextSmoke
   },
   chat: {
-    description: "Print Neon Chat conversations from Gateway runs.",
+    description: "Print Neonika Chat conversations from Gateway runs.",
     run: runChatReport
   },
   "chat-smoke": {
-    description: "Start a local API server and verify Neon Chat conversations.",
+    description: "Start a local API server and verify Neonika Chat conversations.",
     run: runChatSmoke
   },
   sessions: {
-    description: "Print Neon Sessions from Gateway runs.",
+    description: "Print Neonika Sessions from Gateway runs.",
     run: runSessionsReport
   },
   "sessions-smoke": {
-    description: "Start a local API server and verify Neon Sessions.",
+    description: "Start a local API server and verify Neonika Sessions.",
     run: runSessionsSmoke
   },
   indexer: {
-    description: "Print the Neon Indexer projection (decision candidates from Gateway runs).",
+    description: "Print the Neonika Indexer projection (decision candidates from Gateway runs).",
     run: runIndexerReport
   },
   "indexer-smoke": {
-    description: "Start a local API server and verify the Neon Indexer projection.",
+    description: "Start a local API server and verify the Neonika Indexer projection.",
     run: runIndexerSmoke
   },
   transcript: {
-    description: "Print the Neon Transcript Indexer projection (Claude Code session digests).",
+    description: "Print the Neonika Transcript Indexer projection (Claude Code session digests).",
     run: runTranscriptReport
   },
   "transcript-smoke": {
-    description: "Start a local API server and verify the Neon Transcript Indexer projection.",
+    description: "Start a local API server and verify the Neonika Transcript Indexer projection.",
     run: runTranscriptSmoke
   },
   "llm-gate": {
@@ -1254,11 +1293,11 @@ const commands: Record<string, ICommand> = {
     run: runLiveIndexProductionCheck
   },
   activity: {
-    description: "Print Neon Activity from Gateway runs.",
+    description: "Print Neonika Activity from Gateway runs.",
     run: runActivityReport
   },
   "activity-smoke": {
-    description: "Start a local API server and verify Neon Activity.",
+    description: "Start a local API server and verify Neonika Activity.",
     run: runActivitySmoke
   },
   "mission-control-filter": {
@@ -1270,19 +1309,19 @@ const commands: Record<string, ICommand> = {
     run: runMissionControlFilterSmoke
   },
   replay: {
-    description: "Print detailed Neon Replay runs from Gateway history.",
+    description: "Print detailed Neonika Replay runs from Gateway history.",
     run: runReplayReport
   },
   "replay-smoke": {
-    description: "Start a local API server and verify Neon Replay filters and redaction.",
+    description: "Start a local API server and verify Neonika Replay filters and redaction.",
     run: runReplaySmoke
   },
   skills: {
-    description: "Print local Neon Skills and upstream reference extensions.",
+    description: "Print local Neonika Skills and upstream reference extensions.",
     run: runSkillsReport
   },
   "skills-smoke": {
-    description: "Start a local API server and verify Neon Skills inventory.",
+    description: "Start a local API server and verify Neonika Skills inventory.",
     run: runSkillsSmoke
   },
   "skill-commands": {
@@ -1300,11 +1339,11 @@ const commands: Record<string, ICommand> = {
     run: runCronNextRunSmoke
   },
   tools: {
-    description: "Print the Neon Tools inventory (families, providers, gated invocation plan).",
+    description: "Print the Neonika Tools inventory (families, providers, gated invocation plan).",
     run: runToolsReport
   },
   "tools-smoke": {
-    description: "Start a local API server and verify the gated, leak-safe Neon Tools inventory.",
+    description: "Start a local API server and verify the gated, leak-safe Neonika Tools inventory.",
     run: runToolsSmoke
   },
   "web-fetch-smoke": {
@@ -1327,7 +1366,7 @@ const commands: Record<string, ICommand> = {
     run: runExtensionsReport
   },
   "extensions-smoke": {
-    description: "Start a local API server and verify Neon Extensions inventory.",
+    description: "Start a local API server and verify Neonika Extensions inventory.",
     run: runExtensionsSmoke
   },
   plugins: {
@@ -1347,7 +1386,7 @@ const commands: Record<string, ICommand> = {
     run: runSkillPolicySmoke
   },
   nodes: {
-    description: "Print local Neon Nodes and device capability policy.",
+    description: "Print local Neonika Nodes and device capability policy.",
     run: runNodesReport
   },
   "node-pairing": {
@@ -1448,19 +1487,19 @@ const commands: Record<string, ICommand> = {
     run: runNodeRunnerOnceSmoke
   },
   "node-runner-status": {
-    description: "Print persisted Neon Node Runner control and health state.",
+    description: "Print persisted Neonika Node Runner control and health state.",
     run: runNodeRunnerStatus
   },
   "node-runner-start": {
-    description: "Set the Neon Node Runner desired state to running without storing secrets.",
+    description: "Set the Neonika Node Runner desired state to running without storing secrets.",
     run: runNodeRunnerStart
   },
   "node-runner-stop": {
-    description: "Set the Neon Node Runner desired state to stopped.",
+    description: "Set the Neonika Node Runner desired state to stopped.",
     run: runNodeRunnerStop
   },
   "node-runner-loop": {
-    description: "Run the supervised Neon Node Runner loop until stopped.",
+    description: "Run the supervised Neonika Node Runner loop until stopped.",
     run: runNodeRunnerLoop
   },
   "node-runner-loop-smoke": {
@@ -1468,43 +1507,43 @@ const commands: Record<string, ICommand> = {
     run: runNodeRunnerLoopSmoke
   },
   "node-runner-service": {
-    description: "Print the Neon Node Runner operator service plan.",
+    description: "Print the Neonika Node Runner operator service plan.",
     run: runNodeRunnerService
   },
   "node-runner-service-plist": {
-    description: "Print the Neon Node Runner LaunchAgent plist preview.",
+    description: "Print the Neonika Node Runner LaunchAgent plist preview.",
     run: runNodeRunnerServicePlist
   },
   "node-runner-service-smoke": {
-    description: "Verify Neon Node Runner service plan without installing it.",
+    description: "Verify Neonika Node Runner service plan without installing it.",
     run: runNodeRunnerServiceSmoke
   },
   "node-runner-service-actions": {
-    description: "Print approval-gated Neon Node Runner service action audit.",
+    description: "Print approval-gated Neonika Node Runner service action audit.",
     run: runNodeRunnerServiceActions
   },
   "node-runner-service-canary": {
-    description: "Print Neon Node Runner service canary readiness gates.",
+    description: "Print Neonika Node Runner service canary readiness gates.",
     run: runNodeRunnerServiceCanary
   },
   "node-runner-service-action-request": {
-    description: "Record a Neon Node Runner service action request without executing it.",
+    description: "Record a Neonika Node Runner service action request without executing it.",
     run: runNodeRunnerServiceActionRequest
   },
   "node-runner-service-action-approve": {
-    description: "Record a Neon Node Runner service action approval without executing it.",
+    description: "Record a Neonika Node Runner service action approval without executing it.",
     run: runNodeRunnerServiceActionApprove
   },
   "node-runner-service-action-execute": {
-    description: "Execute an approved safe Neon Node Runner service action through the gate.",
+    description: "Execute an approved safe Neonika Node Runner service action through the gate.",
     run: runNodeRunnerServiceActionExecute
   },
   "node-runner-service-actions-smoke": {
-    description: "Verify Neon Node Runner service action approval audit without service mutation.",
+    description: "Verify Neonika Node Runner service action approval audit without service mutation.",
     run: runNodeRunnerServiceActionsSmoke
   },
   "node-runner-service-canary-smoke": {
-    description: "Verify Neon Node Runner service canary readiness without service mutation.",
+    description: "Verify Neonika Node Runner service canary readiness without service mutation.",
     run: runNodeRunnerServiceCanarySmoke
   },
   "node-pairing-smoke": {
@@ -1512,15 +1551,15 @@ const commands: Record<string, ICommand> = {
     run: runNodePairingSmoke
   },
   "nodes-smoke": {
-    description: "Start a local API server and verify Neon Nodes inventory.",
+    description: "Start a local API server and verify Neonika Nodes inventory.",
     run: runNodesSmoke
   },
   doctor: {
-    description: "Run Neon Doctor against local Gateway state. Use doctor --explain for read-only repair steps.",
+    description: "Run Neonika Doctor against local Gateway state. Use doctor --explain for read-only repair steps.",
     run: runDoctorSmoke
   },
   "doctor-smoke": {
-    description: "Run Neon Doctor against local Gateway state.",
+    description: "Run Neonika Doctor against local Gateway state.",
     run: runDoctorSmoke
   },
   "doctor-fix-smoke": {
@@ -1559,15 +1598,15 @@ const commands: Record<string, ICommand> = {
     run: runMissionControlServe
   },
   tui: {
-    description: "Open the read-only Neon Operator Shell (interactive terminal dashboard).",
+    description: "Open the read-only Neonika Operator Shell (interactive terminal dashboard).",
     run: runOperatorShell
   },
   interactive: {
-    description: "Alias for tui: open the read-only Neon Operator Shell.",
+    description: "Alias for tui: open the read-only Neonika Operator Shell.",
     run: runOperatorShell
   },
   "tui-smoke": {
-    description: "Render the Neon Operator Shell dashboard once and verify every panel loaded read-only.",
+    description: "Render the Neonika Operator Shell dashboard once and verify every panel loaded read-only.",
     run: runOperatorShellSmoke
   },
   help: {
@@ -1888,14 +1927,14 @@ function createScriptedClaudeSmokeTransport(): IClaudeStreamTransport {
       session_id: "smoke",
       message: {
         role: "assistant",
-        content: [{ type: "text", text: "Neon Claude harness ready, Sir." }]
+        content: [{ type: "text", text: "Neonika Claude harness ready, Sir." }]
       }
     },
     {
       type: "result",
       subtype: "success",
       is_error: false,
-      result: "Neon Claude harness ready, Sir.",
+      result: "Neonika Claude harness ready, Sir.",
       session_id: "smoke",
       usage: { input_tokens: 6, output_tokens: 7 }
     }
@@ -1941,7 +1980,7 @@ function createScriptedClaudeSmokeTransport(): IClaudeStreamTransport {
 async function runClaudeHarnessLiveSmoke(): Promise<string> {
   if (!isReadyLike(process.env["NEON_CLAUDE_HARNESS_LIVE_SMOKE"])) {
     return [
-      "Neon Claude harness live smoke: not-run",
+      "Neonika Claude harness live smoke: not-run",
       "Set NEON_CLAUDE_HARNESS_LIVE_SMOKE=ready to spawn the real `claude` binary for one read-only stream-json turn.",
       "Safety: read-only mode; native tool execution is denied; no outbound delivery; no secrets printed."
     ].join("\n");
@@ -1968,7 +2007,7 @@ async function runClaudeHarnessLiveSmoke(): Promise<string> {
   });
 
   const result = await harness.run({
-    prompt: "Reply with exactly one short sentence confirming the Neon Claude harness reached you.",
+    prompt: "Reply with exactly one short sentence confirming the Neonika Claude harness reached you.",
     binding: {
       channel: "cli",
       accountId: "local",
@@ -1985,7 +2024,7 @@ async function runClaudeHarnessLiveSmoke(): Promise<string> {
   });
 
   return [
-    "Neon Claude harness live smoke: ok",
+    "Neonika Claude harness live smoke: ok",
     `Binary: ${claudeBin}`,
     `Harness: ${harness.id}`,
     `Session: ${result.sessionKey}`,
@@ -2004,7 +2043,7 @@ function runAgentsSmoke(): string {
   }
 
   return [
-    `Neon Agents: ${snapshot.state}`,
+    `Neonika Agents: ${snapshot.state}`,
     `Count: ${snapshot.agents.length}`,
     `Default: ${snapshot.defaultAgentId}`,
     renderNeonAgentIdentity(agent)
@@ -2023,7 +2062,7 @@ async function runGatewayShadowSmoke(): Promise<string> {
         agentId: "chaty",
         workspaceRoot: process.cwd(),
         mode: "read-only",
-        content: "Local Neon Gateway shadow smoke",
+        content: "Local Neonika Gateway shadow smoke",
         createdAt: new Date(0).toISOString()
       },
       memory: {
@@ -2239,7 +2278,7 @@ async function runMemoryMaintainSmoke(): Promise<string> {
     const backup = await createNeonMemoryBackup({ dbPath, backupDir, keep: 3 });
 
     return [
-      `Neon Memory Maintenance (isolated temp DB) — gate: ${envGate.reason}`,
+      `Neonika Memory Maintenance (isolated temp DB) — gate: ${envGate.reason}`,
       renderNeonImportanceRecalcReport(recalc),
       renderNeonRelationDiscoveryReport(relations),
       renderNeonPruneReport(prune),
@@ -2257,7 +2296,7 @@ async function runMemoryMaintain(): Promise<string> {
   const dbPath = resolveNeonMemoryRecallDbPath(process.env);
   if (targetsRealNeonDb(dbPath)) {
     return [
-      "Neon Memory Maintenance: refused",
+      "Neonika Memory Maintenance: refused",
       "NEON_MEMORY_DB_PATH points at the real v2 archive DB - maintenance only runs against the neonika DB.",
       "Set NEON_MEMORY_DB_PATH to the neonika DB (e.g. <checkout>/data/semantic-memory.db)."
     ].join("\n");
@@ -2329,7 +2368,7 @@ async function runGatewayMemoryShadowSmoke(): Promise<string> {
         agentId: "chaty",
         workspaceRoot: process.cwd(),
         mode: "read-only",
-        content: "Local Neon Gateway memory shadow smoke",
+        content: "Local Neonika Gateway memory shadow smoke",
         createdAt: new Date(0).toISOString()
       },
       memory
@@ -3751,7 +3790,7 @@ async function runDeliveryDryRunSmoke(): Promise<string> {
       }
 
       return [
-        "Neon Delivery dry-run: ok",
+        "Neonika Delivery dry-run: ok",
         `URL: ${handle.url}/api/neon-delivery/queue`,
         `Candidate: ${candidate.id}`,
         `State: ${candidate.state}`,
@@ -3812,7 +3851,7 @@ async function runDeliveryDryRunSendSmoke(): Promise<string> {
     }
 
     return [
-      "Neon Delivery dry-run send: ok",
+      "Neonika Delivery dry-run send: ok",
       `Candidate: ${candidate.id}`,
       `Target: ${result.target.channel}/${result.target.channelId}`,
       `Reason: ${result.reason}`,
@@ -3848,7 +3887,7 @@ async function runCanaryOutboundSmoke(): Promise<string> {
   }
 
   return [
-    "Neon Canary outbound: ok",
+    "Neonika Canary outbound: ok",
     `Target: ${result.target.channel}/${result.target.channelId}`,
     `Reason: ${result.reason}`,
     `Cutover stage: ${result.cutoverStage}`,
@@ -4006,7 +4045,7 @@ async function runSecretsAuditSmoke(): Promise<string> {
   // a resolvable op:// ref (clean), a plaintext value (PLAINTEXT), and an
   // incomplete op:// ref (REF_UNRESOLVED).
   const fixtureEnv = {
-    NEON_DISCORD_BOT_TOKEN: "op://Automation/Neon Discord/token",
+    NEON_DISCORD_BOT_TOKEN: "op://Automation/Neonika Discord/token",
     NEON_GATEWAY_HTTP_MUTATION_TOKEN: "plaintext-example-not-a-real-secret",
     NEON_SECRET: "op://incomplete"
   };
@@ -4079,7 +4118,7 @@ async function runCanaryOutboundLiveSmoke(): Promise<string> {
     const reason = result.outboundSent ? "sent" : result.reason;
 
     return [
-      "Neon Canary live outbound: SUPPRESSED (preconditions not met)",
+      "Neonika Canary live outbound: SUPPRESSED (preconditions not met)",
       ...preconditionLines,
       `Target: ${result.target.channel}/${result.target.channelId}`,
       `Reason: ${reason}`,
@@ -4103,7 +4142,7 @@ async function runCanaryOutboundLiveSmoke(): Promise<string> {
 
     if (!result.outboundSent) {
       return [
-        "Neon Canary live outbound: gate closed at send time",
+        "Neonika Canary live outbound: gate closed at send time",
         ...preconditionLines,
         `Reason: ${result.reason}`,
         `Outbound sent: ${result.outboundSent}`
@@ -4112,7 +4151,7 @@ async function runCanaryOutboundLiveSmoke(): Promise<string> {
     // result is now narrowed to the sent variant (outboundSent: true).
 
     return [
-      "Neon Canary live outbound: SENT",
+      "Neonika Canary live outbound: SENT",
       ...preconditionLines,
       `Target: ${result.target.channel}/${result.target.channelId}`,
       `Message id: ${result.messageId}`,
@@ -4153,7 +4192,7 @@ async function runCanaryEmbedLiveSmoke(): Promise<string> {
 
   if (!built.ok) {
     return [
-      "Neon Canary embed: INVALID PAYLOAD (refusing to send)",
+      "Neonika Canary embed: INVALID PAYLOAD (refusing to send)",
       ...preconditionLines,
       `Errors: ${built.errors.join("; ")}`
     ].join("\n");
@@ -4162,7 +4201,7 @@ async function runCanaryEmbedLiveSmoke(): Promise<string> {
 
   if (!pre.ready) {
     return [
-      "Neon Canary embed: SUPPRESSED (preconditions not met, no transport constructed)",
+      "Neonika Canary embed: SUPPRESSED (preconditions not met, no transport constructed)",
       ...preconditionLines,
       `Target: discord/${channelId}`,
       payloadLine,
@@ -4178,7 +4217,7 @@ async function runCanaryEmbedLiveSmoke(): Promise<string> {
       [embed]
     );
     return [
-      "Neon Canary embed: SENT",
+      "Neonika Canary embed: SENT",
       ...preconditionLines,
       `Target: discord/${channelId}`,
       payloadLine,
@@ -4222,7 +4261,7 @@ async function runComponentsCanaryLiveSmoke(): Promise<string> {
 
   if (!built.ok) {
     return [
-      "Neon Canary components: INVALID PAYLOAD (refusing to send)",
+      "Neonika Canary components: INVALID PAYLOAD (refusing to send)",
       ...preconditionLines,
       `Errors: ${built.errors.join("; ")}`
     ].join("\n");
@@ -4231,7 +4270,7 @@ async function runComponentsCanaryLiveSmoke(): Promise<string> {
 
   if (!pre.ready) {
     return [
-      "Neon Canary components: SUPPRESSED (preconditions not met, no transport constructed)",
+      "Neonika Canary components: SUPPRESSED (preconditions not met, no transport constructed)",
       ...preconditionLines,
       `Target: discord/${channelId}`,
       payloadLine,
@@ -4248,7 +4287,7 @@ async function runComponentsCanaryLiveSmoke(): Promise<string> {
       rows
     );
     return [
-      "Neon Canary components: SENT",
+      "Neonika Canary components: SENT",
       ...preconditionLines,
       `Target: discord/${channelId}`,
       payloadLine,
@@ -4291,7 +4330,7 @@ async function runMediaCanaryLiveSmoke(): Promise<string> {
 
   if (!built.ok) {
     return [
-      "Neon Canary media: INVALID PAYLOAD (refusing to upload)",
+      "Neonika Canary media: INVALID PAYLOAD (refusing to upload)",
       ...preconditionLines,
       `Errors: ${built.errors.join("; ")}`
     ].join("\n");
@@ -4300,7 +4339,7 @@ async function runMediaCanaryLiveSmoke(): Promise<string> {
 
   if (!pre.ready) {
     return [
-      "Neon Canary media: SUPPRESSED (preconditions not met, no transport constructed)",
+      "Neonika Canary media: SUPPRESSED (preconditions not met, no transport constructed)",
       ...preconditionLines,
       `Target: discord/${channelId}`,
       payloadLine,
@@ -4317,7 +4356,7 @@ async function runMediaCanaryLiveSmoke(): Promise<string> {
       attachments
     );
     return [
-      "Neon Canary media: SENT",
+      "Neonika Canary media: SENT",
       ...preconditionLines,
       `Target: discord/${channelId}`,
       payloadLine,
@@ -4380,7 +4419,7 @@ async function runPresenceCanaryLiveSmoke(): Promise<string> {
 
   if (!built.ok) {
     return [
-      "Neon Canary presence: INVALID PAYLOAD (refusing to set)",
+      "Neonika Canary presence: INVALID PAYLOAD (refusing to set)",
       ...preconditionLines,
       `Errors: ${built.errors.join("; ")}`
     ].join("\n");
@@ -4389,7 +4428,7 @@ async function runPresenceCanaryLiveSmoke(): Promise<string> {
 
   if (!pre.ready) {
     return [
-      "Neon Canary presence: SUPPRESSED (preconditions not met, no transport constructed)",
+      "Neonika Canary presence: SUPPRESSED (preconditions not met, no transport constructed)",
       ...preconditionLines,
       payloadLine,
       "Presence set: false"
@@ -4401,7 +4440,7 @@ async function runPresenceCanaryLiveSmoke(): Promise<string> {
   try {
     await transport.setPresence(presence);
     return [
-      "Neon Canary presence: SET",
+      "Neonika Canary presence: SET",
       ...preconditionLines,
       payloadLine,
       "Presence set: true"
@@ -4439,7 +4478,7 @@ async function runSlashDeployCanaryLiveSmoke(): Promise<string> {
 
   if (!built.ok) {
     return [
-      "Neon Canary slash-deploy: INVALID PAYLOAD (refusing to deploy)",
+      "Neonika Canary slash-deploy: INVALID PAYLOAD (refusing to deploy)",
       ...preconditionLines,
       `Errors: ${built.errors.join("; ")}`
     ].join("\n");
@@ -4449,7 +4488,7 @@ async function runSlashDeployCanaryLiveSmoke(): Promise<string> {
   // Suppressed unless BOTH the canary gate is open AND the plan permits a guild deploy.
   if (!pre.ready || plan.blocked) {
     return [
-      "Neon Canary slash-deploy: SUPPRESSED (gate sealed or plan blocked, no transport constructed)",
+      "Neonika Canary slash-deploy: SUPPRESSED (gate sealed or plan blocked, no transport constructed)",
       ...preconditionLines,
       payloadLine,
       `Plan reason: ${plan.reason}`,
@@ -4462,7 +4501,7 @@ async function runSlashDeployCanaryLiveSmoke(): Promise<string> {
   try {
     const result = await transport.deployGuildCommands(guildId, commands);
     return [
-      "Neon Canary slash-deploy: DEPLOYED",
+      "Neonika Canary slash-deploy: DEPLOYED",
       ...preconditionLines,
       payloadLine,
       `Commands deployed: ${result.deployedCount}`
@@ -4537,12 +4576,12 @@ async function runStickersPollCanaryLiveSmoke(): Promise<string> {
       ...(stickerBuilt.ok ? [] : stickerBuilt.errors),
       ...(pollBuilt.ok ? [] : pollBuilt.errors)
     ];
-    return ["Neon Canary stickers/poll: INVALID PAYLOAD", ...preconditionLines, `Errors: ${errors.join("; ")}`].join("\n");
+    return ["Neonika Canary stickers/poll: INVALID PAYLOAD", ...preconditionLines, `Errors: ${errors.join("; ")}`].join("\n");
   }
 
   if (!pre.ready) {
     return [
-      "Neon Canary stickers/poll: SUPPRESSED (preconditions not met, no transport constructed)",
+      "Neonika Canary stickers/poll: SUPPRESSED (preconditions not met, no transport constructed)",
       ...preconditionLines,
       `Target: discord/${channelId}`,
       payloadLine,
@@ -4556,7 +4595,7 @@ async function runStickersPollCanaryLiveSmoke(): Promise<string> {
     const target = { channel: "discord" as const, accountId: "local", channelId };
     const pollResult = await transport.postPoll(target, poll);
     return [
-      "Neon Canary stickers/poll: SENT (poll)",
+      "Neonika Canary stickers/poll: SENT (poll)",
       ...preconditionLines,
       `Target: discord/${channelId}`,
       payloadLine,
@@ -4576,7 +4615,7 @@ async function runWebhookCanaryLiveSmoke(): Promise<string> {
   const pre = evaluateNeonWebhookLivePreconditions(env);
   const payload: INeonWebhookPayload = {
     content: "Neonika canary webhook smoke — gated proxy identity.",
-    username: "Neon Canary"
+    username: "Neonika Canary"
   };
   const built = buildNeonWebhookPayload(payload);
 
@@ -4591,7 +4630,7 @@ async function runWebhookCanaryLiveSmoke(): Promise<string> {
 
   if (!built.ok) {
     return [
-      "Neon Canary webhook: INVALID PAYLOAD (refusing to send)",
+      "Neonika Canary webhook: INVALID PAYLOAD (refusing to send)",
       ...preconditionLines,
       `Errors: ${built.errors.join("; ")}`
     ].join("\n");
@@ -4600,7 +4639,7 @@ async function runWebhookCanaryLiveSmoke(): Promise<string> {
 
   if (!pre.ready) {
     return [
-      "Neon Canary webhook: SUPPRESSED (identity gate sealed, no client constructed)",
+      "Neonika Canary webhook: SUPPRESSED (identity gate sealed, no client constructed)",
       ...preconditionLines,
       payloadLine,
       "Webhook sent: false"
@@ -4612,7 +4651,7 @@ async function runWebhookCanaryLiveSmoke(): Promise<string> {
   try {
     const result = await transport.send(payload);
     return [
-      "Neon Canary webhook: SENT",
+      "Neonika Canary webhook: SENT",
       ...preconditionLines,
       payloadLine,
       `Message id: ${result.messageId}`,
@@ -4735,7 +4774,7 @@ async function runReactionCanaryLiveSmoke(): Promise<string> {
     const sender = createNeonCanaryReactionSender({ env, channelAllowlist: allowlist });
     const result = await sender.setReaction(target, messageId, emoji);
     return [
-      "Neon Canary reaction: SUPPRESSED (preconditions not met, no transport constructed)",
+      "Neonika Canary reaction: SUPPRESSED (preconditions not met, no transport constructed)",
       ...preconditionLines,
       `Target: discord/${channelId} message=${messageId}`,
       `Emoji: ${result.emoji}`,
@@ -4746,7 +4785,7 @@ async function runReactionCanaryLiveSmoke(): Promise<string> {
 
   if (messageId === "<unset>") {
     return [
-      "Neon Canary reaction: READY but NEON_CANARY_REACTION_MESSAGE_ID unset (nothing to react to)",
+      "Neonika Canary reaction: READY but NEON_CANARY_REACTION_MESSAGE_ID unset (nothing to react to)",
       ...preconditionLines,
       "Reaction sent: false"
     ].join("\n");
@@ -4759,14 +4798,14 @@ async function runReactionCanaryLiveSmoke(): Promise<string> {
     const result = await sender.setReaction(target, messageId, emoji);
     if (!result.reactionSent) {
       return [
-        "Neon Canary reaction: gate closed at send time",
+        "Neonika Canary reaction: gate closed at send time",
         ...preconditionLines,
         `Reason: ${result.reason}`,
         "Reaction sent: false"
       ].join("\n");
     }
     return [
-      "Neon Canary reaction: SENT",
+      "Neonika Canary reaction: SENT",
       ...preconditionLines,
       `Target: discord/${channelId} message=${messageId}`,
       `Emoji: ${result.emoji}`,
@@ -4804,7 +4843,7 @@ async function runTypingCanaryLiveSmoke(): Promise<string> {
       throw new Error("typing start must not run while the canary gate is sealed");
     });
     return [
-      "Neon Canary typing: SKIPPED (sealed, preconditions not met, no transport constructed)",
+      "Neonika Canary typing: SKIPPED (sealed, preconditions not met, no transport constructed)",
       ...preconditionLines,
       `Target: discord/${channelId}`,
       `Outcome: ${outcome}`,
@@ -4817,7 +4856,7 @@ async function runTypingCanaryLiveSmoke(): Promise<string> {
   try {
     const outcome = await guard.run(() => transport.sendTyping(target));
     return [
-      `Neon Canary typing: ${outcome === "started" ? "SENT" : outcome.toUpperCase()}`,
+      `Neonika Canary typing: ${outcome === "started" ? "SENT" : outcome.toUpperCase()}`,
       ...preconditionLines,
       `Target: discord/${channelId}`,
       `Outcome: ${outcome}`,
@@ -4861,7 +4900,7 @@ async function runStatusReactionCanaryLiveSmoke(): Promise<string> {
 
   if (plan.action !== "emit") {
     return [
-      "Neon Canary status-reaction: NO EMIT (status controller plan says skip)",
+      "Neonika Canary status-reaction: NO EMIT (status controller plan says skip)",
       ...preconditionLines,
       planLine,
       "Reaction sent: false"
@@ -4872,7 +4911,7 @@ async function runStatusReactionCanaryLiveSmoke(): Promise<string> {
     const sender = createNeonCanaryReactionSender({ env, channelAllowlist: allowlist });
     const result = await sender.setReaction(target, messageId, plan.emoji);
     return [
-      "Neon Canary status-reaction: SUPPRESSED (gate sealed or message id unset, no transport constructed)",
+      "Neonika Canary status-reaction: SUPPRESSED (gate sealed or message id unset, no transport constructed)",
       ...preconditionLines,
       planLine,
       `Reason: ${result.reactionSent ? "sent" : result.reason}`,
@@ -4886,7 +4925,7 @@ async function runStatusReactionCanaryLiveSmoke(): Promise<string> {
     const sender = createNeonCanaryReactionSender({ env, transport, channelAllowlist: allowlist });
     const result = await sender.setReaction(target, messageId, plan.emoji);
     return [
-      `Neon Canary status-reaction: ${result.reactionSent ? "SENT" : "gate closed at send time"}`,
+      `Neonika Canary status-reaction: ${result.reactionSent ? "SENT" : "gate closed at send time"}`,
       ...preconditionLines,
       planLine,
       `Reaction sent: ${result.reactionSent}`
@@ -4958,7 +4997,7 @@ async function runDeliveryDispatchSmoke(): Promise<string> {
     }
 
     return [
-      "Neon Delivery dispatch smoke: ok (approved + suppressed, no transport)",
+      "Neonika Delivery dispatch smoke: ok (approved + suppressed, no transport)",
       renderNeonDeliveryDispatchReport(result)
     ].join("\n");
   } finally {
@@ -4973,6 +5012,10 @@ async function runDiscordShadowTap(): Promise<undefined> {
   const allowedGuildIds = readRequiredCsvEnv("NEON_DISCORD_ALLOWED_GUILDS");
   const allowedChannelIds = readRequiredCsvEnv("NEON_DISCORD_ALLOWED_CHANNELS");
   const ignoredMentionedUserIds = readOptionalCsvEnv("NEON_DISCORD_IGNORED_MENTIONED_USER_IDS");
+  const planApprovalDisabledChannelIds =
+    readOptionalCsvEnv("NEON_DISCORD_PLAN_APPROVAL_DISABLED_CHANNELS") ?? [];
+  const threadWorkspaceDisabledChannelIds =
+    readOptionalCsvEnv("NEON_DISCORD_THREAD_WORKSPACES_DISABLED_CHANNELS") ?? [];
   // No built-in mention list: an unconfigured deployment routes nothing.
   const neoMentionUserIds = readOptionalCsvEnv("NEON_DISCORD_NEO_MENTION_USER_IDS") ?? [];
   const agentId = process.env["NEON_DISCORD_AGENT_ID"] ?? "chaty";
@@ -4992,8 +5035,26 @@ async function runDiscordShadowTap(): Promise<undefined> {
   const tapRunMode = readDiscordTapRunModeEnv();
   const inboundDebounceMs = readNonNegativeIntegerEnv("NEON_DISCORD_INBOUND_DEBOUNCE_MS", 1500);
   const lifecycleGate = resolveNeonInFlightRunGate();
-  const harness = await createDiscordTapHarness(harnessMode, lifecycleGate);
-  const harnessRegistry = await createDiscordTapHarnessRegistry(harness, lifecycleGate);
+  const inFlightRuns = createNeonInFlightRunRegistry({ gate: lifecycleGate });
+  const sessionQueue = createNeonSessionActorQueue();
+  const runControl = createNeonDiscordRunControl({
+    inFlightRuns,
+    sessionQueue,
+    interruptRun: async (record) => {
+      const startOptions = await createLocalAppServerStartOptions();
+      const lease = await getDiscordTapClientPool().acquire(startOptions);
+      try {
+        await interruptCodexTurn(lease.client, {
+          threadId: record.threadId,
+          turnId: record.turnId
+        });
+      } finally {
+        await lease.release();
+      }
+    }
+  });
+  const harness = await createDiscordTapHarness(harnessMode, lifecycleGate, inFlightRuns);
+  const harnessRegistry = await createDiscordTapHarnessRegistry(harness, lifecycleGate, inFlightRuns);
   const writeLiveRun = harnessMode === "codex" && lifecycleGate.enabled ? writeNeonGatewayRunLatest : undefined;
   const resolveMemory = createDiscordMemoryResolver();
   const workboardAutopilotEnabled = isReadyLike(process.env["NEON_WORKBOARD_AUTOPILOT_ENABLED"]);
@@ -5008,21 +5069,45 @@ async function runDiscordShadowTap(): Promise<undefined> {
   const heartbeatDaemonIntervalMs = readPositiveIntegerEnv("NEON_HEARTBEAT_DAEMON_INTERVAL_MS", 60_000);
   const heartbeatDaemonGate = resolveNeonHeartbeatTimerGate(process.env);
   const canaryReplyRequested = isReadyLike(process.env["NEON_DISCORD_TAP_CANARY_REPLY"]);
+  const progressCardsRequested = isReadyLike(process.env["NEON_DISCORD_PROGRESS_CARD"]);
+  const runtimePickerRequested = isReadyLike(process.env["NEON_DISCORD_RUNTIME_PICKER"]);
+  const capacityRouterRequested = isReadyLike(process.env["NEON_DISCORD_CAPACITY_ROUTER"]);
+  const recoveryCardsRequested = isReadyLike(process.env["NEON_DISCORD_RECOVERY_CARDS"]);
   const canaryReplyPreconditions = evaluateNeonCanaryLivePreconditions(process.env);
   const canaryReplyAllowlist = resolveNeonCanaryChannelAllowlist(process.env);
+  const progressCardsEnabled = progressCardsRequested && canaryReplyPreconditions.ready;
   const canaryTypingRequested = isReadyLike(process.env["NEON_DISCORD_TAP_TYPING"]);
-  const canaryTypingEnabled = canaryTypingRequested && canaryReplyPreconditions.ready;
+  const canaryTypingEnabled =
+    canaryTypingRequested && canaryReplyPreconditions.ready;
   const canaryReactionsRequested = isReadyLike(process.env["NEON_DISCORD_TAP_REACTIONS"]);
-  const canaryReactionsEnabled = canaryReactionsRequested && canaryReplyPreconditions.ready;
-  const canaryReactionEmojiOverrides = {
+  const canaryReactionsEnabled =
+    canaryReactionsRequested && canaryReplyPreconditions.ready;
+  const canaryReactionEmojiOverrides: Partial<Record<string, string | undefined>> = {
     queued: readOptionalEnv("NEON_DISCORD_TAP_REACTION_QUEUED"),
     done: readOptionalEnv("NEON_DISCORD_TAP_REACTION_DONE"),
     error: readOptionalEnv("NEON_DISCORD_TAP_REACTION_ERROR")
   };
   const canaryVoiceReply = resolveNeonDiscordVoiceReplyOptionsFromEnv(process.env);
   const voiceTranscription = resolveNeonDiscordVoiceTranscriptionOptionsFromEnv(process.env);
+  const tapPolicy: INeonDiscordIngressPolicy = {
+    agentId,
+    workspaceRoot: process.cwd(),
+    mode: tapRunMode,
+    botUserId,
+    mentionPolicy: readDiscordMentionPolicyEnv(),
+    allowedGuildIds,
+    allowedChannelIds,
+    ...(agentMentionRoutes ? { agentMentionRoutes } : {}),
+    ...(ignoredMentionAliases ? { ignoredMentionAliases } : {}),
+    ...(ignoredMentionedUserIds ? { ignoredMentionedUserIds } : {})
+  };
   const canaryReplyTransport =
-    canaryReplyRequested && canaryReplyPreconditions.ready
+    (canaryReplyRequested ||
+      progressCardsEnabled ||
+      runtimePickerRequested ||
+      capacityRouterRequested ||
+      recoveryCardsRequested) &&
+    canaryReplyPreconditions.ready
       ? createNeonDiscordOutboundTransport({ token, suppressEmbeds: true })
       : undefined;
   const canaryReplySender = canaryReplyRequested
@@ -5033,6 +5118,607 @@ async function runDiscordShadowTap(): Promise<undefined> {
       })
     : undefined;
   const adapter = createDiscordJsShadowTapAdapter();
+  let pdfReviewRuntime: INeonPdfReviewRuntime | undefined;
+  let runtimePicker: INeonDiscordSessionRuntimePicker | undefined;
+  let capacityGate: INeonDiscordCapacityGate | undefined;
+  let recoveryRuntime: INeonDiscordRecoveryRuntime | undefined;
+  let agentButtonsRuntime: INeonDiscordAgentButtonsRuntime | undefined;
+  let planApprovalRuntime: INeonDiscordPlanApprovalRuntime | undefined;
+  const presentPlanApprovalFromReply = async (
+    run: INeonGatewayShadowRun,
+    reply: Awaited<ReturnType<typeof deliverNeonCanaryReplyForRun>>
+  ): Promise<void> => {
+    if (reply.state === "delivered" && reply.planApproval && reply.target && planApprovalRuntime) {
+      await planApprovalRuntime.present(run, reply.target, reply.planApproval.planText);
+    }
+  };
+  const componentActionRegistry = createNeonDiscordComponentActionRegistry({
+    statePath: resolveNeonDiscordComponentActionStatePath(process.cwd()),
+    resolveHandler: (actionType) => {
+      if (actionType === "run-control:stop") {
+        return async (context) => {
+          const result = await runControl.stopSession(context.sessionKey);
+          return { message: result.message };
+        };
+      }
+      if (isNeonPdfReviewActionType(actionType)) {
+        return async (context) => {
+          if (!pdfReviewRuntime) {
+            throw new Error("PDF review runtime is unavailable");
+          }
+          return await pdfReviewRuntime.handleAction(context);
+        };
+      }
+      if (isNeonDiscordSessionRuntimeActionType(actionType)) {
+        return async (context) => {
+          if (!runtimePicker) {
+            throw new Error("Discord runtime picker is unavailable");
+          }
+          return await runtimePicker.handleAction(context);
+        };
+      }
+      if (isNeonDiscordCapacityActionType(actionType)) {
+        return async (context) => {
+          if (!capacityGate) {
+            throw new Error("Discord capacity router is unavailable");
+          }
+          return await capacityGate.handleAction(context);
+        };
+      }
+      if (isNeonDiscordRecoveryActionType(actionType)) {
+        return async (context) => {
+          if (!recoveryRuntime) {
+            throw new Error("Discord recovery runtime is unavailable");
+          }
+          return await recoveryRuntime.handleAction(context);
+        };
+      }
+      if (isNeonDiscordAgentButtonsActionType(actionType)) {
+        return async (context) => {
+          if (!agentButtonsRuntime) {
+            throw new Error("Discord agent buttons runtime is unavailable");
+          }
+          return await agentButtonsRuntime.handleAction(context);
+        };
+      }
+      if (isNeonDiscordPlanApprovalActionType(actionType)) {
+        return async (context) => {
+          if (!planApprovalRuntime) {
+            throw new Error("Discord plan approval runtime is unavailable");
+          }
+          return await planApprovalRuntime.handleAction(context);
+        };
+      }
+      return undefined;
+    }
+  });
+  if (runtimePickerRequested && canaryReplyTransport) {
+    runtimePicker = createNeonDiscordSessionRuntimePicker({
+      projectRoot: process.cwd(),
+      registry: componentActionRegistry,
+      catalog: createDiscordRuntimePickerCatalog(),
+      transport: {
+        postComponents: async (target, content, rows) => {
+          if (!canaryReplyAllowlist.channels.has(target.channelId)) {
+            throw new Error("Runtime picker target is outside the Canary allowlist");
+          }
+          return await canaryReplyTransport.postComponents(target, content, rows);
+        }
+      }
+    });
+  }
+  const resolveTapHarness = (message: INeonGatewayInboundMessage): ICodexHarness => {
+    const sessionKey = deriveCodexSessionKey(createSessionBindingFromGatewayMessage(message));
+    const selected = runtimePicker?.resolve(sessionKey, message.userId);
+    if (selected) {
+      return createDiscordHarnessForRuntimeSelection(selected, inFlightRuns);
+    }
+    const agent = resolveNeonAgentAttachment(message.agentId);
+    if (capacityGate && (agent?.runtime ?? "codex") === "codex") {
+      const decision = resolveNeonDiscordCapacityDecision(message);
+      return createDiscordCodexTapHarness(
+        inFlightRuns,
+        neonDiscordCapacityRuntimes[decision.tier],
+        decision.tier !== "sol"
+      );
+    }
+    return selectNeonHarness(agent?.runtime ?? "codex", harnessRegistry).harness;
+  };
+  if (recoveryCardsRequested && canaryReplyTransport) {
+    recoveryRuntime = createNeonDiscordRecoveryRuntime({
+      projectRoot: process.cwd(),
+      registry: componentActionRegistry,
+      transport: {
+        postComponents: async (target, content, rows, embeds) => {
+          if (!canaryReplyAllowlist.channels.has(target.channelId)) {
+            throw new Error("Recovery card target is outside the Canary allowlist");
+          }
+          return await canaryReplyTransport.postComponents(target, content, rows, embeds);
+        }
+      },
+      canContinue: async (run) => {
+        const binding = await readCodexThreadBinding(process.cwd(), run.harnessSessionKey);
+        const activeRuntime = runtimePicker?.resolve(run.harnessSessionKey, run.request.userId) ?? harnessRegistry.codex.runtime;
+        return binding !== undefined &&
+          binding.model === run.runtime?.model &&
+          activeRuntime !== undefined &&
+          run.runtime !== undefined &&
+          sameHarnessRuntime(activeRuntime, run.runtime);
+      },
+      execute: async ({ action, run }) => {
+        const timestamp = new Date().toISOString();
+        let recoveryEnvelope: INeonDiscordMessageEnvelope;
+        if (action === "retry") {
+          if (!run.request.messageId || !adapter.fetchMessage) {
+            throw new Error("Original Discord message is unavailable for retry");
+          }
+          const original = await adapter.fetchMessage({
+            channelId: run.request.channelId,
+            ...(run.request.threadId ? { threadId: run.request.threadId } : {}),
+            messageId: run.request.messageId
+          });
+          if (!original) {
+            throw new Error("Original Discord message could not be fetched");
+          }
+          const mapped = mapDiscordJsMessageToEnvelope(original, run.request.accountId);
+          if (mapped.author.id !== run.request.userId || mapped.author.bot) {
+            throw new Error("Original Discord message owner changed");
+          }
+          recoveryEnvelope = { ...mapped, createdAt: timestamp };
+        } else {
+          recoveryEnvelope = {
+            accountId: run.request.accountId,
+            channelId: run.request.channelId,
+            ...(run.request.threadId ? { threadId: run.request.threadId } : {}),
+            ...(run.request.guildId ? { guildId: run.request.guildId } : {}),
+            messageId: `recovery-continue:${run.runId}:${Date.now()}`,
+            author: {
+              id: run.request.userId,
+              username: run.request.userDisplayName ?? "the operator",
+              displayName: run.request.userDisplayName ?? "the operator",
+              bot: false
+            },
+            content: "Setze den fehlgeschlagenen Auftrag in dieser Session fort. Prüfe den bisherigen Stand und liefere das Ergebnis vollständig.",
+            createdAt: timestamp,
+            mentionedUserIds: []
+          };
+        }
+        const ingress = await runNeonDiscordShadowIngress(
+          { message: recoveryEnvelope, policy: tapPolicy, resolveMemory },
+          {
+            projectRoot: process.cwd(),
+            harness,
+            resolveHarness: resolveTapHarness,
+            resolveContext: resolveDiscordGatewayContext,
+            sessionQueue,
+            ...(writeLiveRun ? { writeRun: writeLiveRun, writeRunningRun: writeLiveRun } : {}),
+            workboardIngestion: false,
+            cronCommand: false,
+            commitmentCapture: false
+          }
+        );
+        if (ingress.state !== "accepted") {
+          throw new Error("Discord recovery run was rejected");
+        }
+        if (ingress.result.run.status === "failed") {
+          await recoveryRuntime?.start(ingress.result.run);
+        } else if (canaryReplySender) {
+          const reply = await deliverNeonCanaryReplyForRun({
+            run: ingress.result.run,
+            sender: canaryReplySender,
+            replyMode: readDiscordCanaryReplyModeEnv(),
+            projectRoot: process.cwd(),
+            ...(pdfReviewRuntime ? { pdfReview: pdfReviewRuntime } : {}),
+            ...(canaryVoiceReply ? { voiceReply: canaryVoiceReply } : {})
+          });
+          await presentPlanApprovalFromReply(ingress.result.run, reply);
+        }
+        return { runId: ingress.result.run.runId, status: ingress.result.run.status };
+      }
+    });
+  }
+  const pdfReviewEnabled =
+    isReadyLike(process.env["NEON_DISCORD_PDF_REVIEW"]) &&
+    canaryReplySender !== undefined &&
+    canaryReplyTransport !== undefined;
+  if (pdfReviewEnabled && canaryReplySender && canaryReplyTransport) {
+    pdfReviewRuntime = createNeonPdfReviewRuntime({
+      projectRoot: process.cwd(),
+      registry: componentActionRegistry,
+      sender: canaryReplySender,
+      transport: {
+        postComponents: async (target, content, rows) => {
+          if (!canaryReplyAllowlist.channels.has(target.channelId)) {
+            throw new Error("PDF review target is outside the Canary allowlist");
+          }
+          return await canaryReplyTransport.postComponents(target, content, rows);
+        }
+      },
+      requestRevision: async ({ reviewId, run, request }) => {
+        const createdAt = new Date().toISOString();
+        const revisionIngress = await runNeonDiscordShadowIngress(
+          {
+            message: {
+              accountId: run.request.accountId,
+              ...(run.request.guildId ? { guildId: run.request.guildId } : {}),
+              channelId: run.request.channelId,
+              ...(run.request.threadId ? { threadId: run.request.threadId } : {}),
+              messageId: `pdf-revision:${reviewId}:${Date.now()}`,
+              author: {
+                id: run.request.userId,
+                username: run.request.userDisplayName ?? "the operator",
+                displayName: run.request.userDisplayName ?? "the operator",
+                bot: false
+              },
+              content: `Überarbeite den zuletzt erstellten PDF-Entwurf. Änderungswunsch: ${request}`,
+              createdAt,
+              mentionedUserIds: []
+            },
+            policy: tapPolicy,
+            resolveMemory
+          },
+          {
+            projectRoot: process.cwd(),
+            harness,
+            resolveHarness: resolveTapHarness,
+            resolveContext: resolveDiscordGatewayContext,
+            sessionQueue,
+            ...(writeLiveRun ? { writeRun: writeLiveRun, writeRunningRun: writeLiveRun } : {}),
+            workboardIngestion: false,
+            cronCommand: false,
+            commitmentCapture: false
+          }
+        );
+        if (revisionIngress.state !== "accepted") {
+          throw new Error("PDF revision run was rejected");
+        }
+        const reply = await deliverNeonCanaryReplyForRun({
+          run: revisionIngress.result.run,
+          sender: canaryReplySender,
+          replyMode: readDiscordCanaryReplyModeEnv(),
+          projectRoot: process.cwd(),
+          ...(pdfReviewRuntime ? { pdfReview: pdfReviewRuntime } : {}),
+          ...(canaryVoiceReply ? { voiceReply: canaryVoiceReply } : {})
+        });
+        if (reply.state === "transport-error") {
+          throw new Error("PDF revision reply failed");
+        }
+        await presentPlanApprovalFromReply(revisionIngress.result.run, reply);
+        return { runId: revisionIngress.result.run.runId };
+      }
+    });
+  }
+  const progressCards =
+    progressCardsEnabled && canaryReplyTransport
+      ? createNeonDiscordProgressCardRuntime({
+          registry: componentActionRegistry,
+          runControl,
+          transport: {
+            // Card body rides in a Neon-orange embed (left accent bar) so every
+            // progress card reads as branded Neon output.
+            post: async (target, body, rows) => {
+              if (!canaryReplyAllowlist.channels.has(target.channelId)) {
+                throw new Error("Progress card target is outside the Canary allowlist");
+              }
+              return await canaryReplyTransport.postComponents(target, "", rows, [
+                { description: body, color: NEON_DISCORD_ACCENT_COLOR }
+              ]);
+            },
+            edit: async (target, messageId, body, rows) => {
+              if (!canaryReplyAllowlist.channels.has(target.channelId)) {
+                throw new Error("Progress card target is outside the Canary allowlist");
+              }
+              await canaryReplyTransport.editComponents(target, messageId, "", rows, [
+                { description: body, color: NEON_DISCORD_ACCENT_COLOR }
+              ]);
+            }
+          }
+        })
+      : undefined;
+  if (
+    capacityRouterRequested &&
+    harnessMode === "codex" &&
+    canaryReplyTransport &&
+    canaryReplySender
+  ) {
+    capacityGate = createNeonDiscordCapacityGate({
+      registry: componentActionRegistry,
+      transport: {
+        postComponents: async (target, content, rows) => {
+          if (!canaryReplyAllowlist.channels.has(target.channelId)) {
+            throw new Error("Capacity prompt target is outside the Canary allowlist");
+          }
+          return await canaryReplyTransport.postComponents(target, content, rows);
+        }
+      },
+      execute: async (input) => {
+        if (!adapter.fetchMessage) {
+          throw new Error("Original Discord message lookup is unavailable");
+        }
+        const original = await adapter.fetchMessage({
+          channelId: input.context.interaction.channelId,
+          messageId: input.messageId
+        });
+        if (!original) {
+          throw new Error("Original Discord message is unavailable");
+        }
+        const envelope = mapDiscordJsMessageToEnvelope(original, accountId);
+        if (envelope.author.bot || envelope.author.id !== input.context.interaction.userId) {
+          throw new Error("Original Discord message owner changed");
+        }
+        if (createNeonDiscordCapacityFingerprint(envelope) !== input.fingerprint) {
+          throw new Error("Original Discord message changed after the capacity prompt");
+        }
+        const selectedHarness = createDiscordCodexTapHarness(inFlightRuns, input.runtime, false);
+        const deliveryTarget = {
+          channel: "discord" as const,
+          accountId: envelope.accountId,
+          ...(envelope.guildId ? { guildId: envelope.guildId } : {}),
+          channelId: envelope.channelId,
+          ...(envelope.threadId ? { threadId: envelope.threadId } : {}),
+          replyToMessageId: envelope.messageId
+        };
+        const authorization = createNeonDiscordIngressDecision(envelope, tapPolicy);
+        if (authorization.state !== "accepted") {
+          throw new Error("Original Discord message is no longer authorized");
+        }
+        const sessionKey = deriveCodexSessionKey(
+          createSessionBindingFromGatewayMessage(authorization.message)
+        );
+        const capacityProgress = progressCards
+          ? await progressCards.start({
+              target: deliveryTarget,
+              ownerUserId: envelope.author.id,
+              ...(envelope.guildId ? { guildId: envelope.guildId } : {}),
+              channelId: envelope.threadId ?? envelope.channelId,
+              sessionKey
+            }).catch(() => undefined)
+          : undefined;
+        const ingress = await runNeonDiscordShadowIngress(
+          { message: envelope, policy: tapPolicy, resolveMemory },
+          {
+            projectRoot: process.cwd(),
+            harness: selectedHarness,
+            resolveContext: resolveDiscordGatewayContext,
+            sessionQueue,
+            workboardAssumeActionRequest: true,
+            ...(capacityProgress ? { onHarnessEvent: (event) => capacityProgress.observe(event) } : {}),
+            ...(writeLiveRun ? { writeRun: writeLiveRun, writeRunningRun: writeLiveRun } : {}),
+            resolveAbortSignal: (runId, acceptedMessage) =>
+              runControl.resolveAbortSignal(
+                runId,
+                deriveCodexSessionKey(createSessionBindingFromGatewayMessage(acceptedMessage)),
+                acceptedMessage.createdAt
+              )
+          }
+        );
+        if (ingress.state !== "accepted") {
+          throw new Error("Capacity-approved Discord run was rejected");
+        }
+        await capacityProgress?.finish(ingress.result.run.status);
+        if (ingress.result.run.status === "failed") {
+          await recoveryRuntime?.start(ingress.result.run);
+        }
+        const reply = await deliverNeonCanaryReplyForRun({
+          run: ingress.result.run,
+          sender: canaryReplySender,
+          replyMode: readDiscordCanaryReplyModeEnv(),
+          projectRoot: process.cwd(),
+          ...(pdfReviewRuntime ? { pdfReview: pdfReviewRuntime } : {}),
+          ...(canaryVoiceReply ? { voiceReply: canaryVoiceReply } : {})
+        });
+        if (reply.state === "transport-error") {
+          throw new Error("Capacity-approved Discord reply failed");
+        }
+        await presentPlanApprovalFromReply(ingress.result.run, reply);
+        if (reply.outboundSent && reply.messageId) {
+          await (writeLiveRun ?? writeNeonGatewayRun)(
+            process.cwd(),
+            markNeonGatewayRunDelivered(ingress.result.run, {
+              messageId: reply.messageId,
+              ...(reply.reason ? { reason: reply.reason } : {})
+            })
+          );
+        }
+        const status = ingress.result.run.status;
+        return {
+          runId: ingress.result.run.runId,
+          status: status === "completed" || status === "failed" || status === "cancelled" ? status : "failed"
+        };
+      }
+    });
+  }
+  if (canaryReplyTransport && canaryReplySender) {
+    agentButtonsRuntime = createNeonDiscordAgentButtonsRuntime({
+      registry: componentActionRegistry,
+      transport: {
+        postComponents: async (target, content, rows) => {
+          if (!canaryReplyAllowlist.channels.has(target.channelId)) {
+            throw new Error("Agent buttons target is outside the Canary allowlist");
+          }
+          return await canaryReplyTransport.postComponents(target, content, rows);
+        }
+      },
+      execute: async ({ label, context }) => {
+        const timestamp = new Date().toISOString();
+        const envelope: INeonDiscordMessageEnvelope = {
+          accountId,
+          channelId: context.interaction.channelId,
+          ...(context.interaction.guildId ? { guildId: context.interaction.guildId } : {}),
+          messageId: `agent-button:${context.actionId}:${Date.now()}`,
+          author: {
+            id: context.interaction.userId,
+            username: "button-auswahl",
+            displayName: "Button-Auswahl",
+            bot: false
+          },
+          content: label,
+          createdAt: timestamp,
+          mentionedUserIds: []
+        };
+        const authorization = createNeonDiscordIngressDecision(envelope, tapPolicy);
+        if (authorization.state !== "accepted") {
+          throw new Error("Agent button click is not authorized for this channel");
+        }
+        const ingress = await runNeonDiscordShadowIngress(
+          { message: envelope, policy: tapPolicy, resolveMemory },
+          {
+            projectRoot: process.cwd(),
+            harness,
+            resolveHarness: resolveTapHarness,
+            resolveContext: resolveDiscordGatewayContext,
+            sessionQueue,
+            ...(writeLiveRun ? { writeRun: writeLiveRun, writeRunningRun: writeLiveRun } : {}),
+            workboardIngestion: false,
+            cronCommand: false,
+            commitmentCapture: false
+          }
+        );
+        if (ingress.state !== "accepted") {
+          throw new Error("Agent button follow-up run was rejected");
+        }
+        if (ingress.result.run.status === "failed") {
+          await recoveryRuntime?.start(ingress.result.run);
+          return "Der Folgeauftrag ist fehlgeschlagen — Recovery-Karte ist unterwegs.";
+        }
+        const reply = await deliverNeonCanaryReplyForRun({
+          run: ingress.result.run,
+          sender: canaryReplySender,
+          replyMode: readDiscordCanaryReplyModeEnv(),
+          projectRoot: process.cwd(),
+          ...(pdfReviewRuntime ? { pdfReview: pdfReviewRuntime } : {}),
+          ...(canaryVoiceReply ? { voiceReply: canaryVoiceReply } : {})
+        });
+        if (reply.state === "transport-error") {
+          throw new Error("Agent button follow-up reply failed");
+        }
+        await presentPlanApprovalFromReply(ingress.result.run, reply);
+        return `„${label}“ erledigt — die Antwort steht im Channel.`;
+      }
+    });
+  }
+  if (canaryReplyTransport && canaryReplySender) {
+    const runPlanFollowUp = async (
+      sourceRun: INeonGatewayShadowRun,
+      messagePrefix: string,
+      instruction: string
+    ): Promise<{ readonly runId: string }> => {
+      const timestamp = new Date().toISOString();
+      const envelope: INeonDiscordMessageEnvelope = {
+        accountId: sourceRun.request.accountId,
+        channelId: sourceRun.request.channelId,
+        ...(sourceRun.request.threadId ? { threadId: sourceRun.request.threadId } : {}),
+        ...(sourceRun.request.guildId ? { guildId: sourceRun.request.guildId } : {}),
+        messageId: `${messagePrefix}:${sourceRun.runId}:${Date.now()}`,
+        author: {
+          id: sourceRun.request.userId,
+          username: sourceRun.request.userDisplayName ?? "the operator",
+          displayName: sourceRun.request.userDisplayName ?? "the operator",
+          bot: false
+        },
+        content: instruction,
+        createdAt: timestamp,
+        mentionedUserIds: []
+      };
+      const planActionPolicy: INeonDiscordIngressPolicy = {
+        ...tapPolicy,
+        agentId: sourceRun.request.agentId
+      };
+      const ingress = await runNeonDiscordShadowIngress(
+        { message: envelope, policy: planActionPolicy, resolveMemory },
+        {
+          projectRoot: process.cwd(),
+          harness,
+          resolveHarness: resolveTapHarness,
+          resolveContext: resolveDiscordGatewayContext,
+          sessionQueue,
+          ...(writeLiveRun ? { writeRun: writeLiveRun, writeRunningRun: writeLiveRun } : {}),
+          workboardIngestion: false,
+          cronCommand: false,
+          commitmentCapture: false
+        }
+      );
+      if (ingress.state !== "accepted" || ingress.result.run.status !== "completed") {
+        throw new Error("Discord plan follow-up run did not complete");
+      }
+      const reply = await deliverNeonCanaryReplyForRun({
+        run: ingress.result.run,
+        sender: canaryReplySender,
+        replyMode: readDiscordCanaryReplyModeEnv(),
+        projectRoot: process.cwd(),
+        ...(pdfReviewRuntime ? { pdfReview: pdfReviewRuntime } : {}),
+        ...(canaryVoiceReply ? { voiceReply: canaryVoiceReply } : {})
+      });
+      if (reply.state === "transport-error" || reply.state === "skipped") {
+        throw new Error("Discord plan follow-up reply failed");
+      }
+      await presentPlanApprovalFromReply(ingress.result.run, reply);
+      return { runId: ingress.result.run.runId };
+    };
+
+    planApprovalRuntime = createNeonDiscordPlanApprovalRuntime({
+      projectRoot: process.cwd(),
+      registry: componentActionRegistry,
+      disabledChannelIds: planApprovalDisabledChannelIds,
+      transport: {
+        postPublic: async (target, content) => {
+          if (!canaryReplyAllowlist.channels.has(target.channelId)) {
+            throw new Error("Plan approval target is outside the Canary allowlist");
+          }
+          return await canaryReplyTransport.postMessage(target, content);
+        },
+        postComponents: async (target, content, rows) => {
+          if (!canaryReplyAllowlist.channels.has(target.channelId)) {
+            throw new Error("Plan approval target is outside the Canary allowlist");
+          }
+          return await canaryReplyTransport.postComponents(target, content, rows);
+        }
+      },
+      approve: async ({ approvalId, run, planText }) =>
+        await runPlanFollowUp(
+          run,
+          `plan-approved:${approvalId}`,
+          [
+            "Neonika hat den folgenden Plan über den nutzergebundenen Genehmigen-Button freigegeben.",
+            "Führe ihn jetzt vollständig aus. Stelle keine erneute Planfrage und erzeuge keinen neuen Plan-Approval-Marker, außer ein neues unauflösbares Produktziel entsteht.",
+            "",
+            "Genehmigter Plan:",
+            planText
+          ].join("\n")
+        ),
+      requestRevision: async ({ approvalId, run, planText, request }) =>
+        await runPlanFollowUp(
+          run,
+          `plan-revision:${approvalId}`,
+          [
+            "Überarbeite ausschließlich den folgenden Plan anhand des Änderungswunsches.",
+            "Führe noch nichts aus. Zeige danach genau einen neuen vollständigen Plan und hänge <NEON_PLAN_APPROVAL /> als letzte Zeile an.",
+            "",
+            "Bisheriger Plan:",
+            planText,
+            "",
+            "Änderungswunsch:",
+            request
+          ].join("\n")
+        )
+    });
+  }
+  const threadWorkspaces = isReadyLike(process.env["NEON_DISCORD_THREAD_WORKSPACES"])
+    ? createNeonDiscordThreadWorkspaceRuntime<Message>({
+        projectRoot: process.cwd(),
+        disabledChannelIds: threadWorkspaceDisabledChannelIds,
+        transport: {
+          createThread: async (message, input) => {
+            const thread = await message.startThread({
+              name: input.name,
+              autoArchiveDuration: ThreadAutoArchiveDuration.OneDay,
+              reason: input.reason
+            });
+            return { threadId: thread.id };
+          }
+        }
+      })
+    : undefined;
 
   const handle = await startNeonDiscordShadowTap<Message, ChatInputCommandInteraction>({
     token,
@@ -5041,25 +5727,22 @@ async function runDiscordShadowTap(): Promise<undefined> {
     adapter,
     mapMessage: (message) => mapDiscordJsMessageToEnvelope(message, accountId),
     mapInteraction: (interaction) => mapDiscordJsInteractionToSlashEnvelope(interaction, accountId),
-    policy: {
-      agentId,
-      workspaceRoot: process.cwd(),
-      mode: tapRunMode,
-      botUserId,
-      mentionPolicy: readDiscordMentionPolicyEnv(),
-      allowedGuildIds,
-      allowedChannelIds,
-      ...(agentMentionRoutes ? { agentMentionRoutes } : {}),
-      ...(ignoredMentionAliases ? { ignoredMentionAliases } : {}),
-      ...(ignoredMentionedUserIds ? { ignoredMentionedUserIds } : {})
-    },
+    componentActionRegistry,
+    runControl,
+    ...(progressCards ? { progressCards } : {}),
+    ...(runtimePicker ? { runtimePicker } : {}),
+    ...(capacityGate ? { capacityGate } : {}),
+    ...(recoveryRuntime ? { recoveryCards: recoveryRuntime } : {}),
+    ...(agentButtonsRuntime ? { agentButtons: agentButtonsRuntime } : {}),
+    ...(planApprovalRuntime ? { planApproval: planApprovalRuntime } : {}),
+    ...(pdfReviewRuntime ? { pdfReview: pdfReviewRuntime } : {}),
+    ...(threadWorkspaces ? { threadWorkspaces } : {}),
+    policy: tapPolicy,
     resolveMemory,
     resolveContext: resolveDiscordGatewayContext,
-    resolveHarness: (message) => {
-      const agent = resolveNeonAgentAttachment(message.agentId);
-      return selectNeonHarness(agent?.runtime ?? "codex", harnessRegistry).harness;
-    },
+    resolveHarness: resolveTapHarness,
     harness,
+    sessionQueue,
     ...(inboundDebounceMs > 0 ? { inboundDebounce: { debounceMs: inboundDebounceMs } } : {}),
     ...(voiceTranscription ? { voiceTranscription } : {}),
     ...(canaryReplySender
@@ -5080,7 +5763,14 @@ async function runDiscordShadowTap(): Promise<undefined> {
       ? {
           addStatusReaction: async (message, _envelope, _state, emoji) => {
             await adapter.addReaction?.(message, canaryReactionEmojiOverrides[_state] ?? emoji);
-          }
+          },
+          removeStatusReaction: async (message, _envelope, emoji) => {
+            await adapter.removeReaction?.(message, emoji);
+          },
+          // History default: worked-through icons stay as a timeline. Opt out
+          // with NEON_DISCORD_TAP_REACTION_HISTORY=off for replace mode.
+          statusReactionHistory:
+            (process.env["NEON_DISCORD_TAP_REACTION_HISTORY"] ?? "ready").trim().toLowerCase() !== "off"
         }
       : {}),
     ...(writeLiveRun ? { writeRun: writeLiveRun, writeRunningRun: writeLiveRun } : {}),
@@ -5102,6 +5792,44 @@ async function runDiscordShadowTap(): Promise<undefined> {
 
       if (event.kind === "interaction-dropped") {
         console.log(`discord-shadow-tap interaction dropped ${event.reason}`);
+        return;
+      }
+
+      if (event.kind === "component-interaction-accepted") {
+        console.log(
+          `discord-shadow-tap component accepted action=${event.actionType} id=${event.actionId}`
+        );
+        return;
+      }
+
+      if (event.kind === "component-interaction-dropped") {
+        console.log(`discord-shadow-tap component dropped ${event.reason}`);
+        return;
+      }
+
+      if (event.kind === "control-accepted") {
+        console.log(
+          `discord-shadow-tap control accepted state=${event.state} active=${event.activeRunsMatched} queued=${event.pendingTasksCancelled} ack=${event.acknowledgementSent}`
+        );
+        return;
+      }
+
+      if (event.kind === "control-dropped") {
+        console.log(`discord-shadow-tap control dropped ${event.reason}`);
+        return;
+      }
+
+      if (event.kind === "progress-card") {
+        console.log(
+          `discord-shadow-tap progress ${event.state} message=${event.messageId ?? "none"} updates=${event.updates ?? 0}`
+        );
+        return;
+      }
+
+      if (event.kind === "capacity-prompt") {
+        console.log(
+          `discord-shadow-tap capacity ${event.state} message=${event.messageId ?? "none"}`
+        );
         return;
       }
 
@@ -5169,6 +5897,17 @@ async function runDiscordShadowTap(): Promise<undefined> {
         `Codex policy: ${readCodexApprovalPolicyEnv()}/${readCodexSandboxEnv()}`,
         `Codex timeouts: request=${readCodexAppServerRequestTimeoutMsEnv()}ms turn=${readCodexAppServerTurnCompletionTimeoutMsEnv()}ms`,
         `Delivery: ${canaryReplySender ? "canary-reply-gated" : "suppressed"}`,
+        "Component ingress: enabled (owner/TTL/single-use registry)",
+        `Run controls: ${lifecycleGate.enabled ? "enabled (/stop fast-path)" : "blocked"}`,
+        `Progress cards: ${progressCards ? "enabled" : "off"}`,
+        `Runtime picker: ${runtimePicker ? "enabled" : "off"}`,
+        `Capacity router: ${capacityGate ? "enabled (Luna/Terra/Sol + self-escalation)" : "off"}`,
+        `Recovery cards: ${recoveryRuntime ? "enabled" : "off"}`,
+        `Plan approvals: enabled (disabled channels=${planApprovalDisabledChannelIds.length})`,
+        `PDF review: ${pdfReviewRuntime ? "enabled" : "off"}`,
+        `Thread workspaces: ${
+          threadWorkspaces ? `enabled (disabled channels=${threadWorkspaceDisabledChannelIds.length})` : "off"
+        }`,
         `Workboard autopilot: ${workboardAutopilot ? "enabled" : "off"}`,
         `Cron daemon: ${
           cronDaemon ? `enabled (interval=${cronDaemonIntervalMs}ms, gate=${cronDaemonGate.reason})` : "off"
@@ -5199,7 +5938,20 @@ async function runDiscordShadowTap(): Promise<undefined> {
         `Typing started: ${handle.stats.typingStarted}`,
         `Typing errors: ${handle.stats.typingErrors}`,
         `Reactions sent: ${handle.stats.reactionsSent}`,
-        `Reaction errors: ${handle.stats.reactionErrors}`
+        `Reaction errors: ${handle.stats.reactionErrors}`,
+        `Component interactions accepted: ${handle.stats.componentInteractionsAccepted}`,
+        `Component interactions dropped: ${handle.stats.componentInteractionsDropped}`,
+        `Controls accepted: ${handle.stats.controlsAccepted}`,
+        `Controls dropped: ${handle.stats.controlsDropped}`,
+        `Progress cards: ${handle.stats.progressCardsStarted}`,
+        `Progress updates: ${handle.stats.progressCardUpdates}`,
+        `Progress errors: ${handle.stats.progressCardErrors}`,
+        `Runtime pickers opened: ${handle.stats.runtimePickersOpened}`,
+        `Runtime picker errors: ${handle.stats.runtimePickerErrors}`,
+        `Capacity prompts opened: ${handle.stats.capacityPromptsOpened}`,
+        `Capacity prompt errors: ${handle.stats.capacityPromptErrors}`,
+        `Recovery cards: ${handle.stats.recoveryCardsStarted}`,
+        `Recovery errors: ${handle.stats.recoveryCardErrors}`
       ].join("\n")
     );
   } finally {
@@ -5215,7 +5967,7 @@ async function runDiscordShadowTap(): Promise<undefined> {
 async function runDiscordTapCanaryReplyLiveSmoke(): Promise<string> {
   if (!isReadyLike(process.env["NEON_DISCORD_TAP_CANARY_REPLY_LIVE_SMOKE"])) {
     return [
-      "Neon Discord tap canary reply live smoke: not-run",
+      "Neonika Discord tap canary reply live smoke: not-run",
       "Set NEON_DISCORD_TAP_CANARY_REPLY_LIVE_SMOKE=ready, NEON_LIVE_RUN_LIFECYCLE_ENABLED=ready, and the Canary outbound gate to run one private reply-loop smoke.",
       "Safety: only the allowlisted the allowlisted private channel is accepted; no primary cutover; no secrets printed."
     ].join("\n");
@@ -5344,7 +6096,7 @@ async function runDiscordTapCanaryReplyLiveSmoke(): Promise<string> {
     }
 
     return [
-      "Neon Discord tap canary reply live smoke: ok",
+      "Neonika Discord tap canary reply live smoke: ok",
       `Channel: ${channelId}`,
       `Sent trigger message: ${sent.messageId}`,
       `Running run: ${runningRunId}`,
@@ -5381,7 +6133,7 @@ async function runPeekabooProxy(): Promise<string | undefined> {
 
   console.log(
     [
-      "Neon Peekaboo proxy: ready",
+      "Neonika Peekaboo proxy: ready",
       `Socket: ${handle.socketPath}`,
       `TCP: ${handle.tcpUrl}`,
       "Target: fixed peekaboo binary",
@@ -5422,7 +6174,7 @@ async function runPeekabooProxyClient(): Promise<undefined> {
 async function runDiscordIngressCodexLiveSmoke(): Promise<string> {
   if (!isReadyLike(process.env["NEON_DISCORD_INGRESS_CODEX_LIVE_SMOKE"])) {
     return [
-      "Neon Discord ingress codex live smoke: not-run",
+      "Neonika Discord ingress codex live smoke: not-run",
       "Set NEON_DISCORD_INGRESS_CODEX_LIVE_SMOKE=ready and NEON_LIVE_RUN_LIFECYCLE_ENABLED=ready to run one private canary ingress turn.",
       "Safety: only the allowlisted the allowlisted private channel is accepted; no primary cutover; no secrets printed."
     ].join("\n");
@@ -5525,7 +6277,7 @@ async function runDiscordIngressCodexLiveSmoke(): Promise<string> {
     }
 
     return [
-      "Neon Discord ingress codex live smoke: ok",
+      "Neonika Discord ingress codex live smoke: ok",
       `Channel: ${channelId}`,
       `Sent message: ${sent.messageId}`,
       `Running run: ${runningRunId}`,
@@ -5546,7 +6298,7 @@ async function runDiscordIngressCodexLiveSmoke(): Promise<string> {
 async function runDiscordIngressControlLiveSmoke(): Promise<string> {
   if (!isReadyLike(process.env["NEON_DISCORD_INGRESS_CONTROL_LIVE_SMOKE"])) {
     return [
-      "Neon Discord ingress control live smoke: not-run",
+      "Neonika Discord ingress control live smoke: not-run",
       "Set NEON_DISCORD_INGRESS_CONTROL_LIVE_SMOKE=ready and NEON_LIVE_RUN_LIFECYCLE_ENABLED=ready to run one private canary ingress turn and stop it via HTTP control.",
       "Safety: only the allowlisted the allowlisted private channel is accepted; no primary cutover; no secrets printed."
     ].join("\n");
@@ -5753,7 +6505,7 @@ async function runDiscordIngressControlLiveSmoke(): Promise<string> {
     }
 
     return [
-      "Neon Discord ingress control live smoke: ok",
+      "Neonika Discord ingress control live smoke: ok",
       `Channel: ${channelId}`,
       `Sent message: ${sent.messageId}`,
       `Running run: ${runningRunId}`,
@@ -5847,7 +6599,8 @@ async function resolveDiscordGatewayContext(
 
 async function createDiscordTapHarness(
   mode: string,
-  lifecycleGate: ReturnType<typeof resolveNeonInFlightRunGate>
+  lifecycleGate: ReturnType<typeof resolveNeonInFlightRunGate>,
+  inFlightRuns: INeonInFlightRunRegistry = createNeonInFlightRunRegistry({ gate: lifecycleGate })
 ): Promise<ICodexHarness> {
   if (mode === "dry") {
     return createDryRunHarness();
@@ -5861,45 +6614,70 @@ async function createDiscordTapHarness(
     throw new Error(`Invalid NEON_DISCORD_TAP_HARNESS: ${mode}`);
   }
 
-  return createDiscordCodexTapHarness(lifecycleGate);
+  return createDiscordCodexTapHarness(inFlightRuns);
 }
 
 async function createDiscordTapHarnessRegistry(
   baseHarness: ICodexHarness,
-  lifecycleGate: ReturnType<typeof resolveNeonInFlightRunGate>
+  lifecycleGate: ReturnType<typeof resolveNeonInFlightRunGate>,
+  inFlightRuns: INeonInFlightRunRegistry
 ): Promise<{ readonly codex: ICodexHarness; readonly claude: ICodexHarness }> {
   return {
-    codex: baseHarness.id === "codex-app-server" ? baseHarness : createDiscordCodexTapHarness(lifecycleGate),
+    codex:
+      baseHarness.id === "codex-app-server"
+        ? baseHarness
+        : createDiscordCodexTapHarness(inFlightRuns),
     claude: baseHarness.id === "claude-cli" ? baseHarness : createDiscordClaudeTapHarness()
   };
 }
 
 function createDiscordCodexTapHarness(
-  lifecycleGate: ReturnType<typeof resolveNeonInFlightRunGate>
+  inFlightRuns: INeonInFlightRunRegistry,
+  override: Pick<INeonDiscordCapacityRuntime, "model" | "effort"> | undefined = undefined,
+  enableCapacityUpgradeRequests = false
 ): ICodexHarness {
-  return createCodexAppServerHarness({
+  const model = override?.model ?? readOptionalEnv("NEON_CODEX_MODEL");
+  const effort = override?.effort ?? readCodexReasoningEffortEnv();
+  const harness = createCodexAppServerHarness({
     projectRoot: process.cwd(),
-    inFlightRuns: createNeonInFlightRunRegistry({ gate: lifecycleGate }),
+    inFlightRuns,
     acquireClient: async () => {
       const startOptions = await createLocalAppServerStartOptions();
       return await getDiscordTapClientPool().acquire(startOptions);
     },
     approvalPolicy: readCodexApprovalPolicyEnv(),
     sandbox: readCodexSandboxEnv(),
+    ...(model ? { model } : {}),
+    ...(effort ? { effort } : {}),
+    enableCapacityUpgradeRequests,
     turnCompletionTimeoutMs: readCodexAppServerTurnCompletionTimeoutMsEnv()
   });
+  return model && effort
+    ? {
+        ...harness,
+        runtime: {
+          provider: "openai",
+          runtime: "codex",
+          lane: "codex-app-server",
+          model,
+          effort
+        }
+      }
+    : harness;
 }
 
-function createDiscordClaudeTapHarness(): ICodexHarness {
+function createDiscordClaudeTapHarness(
+  override: { readonly model?: string; readonly effort?: TClaudeCliEffort } = {}
+): ICodexHarness {
   const claudeBin = process.env["NEON_CLAUDE_BIN"]?.trim() || "claude";
-  const model = readOptionalEnv("NEON_CLAUDE_MODEL");
-  const effort = readClaudeEffortEnv();
+  const model = override.model ?? readOptionalEnv("NEON_CLAUDE_MODEL");
+  const effort = override.effort ?? readClaudeEffortEnv();
   const permissionMode = readClaudePermissionModeEnv();
   const addDirs = readOptionalCsvEnv("NEON_CLAUDE_ADD_DIRS");
   const tools = readOptionalEnv("NEON_CLAUDE_TOOLS");
-  const turnCompletionTimeoutMs = readPositiveIntegerEnv("NEON_CLAUDE_TURN_COMPLETION_TIMEOUT_MS", 1_200_000);
+  const turnCompletionTimeoutMs = readPositiveIntegerEnv("NEON_CLAUDE_TURN_COMPLETION_TIMEOUT_MS", 3_600_000);
 
-  return createClaudeCliHarness({
+  const harness = createClaudeCliHarness({
     acquireTransport: (spec) => {
       const transport = createClaudeProcessTransport({
         command: claudeBin,
@@ -5926,6 +6704,82 @@ function createDiscordClaudeTapHarness(): ICodexHarness {
       Math.min(120_000, turnCompletionTimeoutMs)
     )
   });
+  return model && effort
+    ? {
+        ...harness,
+        runtime: {
+          provider: "anthropic",
+          runtime: "claude",
+          lane: "claude-cli",
+          model,
+          effort
+        }
+      }
+    : harness;
+}
+
+function createDiscordRuntimePickerCatalog(): readonly INeonDiscordRuntimeOption[] {
+  const catalog: INeonDiscordRuntimeOption[] = Object.entries(neonDiscordCapacityRuntimes).map(
+    ([tier, runtime]) => ({
+      id: `codex-${tier}`,
+      label: `Codex · ${runtime.model} · ${runtime.effort}`,
+      description: `OpenAI · ${tier === "sol" ? "schwere" : tier === "terra" ? "normale" : "kurze"} Aufgaben`,
+      ...runtime
+    })
+  );
+  const claudeModel = readOptionalEnv("NEON_CLAUDE_MODEL");
+  const claudeEffort = readClaudeEffortEnv();
+  if (claudeModel && claudeEffort) {
+    catalog.push({
+      id: "claude-primary",
+      label: `Claude · ${claudeModel} · ${claudeEffort}`,
+      description: "Anthropic · Claude CLI (Session-Standard)",
+      provider: "anthropic",
+      runtime: "claude",
+      lane: "claude-cli",
+      model: claudeModel,
+      effort: claudeEffort
+    });
+  }
+  for (const preset of neonDiscordClaudeRuntimePresets) {
+    const duplicate = catalog.some(
+      (entry) => entry.model === preset.model && entry.effort === preset.effort
+    );
+    if (!duplicate) {
+      catalog.push(preset);
+    }
+  }
+  return catalog;
+}
+
+function createDiscordHarnessForRuntimeSelection(
+  selection: INeonDiscordSessionRuntimeSelection,
+  inFlightRuns: INeonInFlightRunRegistry
+): ICodexHarness {
+  if (selection.runtime === "codex") {
+    const runtime = Object.values(neonDiscordCapacityRuntimes).find(
+      (candidate) => candidate.model === selection.model && candidate.effort === selection.effort
+    );
+    if (!runtime) {
+      throw new Error("Selected Codex runtime is no longer present in the live catalog");
+    }
+    return createDiscordCodexTapHarness(inFlightRuns, runtime, false);
+  }
+  return createDiscordClaudeTapHarness({
+    model: selection.model,
+    effort: parseClaudeEffort(selection.effort)
+  });
+}
+
+function sameHarnessRuntime(
+  left: INeonHarnessRuntimeMetadata,
+  right: INeonHarnessRuntimeMetadata
+): boolean {
+  return left.provider === right.provider &&
+    left.runtime === right.runtime &&
+    left.lane === right.lane &&
+    left.model === right.model &&
+    left.effort === right.effort;
 }
 
 function readClaudePermissionModeEnv(): TClaudeCliPermissionMode | undefined {
@@ -5952,6 +6806,26 @@ function readClaudeEffortEnv(): TClaudeCliEffort | undefined {
   }
 
   throw new Error(`Invalid NEON_CLAUDE_EFFORT: ${raw}`);
+}
+
+type TNeonCodexReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
+
+function readCodexReasoningEffortEnv(): TNeonCodexReasoningEffort | undefined {
+  const raw = process.env["NEON_CODEX_REASONING_EFFORT"]?.trim();
+  if (!raw) {
+    return undefined;
+  }
+  if (raw === "minimal" || raw === "low" || raw === "medium" || raw === "high" || raw === "xhigh") {
+    return raw;
+  }
+  throw new Error(`Invalid NEON_CODEX_REASONING_EFFORT: ${raw}`);
+}
+
+function parseClaudeEffort(value: string): TClaudeCliEffort {
+  if (value === "low" || value === "medium" || value === "high" || value === "xhigh" || value === "max") {
+    return value;
+  }
+  throw new Error("Selected Claude effort is no longer supported");
 }
 
 async function runGatewayStatus(): Promise<string> {
@@ -6074,7 +6948,7 @@ async function runLifecycleSmoke(): Promise<string> {
     }
 
     return [
-      "Neon Gateway lifecycle: ok",
+      "Neonika Gateway lifecycle: ok",
       `Snapshot: ${handle.url}/api/neon-gateway/lifecycle`,
       `Events: ${handle.url}/api/neon-gateway/events`,
       `State: ${lifecycle.state}`,
@@ -6147,7 +7021,7 @@ async function runGatewayProtocolSmoke(): Promise<string> {
     }
 
     return [
-      "Neon Gateway protocol: ok",
+      "Neonika Gateway protocol: ok",
       `Protocol: ${handle.url}/api/neon-gateway/protocol`,
       `WebSocket path: ${snapshot.endpoints.webSocketPath}`,
       `Hello: ${snapshot.hello.type} protocol=${snapshot.hello.protocol}`,
@@ -6211,7 +7085,7 @@ async function runGatewayWebSocketSmoke(): Promise<string> {
     }
 
     return [
-      "Neon Gateway WebSocket: ok",
+      "Neonika Gateway WebSocket: ok",
       `URL: ${handle.url.replace(/^http:/, "ws:")}/api/neon-gateway/ws`,
       "Challenge: connect.challenge",
       `Hello response: ${hello.id}`,
@@ -6538,7 +7412,7 @@ async function runChatSmoke(): Promise<string> {
       }
 
       return [
-        "Neon Chat API: ok",
+        "Neonika Chat API: ok",
         `URL: ${handle.url}/api/neon-chat/conversations`,
         `Conversations: ${payload.totals.conversations}`,
         `Messages: ${payload.totals.messages}`
@@ -6584,7 +7458,7 @@ async function runSessionsSmoke(): Promise<string> {
       }
 
       return [
-        "Neon Sessions API: ok",
+        "Neonika Sessions API: ok",
         `URL: ${handle.url}/api/neon-sessions`,
         `Sessions: ${payload.totals.sessions}`,
         `Runs: ${payload.totals.runs}`
@@ -6636,7 +7510,7 @@ async function runIndexerSmoke(): Promise<string> {
       }
 
       return [
-        "Neon Indexer API: ok",
+        "Neonika Indexer API: ok",
         `URL: ${handle.url}/api/neon-indexer`,
         `Sessions: ${payload.totals.sessions}`,
         `Runs: ${payload.totals.runs}`,
@@ -6712,7 +7586,7 @@ async function runTranscriptSmoke(): Promise<string> {
       }
 
       return [
-        "Neon Transcript API: ok",
+        "Neonika Transcript API: ok",
         `URL: ${handle.url}/api/neon-transcript`,
         `Sessions: ${payload.totals.sessions}`,
         `Messages: ${payload.totals.messages}`,
@@ -6744,7 +7618,7 @@ async function runLlmGateSmoke(): Promise<string> {
 
   const gate = resolveNeonLlmGate();
   return [
-    "Neon LLM gate smoke: ok",
+    "Neonika LLM gate smoke: ok",
     `Default invoker called: ${result.called}`,
     `Gate: ${gate.reason} (env ${gate.envKey})`,
     "Transport: claude -p Max-Plan CLI only (never api.anthropic.com)"
@@ -6786,7 +7660,7 @@ async function runTranscriptProposalsSmoke(): Promise<string> {
   }
 
   return [
-    "Neon Transcript proposals smoke: ok",
+    "Neonika Transcript proposals smoke: ok",
     `Proposals: ${proposals.length} (all planned, default dry-run)`,
     "Memory written: false · Model called: false",
     "Arming requires NEON_TRANSCRIPT_LLM_ENABLED + an injected runner"
@@ -6831,7 +7705,7 @@ async function runTranscriptPersistSmoke(): Promise<string> {
   }
 
   return [
-    "Neon Transcript persist smoke: ok",
+    "Neonika Transcript persist smoke: ok",
     `Results: ${results.length} (nothing written)`,
     "Productive write requires NEON_MEMORY_WRITE_ENABLED + an explicit isolated storePath",
     "Idempotent: content-hash dedupe skips re-runs"
@@ -6850,7 +7724,7 @@ async function runTranscriptScheduleSmoke(): Promise<string> {
   }
 
   return [
-    "Neon Transcript schedule smoke: ok",
+    "Neonika Transcript schedule smoke: ok",
     `Job: ${intent.jobId} every ${intent.cadenceMinutes} min`,
     `Gate: ${intent.gateReason}, would-emit: ${intent.wouldEmit}`,
     "Executed: false · Timer started: false (intent is descriptive only)"
@@ -6909,7 +7783,7 @@ async function runLiveIndexSyncSmoke(): Promise<string> {
     }
 
     return [
-      "Neon Live Index Sync smoke: ok",
+      "Neonika Live Index Sync smoke: ok",
       `Sources: discord=${result.collection.totals.discord} claude=${result.collection.totals.claude} codex=${result.collection.totals.codex}`,
       `Written: ${written} record(s) to isolated DB`,
       `FTS roundtrip hits: ${roundtrip.length}`,
@@ -6942,7 +7816,7 @@ async function runLiveIndexProductionCheck(): Promise<string> {
   const ready = daemonEnabled && Boolean(dbPath) && memoryGate.enabled;
 
   return [
-    `Neon Live Index Production: ${ready ? "ready" : "blocked"}`,
+    `Neonika Live Index Production: ${ready ? "ready" : "blocked"}`,
     `Daemon interval: ${daemonEnabled ? "enabled" : "disabled"}`,
     `Memory DB path: ${dbPath ? "configured" : "missing"}`,
     `Memory write gate: ${memoryGate.enabled ? "enabled" : "disabled"} (${memoryGate.reason})`,
@@ -6996,7 +7870,7 @@ async function runLiveIndexDaemonSmoke(): Promise<string> {
     }
 
     return [
-      "Neon Live Index Daemon smoke: ok",
+      "Neonika Live Index Daemon smoke: ok",
       `Sources: discord=${first.collection.totals.discord} claude=${first.collection.totals.claude} codex=${first.collection.totals.codex}`,
       `First scan changed: ${first.state.sources.discord.changed + first.state.sources.claude.changed + first.state.sources.codex.changed}`,
       `Second scan unchanged: ${second.state.sources.discord.unchanged + second.state.sources.claude.unchanged + second.state.sources.codex.unchanged}`,
@@ -7097,7 +7971,7 @@ async function runActivitySmoke(): Promise<string> {
       }
 
       return [
-        "Neon Activity API: ok",
+        "Neonika Activity API: ok",
         `URL: ${handle.url}/api/neon-activity`,
         `Entries: ${payload.totals.entries}`,
         `Runs: ${payload.totals.runs}`
@@ -7242,7 +8116,7 @@ async function runReplaySmoke(): Promise<string> {
       }
 
       return [
-        "Neon Replay API: ok",
+        "Neonika Replay API: ok",
         `URL: ${handle.url}/api/neon-replay`,
         `Run: ${latest.runId}`,
         `Events: ${latest.events.length}`,
@@ -7338,7 +8212,7 @@ async function runSkillsSmoke(): Promise<string> {
     }
 
     return [
-      "Neon Skills API: ok",
+      "Neonika Skills API: ok",
       `URL: ${handle.url}/api/neon-skills`,
       `Roots: ${payload.totals.readableRoots}/${payload.totals.roots}`,
       `Skills: ${payload.totals.skills}`,
@@ -7380,7 +8254,7 @@ async function runWebSearchSmoke(): Promise<string> {
   });
 
   return [
-    `Neon Web-Search smoke (live gate ${gate.enabled ? "ARMED" : "closed"}, ${gate.envKey})`,
+    `Neonika Web-Search smoke (live gate ${gate.enabled ? "ARMED" : "closed"}, ${gate.envKey})`,
     "",
     `# "${query}"`,
     renderNeonWebSearchResult(result)
@@ -7499,7 +8373,7 @@ function runRouteProjectionSmoke(): string {
 async function runCronStoreSmoke(): Promise<string> {
   const projectRoot = await mkdtemp(join(tmpdir(), "neonika-cron-store-smoke-"));
   const now = 1_750_000_000_000;
-  const lines = ["Neon Cron-store smoke (isolated tmp store)"];
+  const lines = ["Neonika Cron-store smoke (isolated tmp store)"];
 
   // Default-off: gate closed -> blocked, no file written.
   const closedGate = resolveNeonCronStoreGate({});
@@ -7591,7 +8465,7 @@ async function runCronCommandSmoke(): Promise<string> {
     }
 
     return [
-      "Neon Cron-command smoke: ok",
+      "Neonika Cron-command smoke: ok",
       `default-off: ${off.state} (${off.gate?.reason ?? "no-gate"})`,
       `armed add: ${armed.state} (${armed.appendState ?? "no-append"})`,
       `list: ${listed.state}, jobs=${listed.jobs.length}`,
@@ -7677,7 +8551,7 @@ async function runWebFetchSmoke(): Promise<string> {
     ? [urlArg]
     : ["https://example.com/", "http://169.254.169.254/latest/meta-data/", "http://127.0.0.1:8797/"];
 
-  const lines = [`Neon Web-Fetch smoke (live gate ${gate.enabled ? "ARMED" : "closed"}, ${gate.envKey})`];
+  const lines = [`Neonika Web-Fetch smoke (live gate ${gate.enabled ? "ARMED" : "closed"}, ${gate.envKey})`];
   for (const sample of samples) {
     const result = await executeNeonWebFetch({ url: sample, gate });
     lines.push("", `# ${sample}`, renderNeonWebFetchResult(result));
@@ -7729,7 +8603,7 @@ async function runToolsSmoke(): Promise<string> {
     const liveModeTools = payload.tools.filter((tool) => tool.mode === "live").length;
 
     return [
-      "Neon Tools API: ok",
+      "Neonika Tools API: ok",
       `URL: ${handle.url}/api/neon-tools`,
       `Live gate: ${payload.gate.enabled ? "ARMED" : "closed"} (${payload.gate.envKey})`,
       `Tools: ${payload.totals.available}/${payload.totals.tools} available`,
@@ -7768,7 +8642,7 @@ async function runExtensionsSmoke(): Promise<string> {
     }
 
     return [
-      "Neon Extensions API: ok",
+      "Neonika Extensions API: ok",
       `URL: ${handle.url}/api/neon-extensions`,
       `Extensions: ${payload.totals.extensionManifests}`,
       `Reference-only: ${payload.totals.referenceExtensions}`,
@@ -7822,7 +8696,7 @@ async function runPluginsSmoke(): Promise<string> {
     }
 
     return [
-      "Neon Plugins API: ok",
+      "Neonika Plugins API: ok",
       `URL: ${handle.url}/api/neon-plugins`,
       `Plugins: ${payload.totals.plugins}`,
       `Install gate: ${payload.installGate.enabled ? "enabled" : "disabled"} (${payload.installGate.flag})`,
@@ -7878,7 +8752,7 @@ async function runSkillPolicySmoke(): Promise<string> {
     }
 
     return [
-      "Neon Skill Policy API: ok",
+      "Neonika Skill Policy API: ok",
       `URL: ${handle.url}/api/neon-skills/policy`,
       `Agent: ${policy.agentId} (resolved=${policy.agentResolved})`,
       `Policy enabled: ${policy.policyEnabled}`,
@@ -8372,7 +9246,7 @@ async function runCronDaemonRun(): Promise<string> {
   });
 
   process.stdout.write(
-    `Neon Cron Daemon: starting (interval ${intervalMs}ms, gate ${gate.reason})\n` +
+    `Neonika Cron Daemon: starting (interval ${intervalMs}ms, gate ${gate.reason})\n` +
       (gate.enabled
         ? "Gate armed: ticks read cron-store jobs and write terminal shadow run-records (delivery suppressed, stage unchanged).\n"
         : "Gate closed: daemon ticks but emits/writes nothing. Set NEON_CRON_TIMER_ENABLED to arm.\n") +
@@ -8731,7 +9605,7 @@ async function runHeartbeatDaemonRun(): Promise<string> {
   });
 
   process.stdout.write(
-    `Neon Heartbeat Daemon: starting (interval ${intervalMs}ms, agents ${agents.length}, gate ${gate.reason})\n` +
+    `Neonika Heartbeat Daemon: starting (interval ${intervalMs}ms, agents ${agents.length}, gate ${gate.reason})\n` +
       (gate.enabled
         ? "Gate armed: ticks will write terminal shadow run-records (delivery suppressed, stage unchanged).\n"
         : "Gate closed: daemon ticks but emits/writes nothing. Set NEON_HEARTBEAT_TIMER_ENABLED to arm.\n") +
@@ -8941,11 +9815,11 @@ async function runAutomationSmoke(): Promise<string> {
       payload.hookRegistry.handlerCount !== 0 ||
       payload.hookRegistry.dispatchEnabled !== false
     ) {
-      throw new Error(`Neon Automation smoke failed with HTTP ${response.status}`);
+      throw new Error(`Neonika Automation smoke failed with HTTP ${response.status}`);
     }
 
     return [
-      "Neon Automation API: ok",
+      "Neonika Automation API: ok",
       `URL: ${handle.url}/api/neon-automation`,
       `Jobs: ${payload.totals.jobs}`,
       `Hooks: ${payload.totals.hooks}`,
@@ -9065,7 +9939,7 @@ async function runNodePairingTokenGateSmoke(): Promise<string> {
       }
 
       return [
-        "Neon Node Pairing Token Gate API: ok",
+        "Neonika Node Pairing Token Gate API: ok",
         `URL: ${handle.url}/api/neon-nodes/pairing/token-gate`,
         `State: ${payload.state}`,
         `Eligible approvals: ${payload.totals.eligibleApprovals}`,
@@ -9167,7 +10041,7 @@ async function runNodePairingCanaryTokenIssueSmoke(): Promise<string> {
       }
 
       return [
-        "Neon Node Canary Token Issue: ok",
+        "Neonika Node Canary Token Issue: ok",
         `URL: ${handle.url}/api/neon-nodes/pairing/canary-tokens`,
         `Issue: ${result.record.tokenIssueId}`,
         `Fingerprint: ${result.record.tokenFingerprint}`,
@@ -9317,7 +10191,7 @@ async function runNodeDeviceSessionHandshakeSmoke(): Promise<string> {
       }
 
       return [
-        "Neon Node Device Session Handshake: ok",
+        "Neonika Node Device Session Handshake: ok",
         `URL: ${handle.url}/api/neon-nodes/device-sessions`,
         `Session: ${smoke.sessionResult.record.sessionId}`,
         `Fingerprint: ${smoke.sessionResult.record.sessionFingerprint}`,
@@ -9435,7 +10309,7 @@ async function runNodeActionRequestSmoke(): Promise<string> {
       }
 
       return [
-        "Neon Node Action Request Catalog: ok",
+        "Neonika Node Action Request Catalog: ok",
         `URL: ${handle.url}/api/neon-nodes/action-requests`,
         `Requests: ${actionSnapshot.totals.requests}`,
         `Approval required: ${actionSnapshot.totals.approvalRequired}`,
@@ -9520,7 +10394,7 @@ async function runNodeActionApprovalSmoke(): Promise<string> {
       }
 
       return [
-        "Neon Node Action Approval Audit: ok",
+        "Neonika Node Action Approval Audit: ok",
         `URL: ${handle.url}/api/neon-nodes/action-requests`,
         `Approval records: ${actionSnapshot.totals.approvalRecords}`,
         `Pending approvals: ${actionSnapshot.totals.pendingApproval}`,
@@ -9652,7 +10526,7 @@ async function runNodeActionResultPreviewSmoke(): Promise<string> {
       }
 
       return [
-        "Neon Node Action Result Preview: ok",
+        "Neonika Node Action Result Preview: ok",
         `URL: ${handle.url}/api/neon-nodes/action-requests`,
         `Result previews: ${payload.totals.resultPreviews}`,
         `Ready previews: ${payload.totals.readyResultPreviews}`,
@@ -9712,7 +10586,7 @@ async function runNodeTransportSmoke(): Promise<string> {
       }
 
       return [
-        "Neon Node Transport: ok",
+        "Neonika Node Transport: ok",
         `URL: ${handle.url}/api/neon-nodes/transport`,
         `Dispatches: ${payload.totals.dispatches}`,
         `Dispatch Kind: ${payload.dispatches[0]?.kind ?? "none"}`,
@@ -9794,7 +10668,7 @@ async function runNodeTransportResultIngestSmoke(): Promise<string> {
       }
 
       return [
-        "Neon Node Transport Result Ingest: ok",
+        "Neonika Node Transport Result Ingest: ok",
         `URL: ${handle.url}/api/neon-nodes/transport`,
         `Dispatches: ${payload.totals.dispatches}`,
         `Results: ${payload.totals.results}`,
@@ -9889,7 +10763,7 @@ async function runNodeTransportPollSmoke(): Promise<string> {
       }
 
       return [
-        "Neon Node Transport Poll: ok",
+        "Neonika Node Transport Poll: ok",
         `URL: ${handle.url}/api/neon-nodes/transport/poll`,
         `Dispatches: ${payload.totals.dispatches}`,
         `Polls: ${payload.totals.polls}`,
@@ -9996,7 +10870,7 @@ async function runNodeTransportResultSubmitSmoke(): Promise<string> {
       }
 
       return [
-        "Neon Node Transport Result Submit: ok",
+        "Neonika Node Transport Result Submit: ok",
         `URL: ${handle.url}/api/neon-nodes/transport/results`,
         `Dispatches: ${payload.totals.dispatches}`,
         `Results: ${payload.totals.results}`,
@@ -10082,7 +10956,7 @@ async function runNodeRunnerOnceSmoke(): Promise<string> {
       }
 
       return [
-        "Neon Node Runner: ok",
+        "Neonika Node Runner: ok",
         `URL: ${handle.url}`,
         `Dispatches: ${runnerResult.dispatches}`,
         `Submitted: ${runnerResult.submitted}`,
@@ -10111,7 +10985,7 @@ async function runNodeRunnerStart(): Promise<string> {
   });
 
   return [
-    "Neon Node Runner control: ok",
+    "Neonika Node Runner control: ok",
     `Desired: ${control.desiredState}`,
     `Operator: ${control.operatorId}`,
     `Updated: ${control.updatedAt}`,
@@ -10127,7 +11001,7 @@ async function runNodeRunnerStop(): Promise<string> {
   });
 
   return [
-    "Neon Node Runner control: ok",
+    "Neonika Node Runner control: ok",
     `Desired: ${control.desiredState}`,
     `Operator: ${control.operatorId}`,
     `Updated: ${control.updatedAt}`,
@@ -10227,7 +11101,7 @@ async function runNodeRunnerLoopSmoke(): Promise<string> {
       }
 
       return [
-        "Neon Node Runner Loop: ok",
+        "Neonika Node Runner Loop: ok",
         `URL: ${handle.url}/api/neon-nodes/runner`,
         `Control: ${snapshot.control.desiredState} -> ${stoppedSnapshot.control.desiredState}`,
         `Cycles: ${snapshot.totals.cycles}`,
@@ -10325,7 +11199,7 @@ async function runNodeRunnerServiceSmoke(): Promise<string> {
     }
 
     return [
-      "Neon Node Runner Service: ok",
+      "Neonika Node Runner Service: ok",
       `LaunchAgent: ${snapshot.paths.launchAgentPath}`,
       `Manager: ${snapshot.manager}`,
       `State: ${snapshot.state}`,
@@ -10346,7 +11220,7 @@ async function runNodeRunnerServiceActions(): Promise<string> {
       : ["- none"];
 
   return [
-    `Neon Node Runner Service Actions: ${snapshot.state}`,
+    `Neonika Node Runner Service Actions: ${snapshot.state}`,
     `Requests: ${snapshot.totals.requests}`,
     `Pending approvals: ${snapshot.totals.pendingApproval}`,
     `Blocked: ${snapshot.totals.blocked}`,
@@ -10372,7 +11246,7 @@ async function runNodeRunnerServiceActionRequest(): Promise<string> {
   });
 
   return [
-    "Neon Node Runner service action request recorded: ok",
+    "Neonika Node Runner service action request recorded: ok",
     `Request: ${request.actionRequestId}`,
     `Action: ${request.action}`,
     `State: ${request.state}`,
@@ -10395,7 +11269,7 @@ async function runNodeRunnerServiceActionApprove(): Promise<string> {
   });
 
   return [
-    "Neon Node Runner service action approval recorded: ok",
+    "Neonika Node Runner service action approval recorded: ok",
     `Approval: ${approval.approvalId}`,
     `Request: ${approval.actionRequestId}`,
     `Decision: ${approval.decision}`,
@@ -10415,7 +11289,7 @@ async function runNodeRunnerServiceActionExecute(): Promise<string> {
   });
 
   return [
-    "Neon Node Runner service action execution recorded: ok",
+    "Neonika Node Runner service action execution recorded: ok",
     `Execution: ${execution.executionId}`,
     `Approval: ${execution.approvalId}`,
     `Action: ${execution.action}`,
@@ -10515,7 +11389,7 @@ async function runNodeRunnerServiceActionsSmoke(): Promise<string> {
     }
 
     return [
-      "Neon Node Runner Service Actions: ok",
+      "Neonika Node Runner Service Actions: ok",
       `Request: ${request.actionRequestId}`,
       `Approval: ${approval.approvalId}`,
       `Execution: ${execution.executionId}`,
@@ -10584,7 +11458,7 @@ async function runNodeRunnerServiceCanarySmoke(): Promise<string> {
     }
 
     return [
-      "Neon Node Runner Service Canary: ok",
+      "Neonika Node Runner Service Canary: ok",
       `State: ${snapshot.state}`,
       `Executor: ${snapshot.executorMode}`,
       `Rollback configured: ${snapshot.rollbackConfigured}`,
@@ -10874,7 +11748,7 @@ async function runNodePairingSmoke(): Promise<string> {
       }
 
       return [
-        "Neon Node Pairing API: ok",
+        "Neonika Node Pairing API: ok",
         `URL: ${handle.url}/api/neon-nodes/pairing`,
         `Requests: ${payload.totals.requests}`,
         `Approvals: ${payload.totals.approvals}`,
@@ -10905,15 +11779,15 @@ async function runNodesSmoke(): Promise<string> {
     const fileCapability = payload.capabilities.find((capability) => capability.id === "file-transfer");
 
     if (!response.ok || payload.state !== "ready" || !payload.localNode.nodeId.startsWith("local-")) {
-      throw new Error(`Neon Nodes smoke failed with HTTP ${response.status}`);
+      throw new Error(`Neonika Nodes smoke failed with HTTP ${response.status}`);
     }
 
     if (!fileCapability || fileCapability.policy !== "read-only") {
-      throw new Error("Neon Nodes smoke failed: file-transfer is not read-only");
+      throw new Error("Neonika Nodes smoke failed: file-transfer is not read-only");
     }
 
     return [
-      "Neon Nodes API: ok",
+      "Neonika Nodes API: ok",
       `URL: ${handle.url}/api/neon-nodes`,
       `Node: ${payload.localNode.nodeId}`,
       `Capabilities: ${payload.totals.capabilities}`,
@@ -10970,7 +11844,7 @@ async function runSecretResolutionSmoke(): Promise<string> {
     Promise.resolve({ exitCode: 0, stdout: `${fakeSecret}\n`, stderr: "" });
 
   const result = await resolveNeonSecretRef({
-    ref: "op://Automation/Neon Discord Bot/credential",
+    ref: "op://Automation/Neonika Discord Bot/credential",
     gate,
     runOp
   });
@@ -11054,7 +11928,7 @@ async function runMissionControlUiSmoke(): Promise<string> {
     const response = await fetch(`${handle.url}/mission-control/gateway`);
     const html = await response.text();
     const requiredMarkers = [
-      "Neon Mission Control",
+      "Neonika Mission Control",
       "NEON CORE",
       "data-view=\"chat\"",
       "data-view=\"overview\"",
@@ -11073,20 +11947,20 @@ async function runMissionControlUiSmoke(): Promise<string> {
       "New session",
       "Chaty Lab",
       "Gateway Zugang",
-      "Neon Chat",
+      "Neonika Chat",
       "WebSocket URL",
       "Event Stream",
       "Gateway Snapshot",
-      "Neon Aktivität",
-      "Neon Instanzen",
-      "Neon Nutzung",
-      "Neon Agents",
+      "Neonika Aktivität",
+      "Neonika Instanzen",
+      "Neonika Nutzung",
+      "Neonika Agents",
       "Cron-Aufgaben",
-      "Neon Skills",
-      "Neon Plugins",
-      "Neon Geräte",
-      "Neon Träume",
-      "Neon Einstellungen",
+      "Neonika Skills",
+      "Neonika Plugins",
+      "Neonika Geräte",
+      "Neonika Träume",
+      "Neonika Einstellungen",
       "/api/neon-plugins",
       "/api/neon-cutover",
       "/api/neon-gateway/lifecycle",
@@ -11567,7 +12441,7 @@ async function runWorkboardSmoke(): Promise<string> {
       }
 
       return [
-        "Neon Workboard API: ok",
+        "Neonika Workboard API: ok",
         `URL: ${handle.url}/api/neon-workboard`,
         `Tasks: ${payload.totals.tasks} (open ${payload.totals.open} / blocked ${payload.totals.blocked})`,
         `In Progress column: ${inProgress.count}`,
@@ -11634,7 +12508,7 @@ async function runWorkboardAutopilotPoll(options: INeonWorkboardAutoDispatchOpti
 async function runWorkboardAutopilotOnce(): Promise<string> {
   if (!isReadyLike(process.env["NEON_WORKBOARD_AUTOPILOT_ENABLED"])) {
     return [
-      "Neon Workboard autopilot: not-run",
+      "Neonika Workboard autopilot: not-run",
       "Set NEON_WORKBOARD_AUTOPILOT_ENABLED=ready to process ready cards.",
       "Executor: NEON_WORKBOARD_AUTOPILOT_EXECUTOR=codex|dry|gateway-dry; default codex.",
       "Safety: codex mode also requires NEON_LIVE_RUN_LIFECYCLE_ENABLED=ready; write mode requires NEON_HARNESS_WRITE_ENABLED=ready."
@@ -11653,7 +12527,7 @@ async function runWorkboardAutopilotLoop(): Promise<undefined> {
   if (!isReadyLike(process.env["NEON_WORKBOARD_AUTOPILOT_ENABLED"])) {
     console.log(
       [
-        "Neon Workboard autopilot loop: not-run",
+        "Neonika Workboard autopilot loop: not-run",
         "Set NEON_WORKBOARD_AUTOPILOT_ENABLED=ready to poll ready cards.",
         "Stop: Ctrl+C"
       ].join("\n")
@@ -11672,7 +12546,7 @@ async function runWorkboardAutopilotLoop(): Promise<undefined> {
 
   console.log(
     [
-      "Neon Workboard autopilot loop: ready",
+      "Neonika Workboard autopilot loop: ready",
       `Interval: ${intervalMs}ms`,
       `Owner: ${options.ownerId ?? "workboard-autopilot"}`,
       "Stop: Ctrl+C"
@@ -11694,7 +12568,7 @@ async function runWorkboardAutopilotLoop(): Promise<undefined> {
   }
 
   await stopPromise;
-  console.log("Neon Workboard autopilot loop: stopped");
+  console.log("Neonika Workboard autopilot loop: stopped");
   return undefined;
 }
 
@@ -11767,7 +12641,7 @@ async function runWorkboardAutopilotSmoke(): Promise<string> {
     }
 
     return [
-      "Neon Workboard autopilot smoke: ok",
+      "Neonika Workboard autopilot smoke: ok",
       `Completed card: ${successCard.id}`,
       `Blocked card: ${failureCard.id}`,
       `Task sync: done=${successTask?.status ?? "missing"} blocked=${failureTask?.status ?? "missing"}`,
@@ -12376,7 +13250,7 @@ async function runFlowPlanReport(): Promise<string> {
   const flow = await readNeonFlow(process.cwd(), flowId);
 
   if (!flow) {
-    return `Neon Flow not found: ${flowId}`;
+    return `Neonika Flow not found: ${flowId}`;
   }
 
   return renderNeonFlowPlanReport(planNeonFlowExecution(flow));
@@ -12430,7 +13304,7 @@ async function runFlowsSmoke(): Promise<string> {
         : "redacted";
 
       return [
-        "Neon Flows API: ok",
+        "Neonika Flows API: ok",
         `URL: ${handle.url}/api/neon-flows`,
         `Flows: ${flowsPayload.totals.flows} (armed ${flowsPayload.totals.armed}) · gated steps: ${flowsPayload.totals.gatedSteps}`,
         `Plan: ${planPayload.flowId} executable=${planPayload.executable} blocked=${planPayload.totals.blocked} plannable=${planPayload.totals.plannable}`,
@@ -12565,7 +13439,7 @@ async function runContextSmoke(): Promise<string> {
       const leaks = JSON.stringify(payload).includes("sk-live-") ? "leak" : "redacted";
 
       return [
-        "Neon Context Pack API: ok",
+        "Neonika Context Pack API: ok",
         `URL: ${handle.url}/api/neon-context/pack`,
         `State: ${payload.state} · items: ${payload.totals.items} · chars: ${payload.bounds.charsUsed}/${payload.bounds.charBudget}`,
         `Runs: ${runsSection?.items.length} · Tasks: ${tasksSection?.items.length} · Channel: ${channelSection?.items.length}`,

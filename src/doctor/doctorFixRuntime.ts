@@ -129,7 +129,7 @@ export async function rollbackNeonDoctorPermissionFix(
 
 export function renderNeonDoctorPermissionFixReport(result: INeonDoctorPermissionFixResult): string {
   return [
-    `Neon Doctor Fix: ${result.state}${result.blockReason ? ` / ${result.blockReason}` : ""} (${result.gate.reason}, env ${result.gate.envKey})`,
+    `Neonika Doctor Fix: ${result.state}${result.blockReason ? ` / ${result.blockReason}` : ""} (${result.gate.reason}, env ${result.gate.envKey})`,
     `Kind: ${result.kind}`,
     `Target: ${result.targetPath}`,
     `Mode: ${result.previousModeOctal ?? "?"} -> ${result.newModeOctal ?? result.previousModeOctal ?? "?"}`,

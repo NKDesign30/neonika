@@ -16,7 +16,7 @@ import {
   resolveNeonGatewayAllowedOrigins
 } from "../src/gateway/webSocketServer.js";
 
-describe("Neon Gateway WebSocket transport", () => {
+describe("Neonika Gateway WebSocket transport", () => {
   it("performs challenge, hello, snapshot event, and read-only RPC", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "neonika-gateway-ws-"));
 
@@ -778,7 +778,7 @@ function isReplayPayload(input: unknown): input is { readonly state: string } {
   );
 }
 
-describe("Neon Gateway WS upgrade origin policy", () => {
+describe("Neonika Gateway WS upgrade origin policy", () => {
   it("resolves a comma-separated allowlist and trims entries", () => {
     const resolved = resolveNeonGatewayAllowedOrigins({
       NEON_GATEWAY_ALLOWED_ORIGINS: " https://control.neon ,, http://localhost:5173 "

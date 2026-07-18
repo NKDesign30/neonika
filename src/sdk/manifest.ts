@@ -1,4 +1,4 @@
-// Neon SDK — surface manifest.
+// Neonika SDK — surface manifest.
 //
 // The single source of truth describing the curated SDK layer: which contract
 // surfaces exist, what each curates, and which upstream package it mirrors. The
@@ -106,7 +106,7 @@ export function createNeonSdkManifest(): INeonSdkManifest {
 
 export function renderNeonSdkManifest(): string {
   const lines: string[] = [
-    `Neon SDK v${NEON_SDK_VERSION}`,
+    `Neonika SDK v${NEON_SDK_VERSION}`,
     `Surfaces: ${neonSdkSurfaces.length}`,
     ""
   ];

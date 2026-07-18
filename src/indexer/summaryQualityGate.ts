@@ -1,4 +1,4 @@
-// Neon Transcript Indexer — summary quality gate. Port of the battle-tested v3
+// Neonika Transcript Indexer — summary quality gate. Port of the battle-tested v3
 // live-pass gate (the previous runtime's quality gate): sanitize what is safe to fix
 // (boilerplate greetings, enclosing markdown codefences), reject what is
 // structurally wrong (empty output, leaked template placeholders, missing

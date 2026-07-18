@@ -1,6 +1,6 @@
 import { readReadyCutoverEnv } from "../core/cutover.js";
 
-// Neon Tools Runtime — capability type model + availability/gate evaluation.
+// Neonika Tools Runtime — capability type model + availability/gate evaluation.
 //
 // Rebuild-native from upstream `src/tools/types.ts` + `src/tools/availability.ts`
 // + `src/tools/planner.ts`. Upstream models a generic tool registry with

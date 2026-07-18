@@ -24,7 +24,7 @@ function proposal(overrides: Partial<INeonTranscriptProposal> = {}): INeonTransc
   };
 }
 
-describe("Neon Transcript persist runtime (S4)", () => {
+describe("Neonika Transcript persist runtime (S4)", () => {
   it("refuses to promote a non-proposed proposal", async () => {
     const result = await promoteNeonTranscriptProposal({
       proposal: proposal({ state: "planned" }),

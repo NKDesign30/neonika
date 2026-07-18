@@ -12,7 +12,7 @@ import {
   writeNeonMirrorEvidence
 } from "../src/index.js";
 
-describe("Neon Mirror evidence", () => {
+describe("Neonika Mirror evidence", () => {
   it("writes redacted old-vs-new comparison evidence and reports ready", async () => {
     const projectRoot = await createTempProjectRoot();
     const secretValue = "sk-mirrorsecretsecretsecret";
@@ -42,7 +42,7 @@ describe("Neon Mirror evidence", () => {
       assert.equal(snapshot.state, "ready");
       assert.equal(snapshot.totals.accepted, 1);
       assert.equal(snapshot.latestRecord?.evidenceId, "mirror-evidence-1");
-      assert.match(report, /Neon Mirror Evidence: ready/);
+      assert.match(report, /Neonika Mirror Evidence: ready/);
       assert.doesNotMatch(serialized, new RegExp(secretValue));
       assert.doesNotMatch(report, new RegExp(secretValue));
     } finally {

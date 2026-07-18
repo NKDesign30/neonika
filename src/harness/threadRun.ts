@@ -1,3 +1,7 @@
+/**
+ * Adapted in part from OpenClaw src/agents/tool-display-config.ts.
+ * See THIRD_PARTY_NOTICES.md for attribution and license details.
+ */
 import {
   codexAppServerMethods,
   type ICodexAppServerClient,
@@ -10,6 +14,7 @@ import { redactText } from "./redaction.js";
 
 export type TCodexApprovalPolicy = "untrusted" | "on-failure" | "on-request" | "never";
 export type TCodexSandboxMode = "read-only" | "workspace-write" | "danger-full-access";
+export type TCodexReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
 export type TCodexThreadSource = "started" | "resumed";
 export type TCodexTurnStatus = "completed" | "interrupted" | "failed" | "inProgress" | "unknown";
 
@@ -42,6 +47,7 @@ export interface ICodexTurnStartInput {
   readonly cwd?: string;
   readonly approvalPolicy?: TCodexApprovalPolicy;
   readonly model?: string;
+  readonly effort?: TCodexReasoningEffort;
   readonly serviceTier?: string;
 }
 
@@ -51,6 +57,23 @@ export interface ICodexTurnHandle {
   readonly status: TCodexTurnStatus;
   readonly response: TJsonValue | undefined;
 }
+
+export type TCodexProgressItemType =
+  | "commandExecution"
+  | "fileChange"
+  | "webSearch"
+  | "mcpToolCall"
+  | "reasoning"
+  | "imageView";
+
+const codexProgressItemTypes: ReadonlySet<string> = new Set([
+  "commandExecution",
+  "fileChange",
+  "webSearch",
+  "mcpToolCall",
+  "reasoning",
+  "imageView"
+]);
 
 export type TCodexRunEvent =
   | {
@@ -77,8 +100,23 @@ export type TCodexRunEvent =
       readonly status: TCodexTurnStatus;
     }
   | {
+      readonly type: "item.progress";
+      readonly threadId: string;
+      readonly itemId: string;
+      readonly itemType: TCodexProgressItemType;
+      readonly phase: "started" | "completed";
+      readonly detail?: string;
+    }
+  | {
+      readonly type: "reasoning.delta";
+      readonly threadId: string;
+      readonly itemId: string;
+      readonly text: string;
+    }
+  | {
       readonly type: "error";
       readonly message: string;
+      readonly willRetry: boolean;
     }
   | {
       readonly type: "unknown";
@@ -158,6 +196,49 @@ export function createTextTurnInput(text: string): TJsonValue {
   ];
 }
 
+const PROGRESS_ITEM_DETAIL_MAX_CHARS = 160;
+
+// Detail extraction mirrors OpenClaw's per-tool detailKeys idea
+// (openclaw src/agents/tool-display-config.ts) rebuilt Neon-native: one
+// leak-checked line fragment per item type, never the raw payload.
+function readProgressItemDetail(
+  params: IJsonObject | undefined,
+  itemType: TCodexProgressItemType
+): string | undefined {
+  const raw = ((): string | undefined => {
+    switch (itemType) {
+      case "commandExecution":
+        return readNestedString(params, ["item", "command"]);
+      case "webSearch":
+        return readNestedString(params, ["item", "query"]);
+      case "mcpToolCall": {
+        const server = readNestedString(params, ["item", "server"]);
+        const tool = readNestedString(params, ["item", "tool"]);
+        return server && tool ? `${server}/${tool}` : (tool ?? server);
+      }
+      case "fileChange": {
+        const item = params?.["item"];
+        const changes = isJsonObject(item) ? item["changes"] : undefined;
+        return Array.isArray(changes) && changes.length > 0
+          ? `${changes.length} Datei(en)`
+          : undefined;
+      }
+      case "reasoning":
+      case "imageView":
+        return undefined;
+    }
+  })();
+
+  const trimmed = raw?.trim().replace(/\s+/gu, " ");
+  if (!trimmed) {
+    return undefined;
+  }
+  const redacted = redactText(trimmed);
+  return redacted.length > PROGRESS_ITEM_DETAIL_MAX_CHARS
+    ? `${redacted.slice(0, PROGRESS_ITEM_DETAIL_MAX_CHARS - 1)}…`
+    : redacted;
+}
+
 export function projectCodexNotification(
   notification: ICodexAppServerNotification
 ): TCodexRunEvent {
@@ -228,10 +309,57 @@ export function projectCodexNotification(
             method: notification.method
           };
     }
+    case "item/reasoning/summaryTextDelta":
+    case "item/reasoning/textDelta": {
+      const threadId = readString(params?.["threadId"]);
+      const itemId = readString(params?.["itemId"]);
+      const delta = readString(params?.["delta"]);
+
+      return threadId && itemId && delta !== undefined
+        ? {
+            type: "reasoning.delta",
+            threadId,
+            itemId,
+            text: redactText(delta)
+          }
+        : {
+            type: "unknown",
+            method: notification.method
+          };
+    }
+    case "item/started":
+    case "item/completed": {
+      const threadId = readString(params?.["threadId"]);
+      const itemId = readNestedString(params, ["item", "id"]);
+      const itemType = readNestedString(params, ["item", "type"]);
+
+      // agentMessage is the reply itself (already streamed via item/agentMessage/delta),
+      // not a work step worth surfacing as progress.
+      if (!threadId || !itemId || !itemType || !codexProgressItemTypes.has(itemType)) {
+        return {
+          type: "unknown",
+          method: notification.method
+        };
+      }
+      const detail = readProgressItemDetail(params, itemType as TCodexProgressItemType);
+      return {
+        type: "item.progress",
+        threadId,
+        itemId,
+        itemType: itemType as TCodexProgressItemType,
+        phase: notification.method === "item/started" ? "started" : "completed",
+        ...(detail ? { detail } : {})
+      };
+    }
     case "error": {
       return {
         type: "error",
-        message: redactText(readString(params?.["message"]) ?? "Codex app-server emitted an error")
+        message: redactText(
+          readNestedString(params, ["error", "message"]) ??
+            readString(params?.["message"]) ??
+            "Codex app-server emitted an error"
+        ),
+        willRetry: params?.["willRetry"] === true
       };
     }
     default:
@@ -278,6 +406,7 @@ function buildTurnStartParams(input: ICodexTurnStartInput): TJsonValue {
     cwd: input.cwd,
     approvalPolicy: input.approvalPolicy,
     model: input.model,
+    effort: input.effort,
     serviceTier: input.serviceTier
   });
 }

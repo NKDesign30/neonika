@@ -124,7 +124,7 @@ export function renderNeonReplayReport(snapshot: INeonReplaySnapshot): string {
     .join(", ");
 
   return [
-    `Neon Replay: ${snapshot.state}`,
+    `Neonika Replay: ${snapshot.state}`,
     `Runs: ${snapshot.totals.filteredRuns}/${snapshot.totals.sourceRuns}`,
     `Events: ${snapshot.totals.events}`,
     `Filters: ${filters || "none"}`,
@@ -211,7 +211,7 @@ export function renderNeonReplayEventPageReport(page: INeonReplayEventPage): str
   const head = page.items[0];
 
   return [
-    `Neon Replay Page: ${page.state}`,
+    `Neonika Replay Page: ${page.state}`,
     `Events: ${page.returned}/${page.totalEvents} (limit ${page.limit})`,
     `HasMore: ${page.hasMore ? "yes" : "no"}`,
     `NextCursor: ${page.nextCursor ?? "none"}`,

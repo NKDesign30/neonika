@@ -200,7 +200,7 @@ export function renderNeonGatewayRouteInspectionReport(
       : ["- none"];
 
   return [
-    `Neon Gateway Routes: ${snapshot.state}`,
+    `Neonika Gateway Routes: ${snapshot.state}`,
     `Discord: account=${snapshot.discord.accountId} agent=${snapshot.discord.agentId} botUserId=${snapshot.discord.botUserIdPresent ? "present" : "missing"} mention=${snapshot.discord.mentionPolicy} harness=${snapshot.discord.harnessMode}`,
     `Identity: applicationId=${snapshot.discord.applicationId ?? "unknown"} consistency=${snapshot.discord.botIdentityConsistency}`,
     `Auth: discord=${snapshot.authStatus[0]?.state ?? "needs-config"} bot=${snapshot.authStatus[0]?.botIdentity ?? "missing"} guild=${snapshot.authStatus[0]?.guildScope ?? "missing"} channel=${snapshot.authStatus[0]?.channelScope ?? "missing"}`,
@@ -297,7 +297,7 @@ function createRecovery(input: {
   }
 
   if (!input.agentFound) {
-    recovery.push("Set NEON_DISCORD_AGENT_ID to a known Neon Agent.");
+    recovery.push("Set NEON_DISCORD_AGENT_ID to a known Neonika Agent.");
   }
 
   return recovery;

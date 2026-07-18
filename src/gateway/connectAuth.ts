@@ -4,7 +4,7 @@ import {
 } from "./httpMutationAuth.js";
 
 /**
- * WS connect-credential auth for the Neon Gateway (Z303).
+ * WS connect-credential auth for the Neonika Gateway (Z303).
  *
  * The HTTP mutation routes already gate writes behind
  * `NEON_GATEWAY_HTTP_MUTATION_TOKEN` (`httpMutationAuth.ts`). Until this slice

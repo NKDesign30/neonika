@@ -20,7 +20,7 @@ function scriptedInvoker(
   };
 }
 
-describe("Neon LLM fallback invoker", () => {
+describe("Neonika LLM fallback invoker", () => {
   it("passes gate-closed non-calls through without a fallback attempt", async () => {
     const calls: INeonLlmRequest[] = [];
     const invoker = createNeonFallbackLlmInvoker({

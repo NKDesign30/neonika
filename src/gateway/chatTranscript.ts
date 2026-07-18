@@ -217,7 +217,7 @@ export function renderNeonChatReport(snapshot: INeonChatSnapshot): string {
   const toolCards = renderChatToolCardBlock(snapshot);
 
   return [
-    `Neon Chat: ${snapshot.state}`,
+    `Neonika Chat: ${snapshot.state}`,
     `Conversations: ${snapshot.totals.conversations}`,
     `Messages: ${snapshot.totals.messages}`,
     `Runs: ${snapshot.totals.filteredRuns}/${snapshot.totals.sourceRuns}`,

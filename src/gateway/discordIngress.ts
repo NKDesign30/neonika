@@ -1,5 +1,10 @@
 import { deriveCodexSessionKey } from "../harness/sessionKey.js";
-import type { ICodexHarness, IMemoryAttachment, THarnessRunMode } from "../harness/types.js";
+import type {
+  ICodexHarness,
+  IMemoryAttachment,
+  TCodexHarnessEvent,
+  THarnessRunMode
+} from "../harness/types.js";
 import {
   resolveNeonInboundAccessDecision,
   type TNeonInboundAccessBlockReason
@@ -173,8 +178,13 @@ export interface INeonDiscordShadowIngressOptions {
   readonly writeRun?: TNeonGatewayRunWriter;
   readonly writeRunningRun?: TNeonGatewayRunWriter;
   readonly onAcceptedMessage?: (message: INeonGatewayInboundMessage) => Promise<void> | void;
+  readonly onHarnessEvent?: (event: TCodexHarnessEvent) => void;
   readonly voiceTranscription?: INeonDiscordVoiceTranscriptionOptions;
   readonly workboardIngestion?: false;
+  // Force action-request workboard intent past the narrow verb-regex — for
+  // callers that already have an explicit user confirmation (capacity-gate
+  // button click) as a stronger work signal.
+  readonly workboardAssumeActionRequest?: boolean;
   readonly cronCommand?:
     | false
     | {
@@ -282,7 +292,8 @@ export async function runNeonDiscordShadowIngress(
     }
     const workboard = await recordNeonDiscordWorkboardCard(options.projectRoot, message, {
       enabled: options.workboardIngestion !== false,
-      ...(options.now ? { now: options.now } : {})
+      ...(options.now ? { now: options.now } : {}),
+      ...(options.workboardAssumeActionRequest ? { assumeActionRequest: true } : {})
     });
     const workboardClaim = await claimDiscordWorkboardRunCard(
       options.projectRoot,
@@ -310,6 +321,7 @@ export async function runNeonDiscordShadowIngress(
         harness,
         ...(options.now ? { now: options.now } : {}),
         ...(options.resolveAbortSignal ? { resolveAbortSignal: options.resolveAbortSignal } : {}),
+        ...(options.onHarnessEvent ? { onHarnessEvent: options.onHarnessEvent } : {}),
         ...(options.writeRunningRun
           ? {
               onRunStarted: async (run) => {
@@ -389,7 +401,7 @@ async function finalizeDiscordWorkboardRunCard(
   }
 
   const proof = {
-    status: run.status === "completed" ? "passed" : "failed",
+    status: run.status === "completed" ? "passed" : run.status === "cancelled" ? "skipped" : "failed",
     label: "discord-ingress-run",
     command: `harness:${run.harnessId}`,
     note: `run=${run.runId}`
@@ -430,7 +442,7 @@ async function finalizeDiscordWorkboardRunCard(
     );
     await syncNeonWorkboardCardTask(projectRoot, {
       card: claim.card,
-      status: "blocked",
+      status: run.status === "cancelled" ? "cancelled" : "blocked",
       summary: run.finalText || `Discord ingress run ${run.runId} ended ${run.status}.`,
       runId: run.runId,
       nowMs

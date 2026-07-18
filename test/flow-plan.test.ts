@@ -13,7 +13,7 @@ import {
   type INeonFlowStep
 } from "../src/index.js";
 
-describe("Neon Flow planning", () => {
+describe("Neonika Flow planning", () => {
   it("plans read steps and blocks every gated side-effecting step, never executable", () => {
     const plan = planNeonFlowExecution(
       createFlow("flow-auto-reply", {

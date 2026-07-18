@@ -1621,10 +1621,14 @@ export {
 export {
   createNeonClaudeCliLlmInvoker,
   createNeonClaudeCliProcessRunner,
+  createNeonCodexCliLlmInvoker,
+  createNeonCodexCliProcessRunner,
   createNeonDryRunLlmInvoker,
   renderNeonLlmGateReport,
   resolveNeonLlmGate,
   type ICreateNeonClaudeCliLlmInvokerOptions,
+  type ICreateNeonCliLlmInvokerOptions,
+  type ICreateNeonCodexCliLlmInvokerOptions,
   type INeonLlmCalledResult,
   type INeonLlmGate,
   type INeonLlmInvoker,
@@ -1632,6 +1636,8 @@ export {
   type INeonLlmProcessResult,
   type INeonLlmProcessRunner,
   type INeonLlmRequest,
+  type TNeonClaudeModel,
+  type TNeonCodexModel,
   type TNeonLlmGateReason,
   type TNeonLlmModel,
   type TNeonLlmResult
@@ -2508,7 +2514,7 @@ export type {
   TNeonChannel,
   TNeonHarnessId
 } from "./harness/types.js";
-// Neon SDK manifest — descriptor for the curated SDK layer. The four SDK
+// Neonika SDK manifest — descriptor for the curated SDK layer. The four SDK
 // contract surfaces (Gateway Client / Channel / Tool / Plugin) are consumed via
 // the dedicated `src/sdk/index.js` barrel; only the manifest is surfaced here to
 // keep the runtime barrel collision-free.
@@ -2844,3 +2850,272 @@ export {
 export {
   renderNeonMissionControlWorkboardPanel
 } from "./missionControl/workboardPanel.js";
+
+export {
+  NEON_ROUNDTABLE_TURN_TEXT_CAP,
+  appendNeonRoundtableTurn,
+  createNeonRoundtableRoom,
+  normalizeNeonRoundtableRoundId,
+  readNeonRoundtableRoom,
+  redactNeonRoundtableTurnText,
+  renderNeonRoundtableRoomReport,
+  resolveNeonRoundtableRoomPath,
+  writeNeonRoundtableRoom,
+  type IAppendNeonRoundtableTurnInput,
+  type ICreateNeonRoundtableRoomInput,
+  type INeonRoundtableParticipant,
+  type INeonRoundtableRoomFile,
+  type INeonRoundtableTurn,
+  type TNeonRoundtablePurpose,
+  type TNeonRoundtableRole,
+  type TNeonRoundtableRoomStatus,
+  type TNeonRoundtableRuntime,
+  type TNeonRoundtableTurnKind
+} from "./roundtable/roundtableRoomStore.js";
+export {
+  NEON_ROUNDTABLE_MAX_ROOMS_SCANNED,
+  NEON_ROUNDTABLE_PROJECTION_TURN_LIMIT,
+  NEON_ROUNDTABLE_ROOM_LIST_LIMIT,
+  NEON_ROUNDTABLE_TURN_PREVIEW_CAP,
+  createNeonRoundtableRoomsSnapshot,
+  isNeonRoundtableRoomRunning,
+  resolveNeonRoundtableRoomsDir,
+  type ICreateNeonRoundtableRoomsSnapshotOptions,
+  type INeonRoundtableRoomListEntry,
+  type INeonRoundtableRoomProjection,
+  type INeonRoundtableRoomsSnapshot,
+  type INeonRoundtableTurnProjection
+} from "./roundtable/roundtableRoomsSnapshot.js";
+export {
+  NEON_ROUNDTABLE_CONSENSUS_MARKER,
+  NEON_ROUNDTABLE_ESCALATE_MARKER,
+  NEON_ROUNDTABLE_SOURCE_MARKER,
+  buildNeonRoundtableConvenedHeads,
+  classifyNeonRoundtableStall,
+  renderNeonRoundtableRoundResult,
+  runNeonRoundtableRound,
+  type INeonRoundtableEscalationEvent,
+  type INeonRoundtableHead,
+  type INeonRoundtableJudge,
+  type INeonRoundtableRoundResult,
+  type IRunNeonRoundtableRoundOptions,
+  type TNeonRoundtableConveningSide,
+  type TNeonRoundtableRoundOutcome,
+  type TNeonRoundtableStallClass
+} from "./roundtable/roundtableRound.js";
+export {
+  buildNeonRoundtableWakeNudgeMessage,
+  dispatchNeonRoundtableWakeNudge,
+  type INeonRoundtableWakeNudgeContent,
+  type INeonRoundtableWakeNudgeResult,
+  type IDispatchNeonRoundtableWakeNudgeOptions,
+  type TNeonRoundtableWakeNudgeState
+} from "./roundtable/roundtableWakeNudge.js";
+export { renderNeonMissionControlRoundtableRoomsPanel } from "./missionControl/roundtableRoomsPanel.js";
+export {
+  createNeonRoundtableArmedInvoker,
+  createNeonRoundtableHeadRoutingInvoker,
+  type ICreateNeonRoundtableHeadRoutingInvokerOptions
+} from "./roundtable/roundtableHeadRoutingInvoker.js";
+
+// Discord cockpit block. Kept as explicit exports so the public SDK surface
+// remains reviewable while the live CLI and HTTP paths share the same modules.
+export {
+  createNeonDeliveryIntentId,
+  createNeonDeliveryPayloadHash,
+  executeNeonExactlyOnceDelivery,
+  readNeonDeliveryReceipt,
+  readNeonDeliveryReceipts,
+  type IExecuteNeonExactlyOnceDeliveryOptions,
+  type IReadNeonDeliveryReceiptsOptions,
+  type INeonDeliveryReceipt,
+  type INeonExactlyOnceDeliveryResult,
+  type TNeonDeliveryIntentKind,
+  type TNeonDeliveryReceiptState,
+  type TNeonExactlyOnceDeliveryState
+} from "./gateway/deliveryReceiptStore.js";
+export {
+  createNeonDiscordAgentButtonsRuntime,
+  isNeonDiscordAgentButtonsActionType,
+  parseNeonDiscordButtonsMarker,
+  type ICreateNeonDiscordAgentButtonsRuntimeOptions,
+  type INeonDiscordAgentButtonsExecuteInput,
+  type INeonDiscordAgentButtonsRuntime,
+  type INeonDiscordAgentButtonsTransport,
+  type INeonDiscordButtonsMarkerParseResult
+} from "./gateway/discordAgentButtons.js";
+export {
+  createNeonDiscordCapacityFingerprint,
+  createNeonDiscordCapacityGate,
+  createNeonDiscordCapacityUpgradeDecision,
+  isNeonDiscordCapacityActionType,
+  neonDiscordCapacityRuntimes,
+  parseNeonDiscordCapacityUpgradeRequest,
+  resolveNeonDiscordCapacityDecision,
+  type ICreateNeonDiscordCapacityGateOptions,
+  type INeonDiscordCapacityAttachment,
+  type INeonDiscordCapacityDecision,
+  type INeonDiscordCapacityExecutionInput,
+  type INeonDiscordCapacityExecutionResult,
+  type INeonDiscordCapacityGate,
+  type INeonDiscordCapacityGateRequest,
+  type INeonDiscordCapacityGateTransport,
+  type INeonDiscordCapacityMessage,
+  type INeonDiscordCapacityRuntime,
+  type INeonDiscordCapacityUpgradeRequest,
+  type TNeonDiscordCapacityTier
+} from "./gateway/discordCapacityRouter.js";
+export {
+  neonDiscordCardMarkerColors,
+  parseNeonDiscordCardMarker,
+  type INeonDiscordCardMarkerParseResult
+} from "./gateway/discordCardMarker.js";
+export {
+  createNeonDiscordComponentActionRegistry,
+  resolveNeonDiscordComponentActionStatePath,
+  type INeonDiscordComponentActionContext,
+  type INeonDiscordComponentActionOutcome,
+  type INeonDiscordComponentActionRegistration,
+  type INeonDiscordComponentActionRegistry,
+  type INeonDiscordComponentActionRegistryOptions,
+  type INeonDiscordComponentInteraction,
+  type INeonDiscordComponentInteractionEvent,
+  type INeonDiscordModal,
+  type INeonDiscordModalTextInput,
+  type INeonDiscordRegisteredComponentAction,
+  type TNeonDiscordComponentActionAudience,
+  type TNeonDiscordComponentActionDispatchResult,
+  type TNeonDiscordComponentActionHandler,
+  type TNeonDiscordComponentActionRejectReason,
+  type TNeonDiscordComponentInteractionKind,
+  type TNeonDiscordComponentResponseMode
+} from "./gateway/discordComponentActionRegistry.js";
+export {
+  NEON_DISCORD_WORK_GOVERNANCE_INSTRUCTION,
+  createNeonDiscordPlanApprovalRuntime,
+  isNeonDiscordPlanApprovalActionType,
+  parseNeonDiscordPlanApprovalMarker,
+  readNeonDiscordPlanApprovalSession,
+  resolveNeonDiscordPlanApprovalSessionPath,
+  resolveNeonDiscordWorkGovernanceInstruction,
+  type ICreateNeonDiscordPlanApprovalRuntimeOptions,
+  type INeonDiscordPlanApprovalActionInput,
+  type INeonDiscordPlanApprovalMarkerParseResult,
+  type INeonDiscordPlanApprovalRuntime,
+  type INeonDiscordPlanApprovalSession,
+  type INeonDiscordPlanApprovalTransport,
+  type INeonDiscordPlanRevisionInput,
+  type TNeonDiscordPlanApprovalStatus
+} from "./gateway/discordPlanApproval.js";
+export {
+  NEON_DISCORD_POLL_MARKER_DEFAULT_DURATION_HOURS,
+  parseNeonDiscordPollMarker,
+  type INeonDiscordPollMarkerParseResult
+} from "./gateway/discordPollMarker.js";
+export {
+  createNeonDiscordProgressCardRuntime,
+  pickNeonProgressLabel,
+  progressLineFromHarnessEvent,
+  renderNeonDiscordProgressCard,
+  shouldStartNeonDiscordProgressCard,
+  type INeonDiscordProgressCardFinishResult,
+  type INeonDiscordProgressCardHandle,
+  type INeonDiscordProgressCardRuntime,
+  type INeonDiscordProgressCardRuntimeOptions,
+  type INeonDiscordProgressCardStartInput,
+  type INeonDiscordProgressCardTransport,
+  type INeonDiscordProgressSteps
+} from "./gateway/discordProgressCard.js";
+export {
+  createNeonDiscordRecoveryRuntime,
+  isNeonDiscordRecoveryActionType,
+  readNeonDiscordRecoverySession,
+  resolveNeonDiscordRecoverySessionPath,
+  type ICreateNeonDiscordRecoveryRuntimeOptions,
+  type INeonDiscordRecoveryExecutionRequest,
+  type INeonDiscordRecoveryRuntime,
+  type INeonDiscordRecoverySession,
+  type INeonDiscordRecoveryTransport,
+  type TNeonDiscordRecoveryAction,
+  type TNeonDiscordRecoveryStartResult,
+  type TNeonDiscordRecoveryStatus
+} from "./gateway/discordRecoveryFlow.js";
+export {
+  createNeonDiscordRunControl,
+  parseNeonDiscordRunControlCommand,
+  registerNeonDiscordStopAction,
+  type INeonDiscordRunControlOptions,
+  type INeonDiscordRunControlResult,
+  type INeonDiscordRunControlRuntime,
+  type INeonDiscordStopActionInput,
+  type TNeonDiscordRunControlCommand,
+  type TNeonDiscordRunControlState
+} from "./gateway/discordRunControl.js";
+export {
+  createNeonDiscordSessionRuntimePicker,
+  isNeonDiscordSessionRuntimeActionType,
+  isNeonDiscordSessionRuntimePickerCommand,
+  neonDiscordClaudeRuntimePresets,
+  resolveNeonDiscordSessionRuntimeStatePath,
+  type ICreateNeonDiscordSessionRuntimePickerOptions,
+  type INeonDiscordRuntimeOption,
+  type INeonDiscordSessionRuntimePicker,
+  type INeonDiscordSessionRuntimePickerOpenInput,
+  type INeonDiscordSessionRuntimePickerTransport,
+  type INeonDiscordSessionRuntimeSelection
+} from "./gateway/discordSessionRuntimePicker.js";
+export {
+  createNeonDiscordThreadWorkspaceRuntime,
+  deriveThreadTopic,
+  readNeonDiscordThreadWorkspaces,
+  resolveNeonDiscordThreadWorkspaceStatePath,
+  shouldCreateNeonDiscordThreadWorkspace,
+  type ICreateNeonDiscordThreadWorkspaceRuntimeOptions,
+  type INeonDiscordThreadWorkspaceRecord,
+  type INeonDiscordThreadWorkspaceRuntime,
+  type INeonDiscordThreadWorkspaceTransport
+} from "./gateway/discordThreadWorkspace.js";
+export {
+  formatNeonDiscordExpiryCountdown,
+  NEON_DISCORD_ACCENT_COLOR,
+  neonDiscordSeverityColors,
+  type TNeonDiscordCardSeverity
+} from "./gateway/discordUiColors.js";
+export {
+  createNeonPdfReviewRuntime,
+  isNeonPdfReviewActionType,
+  readNeonPdfReviewSession,
+  resolveNeonPdfReviewSessionPath,
+  type ICreateNeonPdfReviewRuntimeOptions,
+  type INeonPdfReviewRevisionRequest,
+  type INeonPdfReviewRuntime,
+  type INeonPdfReviewSession,
+  type INeonPdfReviewStartInput,
+  type INeonPdfReviewTransport,
+  type TNeonPdfReviewStartResult,
+  type TNeonPdfReviewStatus
+} from "./gateway/pdfReviewFlow.js";
+export {
+  createNeonMissionControlDiscordCockpitSnapshot,
+  createUnknownNeonMissionControlDiscordCockpitSnapshot,
+  parseNeonMissionControlDiscordCockpitSnapshot,
+  readNeonMissionControlDiscordCockpitSnapshot,
+  type ICreateNeonMissionControlDiscordCockpitOptions,
+  type IReadNeonMissionControlDiscordCockpitOptions,
+  type INeonMissionControlDiscordActiveRun,
+  type INeonMissionControlDiscordCockpitSnapshot,
+  type INeonMissionControlDiscordDeliveryReceipt,
+  type INeonMissionControlDiscordDeliveryTotals,
+  type INeonMissionControlDiscordRuntime,
+  type TNeonMissionControlDiscordCockpitState,
+  type TNeonMissionControlDiscordScopeState,
+  type TNeonMissionControlDiscordSourceState
+} from "./missionControl/discordCockpitSnapshot.js";
+export { NEON_DISCORD_FILE_DELIVERY_INSTRUCTION } from "./harness/codexAppServerHarness.js";
+export { createNeonDiscordDeliveryNonce } from "./gateway/discordOutboundTransport.js";
+export type { INeonLocalMediaFile } from "./gateway/localMediaAttachment.js";
+export {
+  NeonSessionActorQueueCancellationError,
+  isNeonSessionActorQueueCancellationError
+} from "./gateway/sessionActorQueue.js";
+export type { INeonHarnessRuntimeMetadata } from "./harness/types.js";

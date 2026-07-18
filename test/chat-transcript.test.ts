@@ -11,7 +11,7 @@ import {
   type INeonGatewayShadowRun
 } from "../src/index.js";
 
-describe("Neon Chat transcript", () => {
+describe("Neonika Chat transcript", () => {
   it("groups Gateway runs into channel conversations with inbound and agent messages", async () => {
     const projectRoot = await createTempProjectRoot();
 
@@ -217,7 +217,7 @@ describe("Neon Chat transcript", () => {
     try {
       const report = renderNeonChatReport(await createNeonChatSnapshot(projectRoot));
 
-      assert.match(report, /Neon Chat: empty/);
+      assert.match(report, /Neonika Chat: empty/);
       assert.match(report, /Latest: none/);
     } finally {
       await rm(projectRoot, { force: true, recursive: true });

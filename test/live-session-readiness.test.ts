@@ -96,7 +96,7 @@ describe("Neon live-session runtime readiness", () => {
     const report = renderNeonLiveSessionReadinessReport(
       createNeonLiveSessionReadinessSnapshot({ env: {} })
     );
-    assert.match(report, /Neon Live-Session Runtime Readiness/);
+    assert.match(report, /Neonika Live-Session Runtime Readiness/);
     assert.match(report, /live-runtime-ready=false/);
     assert.match(report, /active-runs=0/);
     assert.match(report, /Missing runtime pieces:/);

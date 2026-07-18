@@ -1,7 +1,7 @@
 import { isLoopbackRemoteAddress } from "./httpMutationAuth.js";
 
 /**
- * In-memory sliding-window auth-failure rate limiter for the Neon Gateway
+ * In-memory sliding-window auth-failure rate limiter for the Neonika Gateway
  * connect handshake (Z305).
  *
  * Caps failed connect-auth attempts per client IP ACROSS connections. The

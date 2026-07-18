@@ -17,7 +17,7 @@ import {
   type INeonTuiPanelView
 } from "../src/index.js";
 
-describe("Neon Operator Shell — command routing", () => {
+describe("Neonika Operator Shell — command routing", () => {
   it("routes every panel command to its panel id", () => {
     for (const descriptor of neonTuiPanelDescriptors) {
       const command = routeNeonTuiCommand(descriptor.command);
@@ -82,7 +82,7 @@ describe("Neon Operator Shell — command routing", () => {
   });
 });
 
-describe("Neon Operator Shell — rendering", () => {
+describe("Neonika Operator Shell — rendering", () => {
   it("renders a single panel with header, state, and indented body", () => {
     const view: INeonTuiPanelView = {
       id: "gateway",
@@ -126,7 +126,7 @@ describe("Neon Operator Shell — rendering", () => {
 
     const rendered = renderNeonTuiDashboard(dashboard);
 
-    assert.match(rendered, /Neon Operator Shell — dashboard/u);
+    assert.match(rendered, /Neonika Operator Shell — dashboard/u);
     assert.match(rendered, /Generated: 2026-06-02T11:00:00\.000Z/u);
     assert.match(rendered, /Panels: 7/u);
     for (const descriptor of neonTuiPanelDescriptors) {
@@ -136,7 +136,7 @@ describe("Neon Operator Shell — rendering", () => {
   });
 
   it("renders banner, help, unknown-command, and goodbye text", () => {
-    assert.match(renderNeonTuiBanner(), /Neon Operator Shell/u);
+    assert.match(renderNeonTuiBanner(), /Neonika Operator Shell/u);
     assert.match(renderNeonTuiBanner(), /shadow mode/u);
 
     const help = renderNeonTuiHelp();

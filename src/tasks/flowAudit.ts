@@ -126,7 +126,7 @@ export function renderNeonFlowAuditReport(
   summary: INeonFlowAuditSummary
 ): string {
   const header = [
-    `Neon Flow Audit: ${summary.total === 0 ? "clean" : `${summary.total} finding(s)`}`,
+    `Neonika Flow Audit: ${summary.total === 0 ? "clean" : `${summary.total} finding(s)`}`,
     `Errors: ${summary.errors} · Warnings: ${summary.warnings}`
   ];
 

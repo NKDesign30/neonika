@@ -120,7 +120,7 @@ export function renderNeonSecurityAuditReport(report: INeonSecurityAuditReport):
   const warn = report.findings.filter((finding) => finding.severity === "warn").length;
   const info = report.findings.filter((finding) => finding.severity === "info").length;
 
-  lines.push(`Neon Security Audit: exit ${report.exitCode}`);
+  lines.push(`Neonika Security Audit: exit ${report.exitCode}`);
   lines.push(`Findings: ${critical} critical, ${warn} warn, ${info} info`);
 
   if (report.findings.length > 0) {

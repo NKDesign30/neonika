@@ -1,5 +1,5 @@
 /**
- * Neon Plugin SDK — the pure, source-backed contract for describing and
+ * Neonika Plugin SDK — the pure, source-backed contract for describing and
  * trust-evaluating plugins without ever loading their code.
  *
  * The host runtime lives in `src/plugins`; this module is intentionally free of

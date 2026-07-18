@@ -8,7 +8,7 @@ import {
   resolveNeonAuthRateLimitConfig
 } from "../src/index.js";
 
-describe("Neon Gateway auth-failure rate limiter (Z305)", () => {
+describe("Neonika Gateway auth-failure rate limiter (Z305)", () => {
   it("exempts loopback and unknown addresses (local clients never lock out)", () => {
     const limiter = createNeonAuthRateLimiter({ maxAttempts: 2, windowMs: 1000, lockoutMs: 5000 });
     for (let i = 0; i < 10; i += 1) {

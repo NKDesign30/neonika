@@ -239,7 +239,7 @@ export function renderNeonGatedSideEffectPostureReport(
   );
 
   return [
-    "Neon Gated Side-Effect Posture",
+    "Neonika Gated Side-Effect Posture",
     `State: ${posture.state}`,
     `Gates: ${posture.totals.gates} (armed ${posture.totals.armed} · shadowed ${posture.totals.shadowed})`,
     ...(posture.armedEnvKeys.length > 0 ? [`Armed: ${posture.armedEnvKeys.join(", ")}`] : []),

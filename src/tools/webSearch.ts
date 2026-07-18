@@ -154,18 +154,18 @@ export async function executeNeonWebSearch(
 
 export function renderNeonWebSearchResult(result: INeonWebSearchResult): string {
   if (result.kind === "blocked") {
-    return `Neon Web-Search: BLOCKED (${result.reason}) — ${result.detail}`;
+    return `Neonika Web-Search: BLOCKED (${result.reason}) — ${result.detail}`;
   }
   if (result.kind === "dry-run") {
     return [
-      `Neon Web-Search: dry-run (live gate closed, ${result.gateEnvKey})`,
+      `Neonika Web-Search: dry-run (live gate closed, ${result.gateEnvKey})`,
       `Provider (chosen): ${result.provider}`,
       `Query: ${result.query}`,
       "No provider call was made; arm the tools-live gate to search."
     ].join("\n");
   }
   return [
-    `Neon Web-Search: ${result.hitCount} hit(s) from ${result.provider} for "${result.query}"`,
+    `Neonika Web-Search: ${result.hitCount} hit(s) from ${result.provider} for "${result.query}"`,
     `Bytes: ${result.result.byteCount} (truncated=${result.result.truncated}, redacted)`,
     `Preview: ${result.result.preview}`
   ].join("\n");

@@ -10,7 +10,7 @@ import {
 } from "./taskModel.js";
 
 /**
- * Append-only Neon Task store.
+ * Append-only Neonika Task store.
  *
  * Tasks are internal Workboard bookkeeping (like gateway shadow runs), so the
  * store writes freely to `state/tasks/tasks.jsonl` — this is observability state,

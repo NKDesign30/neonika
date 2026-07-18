@@ -99,7 +99,7 @@ describe("Neon secrets audit", () => {
     });
 
     const rendered = renderNeonSecretsAuditReport(report);
-    assert.match(rendered, /Neon Secrets Audit: findings/);
+    assert.match(rendered, /Neonika Secrets Audit: findings/);
     assert.match(rendered, /\[PLAINTEXT\] NEON_SECRET/);
   });
 });

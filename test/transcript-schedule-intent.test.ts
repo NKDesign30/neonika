@@ -7,7 +7,7 @@ import {
 
 const NOW = Date.UTC(2026, 5, 1, 12, 0, 0);
 
-describe("Neon Transcript schedule intent (S5)", () => {
+describe("Neonika Transcript schedule intent (S5)", () => {
   it("is disabled by default and never marks anything executed", () => {
     const intent = buildNeonTranscriptScheduleIntent({
       gate: resolveNeonCronTimerGate({}),

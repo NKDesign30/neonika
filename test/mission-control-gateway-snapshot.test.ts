@@ -14,7 +14,7 @@ import {
   type INeonGatewayStatus
 } from "../src/index.js";
 
-describe("Neon Mission Control Gateway snapshot", () => {
+describe("Neonika Mission Control Gateway snapshot", () => {
   it("builds a dashboard-ready snapshot from gateway status and runs", () => {
     const status = createStatus();
     const runs = [createSnapshotRun("run-1", "completed"), createSnapshotRun("run-2", "failed")];
@@ -22,7 +22,7 @@ describe("Neon Mission Control Gateway snapshot", () => {
       now: () => new Date("2026-05-31T16:00:00.000Z")
     });
 
-    assert.equal(snapshot.title, "Neon Gateway");
+    assert.equal(snapshot.title, "Neonika Gateway");
     assert.equal(snapshot.generatedAt, "2026-05-31T16:00:00.000Z");
     assert.equal(snapshot.totals.runs, 2);
     assert.equal(snapshot.totals.failed, 1);
@@ -218,6 +218,7 @@ function createStatus(): INeonGatewayStatus {
     completedCount: 1,
     failedCount: 1,
     runningCount: 0,
+    cancelledCount: 0,
     deliverySuppressedCount: 2,
     latestRun: {
       runId: "run-2",

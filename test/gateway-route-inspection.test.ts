@@ -12,7 +12,7 @@ import {
   type INeonGatewayShadowRun
 } from "../src/index.js";
 
-describe("Neon Gateway route inspection", () => {
+describe("Neonika Gateway route inspection", () => {
   it("reports missing Discord route config without exposing secrets", async () => {
     const projectRoot = await createTempProjectRoot();
 
@@ -78,7 +78,7 @@ describe("Neon Gateway route inspection", () => {
       assert.equal(snapshot.allowlist.channels.count, 2);
       assert.equal(snapshot.routes[0]?.authState, "ready");
       assert.equal(snapshot.routes[0]?.latestRunId, "route-run-1");
-      assert.match(report, /Neon Gateway Routes: ready/);
+      assert.match(report, /Neonika Gateway Routes: ready/);
       assert.match(report, /Auth: discord=ready bot=present guild=configured channel=configured/);
       assert.match(report, /Allowlist: guilds=1 channels=2/);
       assert.doesNotMatch(serialized, new RegExp(secretToken));

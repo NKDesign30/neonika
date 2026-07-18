@@ -259,7 +259,7 @@ export async function dispatchNeonAutoReply(
 
 export function renderNeonAutoReplyDispatchReport(result: INeonAutoReplyResult): string {
   const lines = [
-    "Neon Auto-Reply Dispatch",
+    "Neonika Auto-Reply Dispatch",
     `State: ${result.state}`,
     `Reason: ${result.reason}`,
     `Was mentioned: ${result.wasMentioned}`,

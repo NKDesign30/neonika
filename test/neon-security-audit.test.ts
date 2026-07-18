@@ -99,7 +99,7 @@ describe("Neon security footgun audit", () => {
     const report = runNeonSecurityAudit({ NEON_CUTOVER_STAGE: "canary" });
     const rendered = renderNeonSecurityAuditReport(report);
 
-    assert.match(rendered, /Neon Security Audit: exit 2/);
+    assert.match(rendered, /Neonika Security Audit: exit 2/);
     assert.match(rendered, /critical/);
   });
 });

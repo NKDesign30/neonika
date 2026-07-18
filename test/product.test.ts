@@ -26,19 +26,19 @@ describe("Neonika product foundation", () => {
     );
   });
 
-  it("renders the architecture around Neon Gateway and Mission Control", () => {
+  it("renders the architecture around Neonika Gateway and Mission Control", () => {
     const summary = renderArchitectureSummary();
 
-    assert.match(summary, /Neon Gateway/);
-    assert.match(summary, /Neon Mission Control/);
+    assert.match(summary, /Neonika Gateway/);
+    assert.match(summary, /Neonika Mission Control/);
     assert.match(summary, /Live Neonika APIs/);
   });
 
-  it("renders a product manifest with Neon Memory and Neon Agents", () => {
+  it("renders a product manifest with Neonika Memory and Neonika Agents", () => {
     const manifest = renderProductManifest();
 
-    assert.match(manifest, /Neon Memory/);
-    assert.match(manifest, /Neon Agents/);
+    assert.match(manifest, /Neonika Memory/);
+    assert.match(manifest, /Neonika Agents/);
   });
 
   it("keeps cutover stages explicit and ordered", () => {
@@ -52,7 +52,7 @@ describe("Neonika product foundation", () => {
   });
 
   it("can resolve a product layer by id", () => {
-    assert.equal(getLayerById("gateway").name, "Neon Gateway");
+    assert.equal(getLayerById("gateway").name, "Neonika Gateway");
   });
 
 });

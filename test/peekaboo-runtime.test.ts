@@ -11,7 +11,7 @@ import {
   resolveNeonPeekabooPathPrepend
 } from "../src/index.js";
 
-describe("Neon Peekaboo runtime", () => {
+describe("Neonika Peekaboo runtime", () => {
   it("mirrors Peekaboo/upstream bridge socket discovery candidates", () => {
     const candidates = getNeonPeekabooBridgeSocketCandidates("/Users/operator");
 

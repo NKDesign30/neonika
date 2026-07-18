@@ -159,7 +159,7 @@ export async function promoteNeonDreamProposal(
 
 export function renderNeonDreamingReflectionReport(result: INeonDreamingReflectionResult): string {
   const lines = [
-    `Neon Dreaming: ${result.dreamed ? "armed" : "disabled"} / ${result.phase} (${result.gate.reason}, env ${result.gate.envKey})`,
+    `Neonika Dreaming: ${result.dreamed ? "armed" : "disabled"} / ${result.phase} (${result.gate.reason}, env ${result.gate.envKey})`,
     `Evaluated: ${result.evaluatedAt}`,
     `Proposals: ${result.proposals.length}`,
     `Safety: memoryWritten=${result.safety.memoryWritten} autoPromoted=${result.safety.autoPromoted}`

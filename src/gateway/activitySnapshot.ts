@@ -116,7 +116,7 @@ export function renderNeonActivityReport(snapshot: INeonActivitySnapshot): strin
   });
 
   return [
-    `Neon Activity: ${snapshot.state}`,
+    `Neonika Activity: ${snapshot.state}`,
     `Entries: ${snapshot.totals.entries}`,
     `Runs: ${snapshot.totals.runs}`,
     `Errors: ${snapshot.totals.errors}`,

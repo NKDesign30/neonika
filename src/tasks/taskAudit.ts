@@ -181,7 +181,7 @@ export function renderNeonTaskAuditReport(
   summary: INeonTaskAuditSummary
 ): string {
   const header = [
-    `Neon Task Audit: ${summary.total === 0 ? "clean" : `${summary.total} finding(s)`}`,
+    `Neonika Task Audit: ${summary.total === 0 ? "clean" : `${summary.total} finding(s)`}`,
     `Errors: ${summary.errors} · Warnings: ${summary.warnings}`
   ];
 

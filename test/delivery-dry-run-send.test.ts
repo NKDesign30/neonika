@@ -9,7 +9,7 @@ import {
   type INeonOutboundSendResult
 } from "../src/index.js";
 
-describe("Neon DryRun Outbound Sender", () => {
+describe("Neonika DryRun Outbound Sender", () => {
   it("returns a no-send result with a redacted, shortened body preview", async () => {
     const sender = createNeonDryRunOutboundSender({
       now: () => new Date("2026-05-31T20:00:03.000Z")

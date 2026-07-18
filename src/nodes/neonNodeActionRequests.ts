@@ -537,7 +537,7 @@ export function renderNeonNodeActionRequestReport(snapshot: INeonNodeActionReque
       : ["- none"];
 
   return [
-    `Neon Node Action Requests: ${snapshot.state}`,
+    `Neonika Node Action Requests: ${snapshot.state}`,
     `Totals: requests=${snapshot.totals.requests} approval=${snapshot.totals.approvalRequired} pending=${snapshot.totals.pendingApproval} blocked=${snapshot.totals.blocked}`,
     `Approval records: ${snapshot.totals.approvalRecords}`,
     `Result previews: ${snapshot.totals.resultPreviews} ready=${snapshot.totals.readyResultPreviews} pending=${snapshot.totals.pendingResultPreviews} blocked=${snapshot.totals.blockedResultPreviews}`,

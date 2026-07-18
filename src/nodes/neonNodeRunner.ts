@@ -364,7 +364,7 @@ export function renderNeonNodeRunnerReport(result: INeonNodeRunnerOnceResult): s
       : ["- none"];
 
   return [
-    `Neon Node Runner: ${result.state}`,
+    `Neonika Node Runner: ${result.state}`,
     `Poll HTTP: ${result.pollStatus}`,
     `Replay: ${result.replay ?? "n/a"}`,
     `Dispatches: ${result.dispatches}`,
@@ -385,7 +385,7 @@ export function renderNeonNodeRunnerSnapshotReport(snapshot: INeonNodeRunnerSnap
       : ["- none"];
 
   return [
-    `Neon Node Runner Snapshot: ${snapshot.state}`,
+    `Neonika Node Runner Snapshot: ${snapshot.state}`,
     `Control: ${snapshot.control.desiredState}`,
     `Updated: ${snapshot.health?.updatedAt ?? snapshot.control.updatedAt}`,
     `Cycles: ${snapshot.totals.cycles}`,

@@ -317,7 +317,7 @@ export function renderNeonDoctorReport(snapshot: INeonDoctorSnapshot): string {
   });
 
   return [
-    `Neon Doctor: ${snapshot.state}`,
+    `Neonika Doctor: ${snapshot.state}`,
     `Stage: ${snapshot.currentStage}`,
     `Checks: pass=${snapshot.totals.pass} warn=${snapshot.totals.warn} fail=${snapshot.totals.fail}`,
     `Runs: ${snapshot.source.runsPath}`,
@@ -328,7 +328,7 @@ export function renderNeonDoctorReport(snapshot: INeonDoctorSnapshot): string {
 export function renderNeonDoctorExplainReport(snapshot: INeonDoctorSnapshot): string {
   const actionableChecks = snapshot.checks.filter((check) => check.state !== "pass");
   const lines = [
-    `Neon Doctor Explain: ${snapshot.state}`,
+    `Neonika Doctor Explain: ${snapshot.state}`,
     "Mode: read-only; no repair, restart, config write, credential lookup, or chmod executed.",
     `Stage: ${snapshot.currentStage}`,
     `Checks: pass=${snapshot.totals.pass} warn=${snapshot.totals.warn} fail=${snapshot.totals.fail}`,
@@ -376,7 +376,7 @@ function recommendedDoctorAction(check: INeonDoctorCheck): string {
     case "node-runtime":
       return "Run Neonika on Node >=22.19.0 <23 or >=23.11.0; Node 23.0-23.10 is blocked.";
     case "gateway":
-      return "Start or inspect the Neon Gateway before cutover.";
+      return "Start or inspect the Neonika Gateway before cutover.";
     case "runs":
       return "Run node dist/src/cli.js gateway-shadow-smoke to capture baseline Gateway evidence.";
     case "channels":

@@ -11,7 +11,7 @@ import {
   resolveNeonAgentProfile
 } from "../src/index.js";
 
-describe("Neon Agents registry", () => {
+describe("Neonika Agents registry", () => {
   it("exposes the canonical Neon agent roster", () => {
     const snapshot = createNeonAgentsSnapshot();
 
@@ -40,11 +40,11 @@ describe("Neon Agents registry", () => {
 
   it("builds bounded memory queries from agent seeds", () => {
     const attachment = assertPresent(resolveNeonAgentAttachment("chaty"));
-    const query = buildNeonAgentMemoryQuery(attachment, "Bitte baue Neon Gateway weiter.");
+    const query = buildNeonAgentMemoryQuery(attachment, "Bitte baue Neonika Gateway weiter.");
 
     assert.ok(query.length <= 240);
     assert.match(query, /chaty agent memory/);
-    assert.match(query, /Neon Gateway/);
+    assert.match(query, /Neonika Gateway/);
   });
 
   it("keeps profile ids unique", () => {

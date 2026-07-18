@@ -1,4 +1,4 @@
-// Neon Transcript Indexer — the decision document module. Single owner of the
+// Neonika Transcript Indexer — the decision document module. Single owner of the
 // persisted decision markdown format: it serializes AND parses, so no caller
 // ever regex-guesses the shape. This is the direct fix for the v3 failure mode
 // where one writer (buildBody) had three independent regex readers and a format

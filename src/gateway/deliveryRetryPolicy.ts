@@ -135,7 +135,7 @@ export function renderNeonDeliveryRetryScheduleReport(now: number): string {
   }
 
   return [
-    "Neon Delivery Retry Policy",
+    "Neonika Delivery Retry Policy",
     `Max retries: ${NEON_DELIVERY_MAX_RETRIES}`,
     `Backoff schedule: ${NEON_DELIVERY_BACKOFF_MS.map(formatMs).join(" -> ")}`,
     "Outbound sent: false",

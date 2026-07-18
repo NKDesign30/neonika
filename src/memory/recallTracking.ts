@@ -153,7 +153,7 @@ export function summarizeNeonRecallCounts(
 
 export function renderNeonRecallTrackingReport(result: INeonRecallAppendResult): string {
   return [
-    `Neon Recall Tracking: ${result.state} (${result.gate.reason}, env ${result.gate.envKey})`,
+    `Neonika Recall Tracking: ${result.state} (${result.gate.reason}, env ${result.gate.envKey})`,
     `Store: ${result.storePath ?? "none (isolated store required)"}`,
     `Event: ${result.event ? `${result.event.queryHash} -> ${result.event.hits.length} hit(s)` : "none"}`,
     `Safety: isolatedStore=${result.safety.isolatedStore} rawQueryStored=${result.safety.rawQueryStored}`,

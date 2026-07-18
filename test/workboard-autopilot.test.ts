@@ -15,7 +15,7 @@ import {
   runNeonWorkboardAutoDispatchOnce
 } from "../src/index.js";
 
-describe("Neon Workboard autopilot", () => {
+describe("Neonika Workboard autopilot", () => {
   it("claims a ready card and completes it through an executor", async () => {
     const projectRoot = await createTempProjectRoot();
     const now = createClock("2026-06-05T13:00:00.000Z");

@@ -49,7 +49,7 @@ const mutationRoutes = [
   }
 ] as const;
 
-describe("Neon Node Runner Service HTTP mutation auth (P5.1)", () => {
+describe("Neonika Node Runner Service HTTP mutation auth (P5.1)", () => {
   it("denies every spawn-capable service-action route without the configured token (401) and writes nothing", async () => {
     await withConfiguredMutationToken(async () => {
       const projectRoot = await createTempProjectRoot();

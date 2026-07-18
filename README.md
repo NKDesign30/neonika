@@ -1,13 +1,17 @@
-# Neonika
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/banner-dark.png">
+  <img alt="neonika — an agent runtime that listens before it speaks" src="assets/banner-light.png">
+</picture>
+
+Channels come in. Runs happen. Nothing goes out until you say so.
 
 An agent runtime in TypeScript: it takes messages in from a channel, runs an
 agent against them, and shows an operator what happened. Runs are persisted,
 redacted, and replayable. Nothing is sent back out until you explicitly arm it.
 
-It is an independent rebuild of an [OpenClaw](https://github.com/openclaw/openclaw)-style
-agent OS. Some modules were copied or adapted from it — every one is listed in
+Copied or adapted modules and their sources are listed in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Comments that say `upstream`
-mean OpenClaw.
+identify adapted source.
 
 **Status: shadow.** The runtime observes, records, and reports. Outbound
 delivery is suppressed at the seam, not merely unconfigured. Treat this as
@@ -48,10 +52,10 @@ optional.
 | Layer | Role |
 | --- | --- |
 | Neonika | Agent runs, policy, sessions, tasks, tools, memory context |
-| Neon Gateway | Ingress: Discord, channels, devices |
-| Neon Mission Control | Operator dashboard over the live snapshots |
-| Neon Memory | Recall over a local SQLite store (FTS5 + optional vectors) |
-| Neon Doctor | Health, auth, config, security checks |
+| Neonika Gateway | Ingress: Discord, channels, devices |
+| Neonika Mission Control | Operator dashboard over the live snapshots |
+| Neonika Memory | Recall over a local SQLite store (FTS5 + optional vectors) |
+| Neonika Doctor | Health, auth, config, security checks |
 
 The CLI is the primary entry point — `node dist/src/cli.js` with no argument
 lists every command. The `*-smoke` commands are live verification harnesses:

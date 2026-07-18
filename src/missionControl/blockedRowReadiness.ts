@@ -297,7 +297,7 @@ export function renderNeonBlockedRowReadinessReport(
   snapshot: INeonBlockedRowReadinessSnapshot
 ): string {
   const lines: string[] = [
-    "Neon Blocked-Row Readiness",
+    "Neonika Blocked-Row Readiness",
     `rows=${snapshot.totals.total} operator-approval=${snapshot.totals.operatorApprovalNeeded} live-session=${snapshot.totals.liveSessionRuntime} upstream=${snapshot.totals.upstreamProtocol} non-goal=${snapshot.totals.nonGoal}`,
     ""
   ];

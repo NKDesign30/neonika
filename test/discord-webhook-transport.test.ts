@@ -14,13 +14,13 @@ describe("buildNeonWebhookPayload (Z326)", () => {
   it("builds a valid proxy-identity payload", () => {
     const result = buildNeonWebhookPayload({
       content: "hello",
-      username: "Neon Bot",
+      username: "Neonika Bot",
       avatarUrl: "https://example.com/a.png"
     });
     assert.equal(result.ok, true);
     if (result.ok) {
       assert.equal(result.payload.content, "hello");
-      assert.equal(result.payload.username, "Neon Bot");
+      assert.equal(result.payload.username, "Neonika Bot");
     }
   });
 
@@ -104,11 +104,11 @@ describe("createNeonDiscordWebhookTransport (Z326, gated)", () => {
       webhookUrl: "https://discord.com/api/webhooks/1/secret",
       createWebhookClient: create
     });
-    const result = await transport.send({ content: "hi", username: "Neon Bot" });
+    const result = await transport.send({ content: "hi", username: "Neonika Bot" });
     assert.equal(result.messageId, "webhook-message-1");
     assert.equal(state.sends.length, 1);
     assert.equal(state.sends[0]?.content, "hi");
-    assert.equal(state.sends[0]?.username, "Neon Bot");
+    assert.equal(state.sends[0]?.username, "Neonika Bot");
     await transport.close();
     assert.equal(state.destroyCount, 1);
   });

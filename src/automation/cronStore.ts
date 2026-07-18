@@ -220,9 +220,9 @@ export function projectNeonCronStoreJobs(
 
 export function renderNeonCronStoreJobs(jobs: readonly INeonCronStoreJob[]): string {
   if (jobs.length === 0) {
-    return "Neon Cron store: 0 job(s)";
+    return "Neonika Cron store: 0 job(s)";
   }
-  const lines = [`Neon Cron store: ${jobs.length} job(s)`];
+  const lines = [`Neonika Cron store: ${jobs.length} job(s)`];
   for (const job of jobs) {
     lines.push(`- ${job.id} [${job.enabled ? "enabled" : "disabled"}] ${job.schedule} :: ${job.label}`);
   }
@@ -237,9 +237,9 @@ export function renderNeonCronStoreJobs(jobs: readonly INeonCronStoreJob[]): str
  */
 export function renderNeonCronDeliveryPreview(jobs: readonly INeonCronStoreJob[]): string {
   if (jobs.length === 0) {
-    return "Neon Cron delivery preview: 0 job(s)";
+    return "Neonika Cron delivery preview: 0 job(s)";
   }
-  const lines = [`Neon Cron delivery preview: ${jobs.length} job(s) (suppressed, no send)`];
+  const lines = [`Neonika Cron delivery preview: ${jobs.length} job(s) (suppressed, no send)`];
   for (const job of jobs) {
     lines.push(
       job.deliveryTarget

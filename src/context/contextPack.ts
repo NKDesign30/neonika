@@ -14,7 +14,7 @@ import { readNeonTasks } from "../tasks/taskStore.js";
 import type { INeonTaskRecord } from "../tasks/taskModel.js";
 
 /**
- * Neon Context Engine — bounded, leak-safe context packs.
+ * Neonika Context Engine — bounded, leak-safe context packs.
  *
  * A context pack is a read-only bundle assembled for one agent turn from local
  * shadow state: recalled memory (optional, only when a provider is attached),
@@ -202,7 +202,7 @@ export function renderNeonContextPackReport(
     : null;
 
   const header = [
-    `Neon Context Pack: ${pack.state}`,
+    `Neonika Context Pack: ${pack.state}`,
     `Agent: ${pack.agentId} · channel: ${pack.channel}${pack.channelId ? `/${pack.channelId}` : ""}`,
     `Items: ${pack.totals.items} · dropped(budget): ${pack.totals.droppedForBudget} · chars: ${pack.bounds.charsUsed}/${pack.bounds.charBudget}`
   ];

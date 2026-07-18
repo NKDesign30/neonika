@@ -1,4 +1,4 @@
-// Neon LLM fallback invoker — decorates an INeonLlmInvoker with the v3 escalation
+// Neonika LLM fallback invoker — decorates an INeonLlmInvoker with the v3 escalation
 // policy: when the primary (cheap) model genuinely fails or its output is
 // quality-rejected, retry once with a stronger model. Gate-shaped non-calls
 // (gate closed, no runner injected, dry-run) pass through untouched — a second
@@ -30,7 +30,14 @@ export interface INeonLlmFallbackEvent {
 
 export interface ICreateNeonFallbackLlmInvokerOptions {
   readonly invoker: INeonLlmInvoker;
-  /** Escalation target — defaults to "sonnet". */
+  /**
+   * Escalation target — defaults to "sonnet". Must share the request's head:
+   * `TNeonLlmModel` now spans both the claude and codex heads, and a cross-head
+   * escalation (e.g. a codex request falling back to "sonnet") is meaningless —
+   * the codex runner ignores the model and the result would misreport the head.
+   * When wrapping a codex invoker, pass a codex fallback model (or omit the
+   * decorator). Live callers today are claude-only, so the default is safe.
+   */
   readonly fallbackModel?: TNeonLlmModel;
   /** Quality hook: return true when the primary text warrants an escalation. */
   readonly shouldFallback?: (text: string) => boolean;

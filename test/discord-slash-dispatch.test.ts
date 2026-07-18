@@ -53,7 +53,7 @@ function policy(overrides: Partial<INeonDiscordIngressPolicy> = {}): INeonDiscor
   };
 }
 
-describe("Neon Discord slash interaction shadow dispatch", () => {
+describe("Neonika Discord slash interaction shadow dispatch", () => {
   it("admits a slash interaction as a no-send shadow run", async () => {
     await withProjectRoot(async (root) => {
       const result = await runNeonDiscordSlashInteractionShadow(

@@ -25,42 +25,42 @@ export const neonikaLayers: readonly INeonikaLayer[] = [
   },
   {
     id: "gateway",
-    name: "Neon Gateway",
+    name: "Neonika Gateway",
     purpose: "Channel ingress, device pairing, routing, allowlists, and delivery.",
     referenceImplementation: "upstream gateway and channel providers.",
     firstAcceptance: "Gateway status API returns live Discord configuration."
   },
   {
     id: "mission-control",
-    name: "Neon Mission Control",
+    name: "Neonika Mission Control",
     purpose: "Operator dashboard for runs, channels, agents, skills, and doctor state.",
     referenceImplementation: "upstream local dashboard.",
     firstAcceptance: "Dashboard reads live Gateway status."
   },
   {
     id: "memory",
-    name: "Neon Memory",
+    name: "Neonika Memory",
     purpose: "Targeted identity, recall, project context, and run metadata.",
     referenceImplementation: "Session context and memory hooks.",
     firstAcceptance: "Agent run metadata records memory attached, skipped, or failed."
   },
   {
     id: "agents",
-    name: "Neon Agents",
+    name: "Neonika Agents",
     purpose: "Neo, Chaty, Rex, Nova, Forge, Sentinel, and role-based workers.",
     referenceImplementation: "Agent session routing.",
     firstAcceptance: "Run routing includes selected agent and workspace."
   },
   {
     id: "skills",
-    name: "Neon Skills",
+    name: "Neonika Skills",
     purpose: "Repeatable workflows, local commands, and trusted extensions.",
     referenceImplementation: "Skills and plugins.",
     firstAcceptance: "Skills can be listed with trust metadata."
   },
   {
     id: "doctor",
-    name: "Neon Doctor",
+    name: "Neonika Doctor",
     purpose: "Health, auth, channel, memory, worker, security, and repair checks.",
     referenceImplementation: "Doctor and security audit flows.",
     firstAcceptance: "Doctor reports config health without printing secrets."

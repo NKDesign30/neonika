@@ -138,7 +138,7 @@ export function verifyNeonRetireRoundTrip(
 
 export function renderNeonRetireRoundTripReport(result: INeonRetireRoundTripResult): string {
   return [
-    `Neon Retire Export/Import: ${result.roundTripOk ? "ok" : "failed"}`,
+    `Neonika Retire Export/Import: ${result.roundTripOk ? "ok" : "failed"}`,
     `Exported: ${result.exported}`,
     `Imported: ${result.imported}`,
     `Round-trip: ${result.roundTripOk}`,

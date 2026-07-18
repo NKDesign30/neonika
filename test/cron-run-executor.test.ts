@@ -20,7 +20,7 @@ const gate: INeonCronTimerGate = {
   envKey: "NEON_CRON_TIMER_ENABLED"
 };
 
-describe("Neon Cron run executor", () => {
+describe("Neonika Cron run executor", () => {
   it("writes terminal shadow run records for catch-up and current windows without outbound", async () => {
     const written: INeonGatewayShadowRun[] = [];
     const tick = cronTickFixture();

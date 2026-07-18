@@ -191,7 +191,7 @@ export function renderNeonAutomationReport(snapshot: INeonAutomationSnapshot): s
   );
 
   return [
-    `Neon Automation: ${snapshot.state}`,
+    `Neonika Automation: ${snapshot.state}`,
     `Policy: ${snapshot.policy}`,
     `Totals: jobs=${snapshot.totals.jobs} hooks=${snapshot.totals.hooks} dreams=${snapshot.totals.dreams} enabled=${snapshot.totals.enabled}`,
     `Run Intent: ${snapshot.runIntent.jobId} / ${snapshot.runIntent.state} / ${snapshot.runIntent.reason}`,
@@ -218,7 +218,7 @@ export function renderNeonAutomationReport(snapshot: INeonAutomationSnapshot): s
  */
 export function renderNeonAutomationCronListReport(snapshot: INeonAutomationSnapshot): string {
   const header = [
-    `Neon Cron Jobs: ${snapshot.jobs.length} (policy=${snapshot.policy})`,
+    `Neonika Cron Jobs: ${snapshot.jobs.length} (policy=${snapshot.policy})`,
     "Scheduler: disabled (read-only shadow inventory)"
   ];
 
@@ -256,11 +256,11 @@ export function renderNeonAutomationCronJobReport(
 
   if (!job) {
     const available = snapshot.jobs.map((entry) => entry.id).join(", ");
-    return `Neon Cron job not found: ${jobId}\nAvailable jobs: ${available || "none"}`;
+    return `Neonika Cron job not found: ${jobId}\nAvailable jobs: ${available || "none"}`;
   }
 
   const lines = [
-    `Neon Cron Job: ${job.id}`,
+    `Neonika Cron Job: ${job.id}`,
     `Label: ${job.label}`,
     `State: ${job.state} / policy=${job.policy}`,
     `Schedule: ${job.schedule}${job.intervalMinutes !== undefined ? ` (${job.intervalMinutes}m)` : ""}`,

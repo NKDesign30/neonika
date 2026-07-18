@@ -1,4 +1,4 @@
-/* Neon Mission Control — global stylesheet aggregate.
+/* Neonika Mission Control — global stylesheet aggregate.
    Order matters: tokens define the CSS variables that app.css + views.css read.
    Sourced 1:1 from the Claude Design export (neon/colors_and_type.css,
    app/app.css, app/views.css); font files live in ./fonts and are bundled

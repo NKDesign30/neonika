@@ -54,6 +54,7 @@ export type TCodexHarnessEvent =
       readonly kind: "tool-start";
       readonly toolName: string;
       readonly toolCallId?: string;
+      readonly detail?: string;
       readonly hideFromChannelProgress?: true;
     }
   | {
@@ -61,6 +62,7 @@ export type TCodexHarnessEvent =
       readonly toolName: string;
       readonly toolCallId?: string;
       readonly output: string;
+      readonly detail?: string;
       readonly hideFromChannelProgress?: true;
     }
   | {
@@ -92,9 +94,18 @@ export interface ICodexHarnessResult {
   readonly memoryState: TMemoryAttachmentState;
   readonly events: readonly TCodexHarnessEvent[];
   readonly finalText: string;
+  readonly cancelled?: true;
 }
 
 export type TNeonHarnessId = "codex-app-server" | "claude-cli";
+
+export interface INeonHarnessRuntimeMetadata {
+  readonly provider: "openai" | "anthropic";
+  readonly runtime: "codex" | "claude";
+  readonly lane: TNeonHarnessId;
+  readonly model: string;
+  readonly effort: string;
+}
 
 const NEON_HARNESS_IDS: readonly TNeonHarnessId[] = ["codex-app-server", "claude-cli"];
 
@@ -119,5 +130,6 @@ export function isHarnessEventHiddenFromChannelProgress(event: TCodexHarnessEven
 
 export interface ICodexHarness {
   readonly id: TNeonHarnessId;
+  readonly runtime?: INeonHarnessRuntimeMetadata;
   run(input: ICodexHarnessInput): Promise<ICodexHarnessResult>;
 }

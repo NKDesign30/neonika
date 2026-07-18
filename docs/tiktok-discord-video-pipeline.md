@@ -16,7 +16,7 @@ Sources:
 - https://developers.tiktok.com/doc/content-posting-api-reference-direct-post
 - https://developers.tiktok.com/doc/content-posting-api-reference-upload-video
 
-## Neon Flow
+## Neonika Flow
 
 1. Discord message contains a video attachment.
 2. Neon stages the Discord media locally.

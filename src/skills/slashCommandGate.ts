@@ -106,7 +106,7 @@ export function renderNeonControlCommandGateReport(
   decision: INeonControlCommandGateDecision
 ): string {
   return [
-    "Neon Slash/Control Command Gate",
+    "Neonika Slash/Control Command Gate",
     `Command authorized: ${decision.commandAuthorized}`,
     `Should block: ${decision.shouldBlock}`
   ].join("\n");
