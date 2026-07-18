@@ -1,0 +1,74 @@
+title = "Neonika secret scan"
+
+# Every allowlist entry below must state WHY the match is not a secret, and must
+# be narrow enough that a real credential in the same file is still reported.
+#
+# The one rule that is never relaxed: do not allowlist a path just because it is
+# noisy. `test/` in particular stays under the scanner — the entries below match
+# fixture *values*, so a real credential pasted into a test still fails the scan.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Build output and dependencies. Untracked (see .gitignore); only visible to `gitleaks detect --no-git`, never to a cloner."
+paths = [
+  '''^dist/''',
+  '''^node_modules/''',
+  '''^ui/node_modules/''',
+  '''^ui/dist/''',
+]
+
+[[allowlists]]
+description = """
+Symbol and environment-variable NAMES, never values. `neonSecretsAudit.ts` is the
+secret *detector*: it lists the env keys it audits, and the default rules read
+`DISCORD_CLIENT_SECRET` as if it were the secret it names. `index.ts` re-exports
+those symbols.
+"""
+paths = [
+  '''^src/secrets/neonSecretsAudit\.ts$''',
+  '''^src/index\.ts$''',
+]
+regexes = [
+  '''(?i)[A-Z_]*(CLIENT_SECRET|API_KEY|TOKEN|SECRET)[A-Z_]*''',
+  '''(?i)neon[A-Za-z]*Secret[A-Za-z]*''',
+]
+
+[[allowlists]]
+description = """
+Synthetic fixtures for the redaction suite. Their whole purpose is to be passed
+to redactText() and asserted absent from the output — a real credential here
+would make the assertion meaningless. Matched by value shape, so an actual
+credential added to test/ is still reported.
+"""
+regexes = [
+  # Sequential-digit and alphabet-run fillers: nothing real looks like this.
+  '''1234567890''',
+  '''0123456789''',
+  '''0987654321''',
+  '''abcdefghijklmnopqrstuvwxy''',
+  '''AbCdEfGhIjKlMnOpQrStUvWx''',
+  # Explicit test markers baked into the value itself.
+  '''sk-test''',
+  '''(?i)hunter2''',
+  '''s3cr3tP%40ss''',
+  # The RFC-7519 example JWT (HS256 over {"sub":"1234567890"}).
+  '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.''',
+]
+
+[[allowlists]]
+description = """
+`sessionKey: "discord/private"` is a routing label, not a credential — the
+generic-api-key rule fires on the `sessionKey` keyword plus the slash. Matched
+as a whole literal so any other value assigned to sessionKey is still scanned.
+"""
+regexes = [
+  '''^discord/private$''',
+]
+
+[[allowlists]]
+description = "Placeholder Discord snowflakes. The 9000000000000000xx block is reserved for docs and defaults; no real guild, channel or user carries these IDs."
+regexes = [
+  '''9000000000000000[0-9]{2}''',
+]

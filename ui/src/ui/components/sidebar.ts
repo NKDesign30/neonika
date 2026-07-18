@@ -1,0 +1,98 @@
+import { LitElement, html, svg, type TemplateResult } from "lit";
+import { property } from "lit/decorators.js";
+import { I18nController, t } from "../../i18n/index.js";
+import { icon } from "../icons.js";
+import { NAV_GROUPS, type Tab } from "../navigation.js";
+
+// Official NEON brand mark (stacked N·E / O·N monogram), from the brand kit's
+// neon-symbol.svg. Inlined with fill="currentColor" so the sidebar can color it
+// per theme (#2EAB73 dark / #1F8E5C light) independently of the user-chosen
+// accent. The mark is flat by brand rule — no shadow, gradient or recolor.
+const brandMark = (): TemplateResult => svg`
+  <svg viewBox="40 46 166 166" fill="currentColor" aria-hidden="true">
+    <path d="M 117 107.65 L 116 107.64 L 115.33 107 L 114 104.58 L 95.8 83 L 94.87 80 L 94.86 56 L 95.23 55 L 96 54.43 L 116 54.28 L 117.59 55 L 118.12 56 L 117.72 64 L 117.87 104 L 117.77 107 Z"></path>
+    <path d="M 117 122.22 L 116 122.83 L 115 122.85 L 94 122.56 L 93 122.31 L 91.32 121 L 49.63 72 L 49 70 L 48.85 64 L 49.09 56 L 49.57 55 L 51 54.41 L 69 54.37 L 70.76 55 L 73 57.02 L 89.24 77 L 96.8 87 L 116.56 110 L 117.91 113 L 117.58 121 Z"></path>
+    <path d="M 195 76.14 L 192 76.55 L 132 76.12 L 131.29 75 L 131.21 74 L 131.41 56 L 132 54.95 L 134 54.46 L 195 54.62 L 196 55.31 L 196.52 57 L 196.17 74 Z"></path>
+    <path d="M 71 122.02 L 69 122.83 L 52 122.63 L 50.08 122 L 49.53 121 L 48.88 77 L 49.01 76 L 50 75.45 L 51 76.01 L 58.97 86 L 70 98.41 L 71.48 101 L 71.82 103 L 71.66 120 Z"></path>
+    <path d="M 179 98.23 L 133 98.68 L 132 98.18 L 131.51 97 L 131.11 79 L 132 78.05 L 133 77.85 L 179 78.07 L 180.3 79 L 180.45 80 L 180.04 97 Z"></path>
+    <path d="M 195 122.75 L 133 122.65 L 132 122.1 L 131.5 121 L 131.35 102 L 131.87 101 L 133 100.51 L 143 100.8 L 195 100.4 L 196.32 102 L 196.37 110 L 196.19 120 L 195.67 122 Z"></path>
+    <path d="M 116 167.17 L 114 166.75 L 69 167.08 L 55 166.61 L 51 166.9 L 50 166.58 L 49.32 165 L 50.35 159 L 51.68 155 L 53.77 151 L 58 145.61 L 62 141.65 L 67 138.33 L 74 135.5 L 79 134.65 L 86 134.51 L 92 135.14 L 100 138.26 L 105 141.5 L 110 146.36 L 113.51 151 L 115.13 154 L 116.52 158 L 117.85 165 L 117.57 166 Z"></path>
+    <path d="M 195 191.89 L 194 191.36 L 182.35 177 L 175.91 169 L 174.12 166 L 173.82 165 L 173.71 138 L 174.03 137 L 175 136.24 L 194 136.2 L 195 136.31 L 195.86 137 L 196.23 139 L 195.68 190 L 195.62 191 Z"></path>
+    <path d="M 152 202.17 L 133 201.93 L 132 201.82 L 131.02 201 L 130.6 138 L 130.82 137 L 132 136.33 L 147 136.3 L 148.37 137 L 153.89 144 L 153.49 148 L 153.15 181 L 153.62 200 L 153 201.71 Z"></path>
+    <path d="M 185 202.07 L 168 201.77 L 161.65 195 L 155.98 188 L 155.59 187 L 155.28 149 L 155.4 148 L 156 147.36 L 157 147.82 L 161.3 153 L 177 173.48 L 195.36 196 L 195.57 198 L 195 201.45 L 193 201.97 Z"></path>
+    <path d="M 91 202.2 L 87 202.97 L 80 202.9 L 74 201.8 L 69 200.02 L 61.22 195 L 58 192.01 L 55.61 189 L 52 182.89 L 49.77 175 L 49.32 170 L 49.92 169 L 51 168.65 L 113 168.97 L 116 168.54 L 117.03 169 L 117.84 170 L 117.84 171 L 116.52 178 L 113.19 186 L 110.54 190 L 107 193.91 L 101 198.43 L 97 200.35 Z"></path>
+  </svg>
+`;
+
+// Left navigation rail: brand mark, "new session", grouped tabs, footer identity.
+export class NeonSidebar extends LitElement {
+  @property({ attribute: false }) tab: Tab = "overview";
+
+  constructor() {
+    super();
+    new I18nController(this);
+  }
+
+  protected override createRenderRoot(): HTMLElement {
+    return this;
+  }
+
+  private select(tab: Tab): void {
+    this.dispatchEvent(new CustomEvent<Tab>("tab-select", { detail: tab, bubbles: true, composed: true }));
+  }
+
+  private newSession(): void {
+    this.dispatchEvent(new CustomEvent("new-session", { bubbles: true, composed: true }));
+  }
+
+  override render(): TemplateResult {
+    return html`
+      <nav class="nav">
+        <div class="nav__head">
+          <span class="nav__logo" role="img" aria-label="Neon">${brandMark()}</span>
+          <div class="nav__brandcopy">
+            <span class="nav__eyebrow">${t("brand.eyebrow")}</span>
+            <span class="nav__title">${t("brand.title")}</span>
+          </div>
+        </div>
+
+        <button class="nav__new" @click=${this.newSession}>
+          ${icon("plus", 15, "bold")} ${t("common.newSession")}
+        </button>
+
+        <div class="nav__scroll scrolly">
+          ${NAV_GROUPS.map(
+            (group) => html`
+              <div class="nav__group">
+                <div class="nav__grouplabel">${t(`groups.${group.label}`)}</div>
+                ${group.items.map((item) => {
+                  const active = item.id === this.tab;
+                  return html`
+                    <button
+                      class=${"nav__item" + (active ? " nav__item--active" : "")}
+                      @click=${() => this.select(item.id)}
+                      aria-current=${active ? "page" : "false"}
+                    >
+                      ${icon(item.icon, 16)}
+                      <span>${t(`tabs.${item.id}`)}</span>
+                    </button>
+                  `;
+                })}
+              </div>
+            `,
+          )}
+        </div>
+
+        <div class="nav__foot">
+          <div class="nav__avatar">NK</div>
+          <div class="nav__footcopy">
+            <div class="nav__footname">Operator</div>
+            <div class="nav__footmeta">Neonika</div>
+          </div>
+        </div>
+      </nav>
+    `;
+  }
+}
+
+customElements.define("neon-sidebar", NeonSidebar);
