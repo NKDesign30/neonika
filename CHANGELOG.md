@@ -4,6 +4,11 @@
 
 - Next changes are collected here.
 
+## [0.2.1] - 2026-07-18
+
+- Kept verified release tooling outside the source checkout so the immutable release manifest remains clean.
+- Updated pinned GitHub Actions runtimes to the current Node 24 based releases.
+
 ## [0.2.0] - 2026-07-18
 
 - Added a private first-use wizard that creates one owner identity and local SQLite memory without persisting secrets.

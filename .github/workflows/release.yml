@@ -36,12 +36,14 @@ jobs:
           SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
         run: |
           set -euo pipefail
-          asset="gitleaks_${VERSION}_linux_x64.tar.gz"
+          asset_name="gitleaks_${VERSION}_linux_x64.tar.gz"
+          asset="$RUNNER_TEMP/$asset_name"
+          binary="$RUNNER_TEMP/gitleaks"
           curl -sSfL -o "$asset" \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/${asset}"
+            "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/${asset_name}"
           echo "${SHA256}  ${asset}" | sha256sum -c -
-          tar -xzf "$asset" gitleaks
-          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+          tar -xzf "$asset" -C "$RUNNER_TEMP" gitleaks
+          sudo install -m 0755 "$binary" /usr/local/bin/gitleaks
       - name: Restore publication identity denylist
         env:
           DENYLIST_B64: ${{ secrets.OSS_AUDIT_DENYLIST }}
