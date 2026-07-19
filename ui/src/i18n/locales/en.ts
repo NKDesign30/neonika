@@ -2,10 +2,11 @@ import type { TranslationMap } from "../lib/types.js";
 
 // English — default locale, matches the Claude Design export wording.
 export const en: TranslationMap = {
-  brand: { eyebrow: "Control", title: "Neon" },
-  groups: { Chat: "Chat", Control: "Control", Agent: "Agent", Settings: "Settings" },
+  brand: { eyebrow: "Mission Control", title: "Neonika" },
+  groups: { Chat: "Chat", Control: "Control", Agent: "Agent", Sites: "Sites", Settings: "Settings" },
   tabs: {
     chat: "Chat",
+    sites: "Sites",
     overview: "Overview",
     activity: "Activity",
     workboard: "Workboard",
@@ -34,6 +35,7 @@ export const en: TranslationMap = {
     idle: "Idle",
     error: "Error",
     ok: "OK",
+    close: "Close",
   },
   state: {
     loading: "Loading…",
@@ -42,6 +44,12 @@ export const en: TranslationMap = {
     retry: "Retry",
   },
   gateway: { status: "Gateway", connected: "connected" },
+  workboard: {
+    loadMore: "Load more ({count} more)",
+    detailNoRun: "No run linked",
+    detailResult: "Result",
+    detailEvents: "Events ({count})",
+  },
   overview: {
     sub: "{count} runs tracked · live runtime",
     recentSessions: "Recent sessions",

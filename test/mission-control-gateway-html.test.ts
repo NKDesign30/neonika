@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -382,6 +382,51 @@ describe("Neonika Mission Control Gateway HTML", () => {
         assert.match(response.headers.get("content-type") ?? "", /text\/html/);
         assert.match(html, /Neonika Mission Control/);
         assert.match(html, /initialSnapshot/);
+      } finally {
+        await handle.close();
+      }
+    } finally {
+      await rm(projectRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("serves one injected packaged SPA across every Mission Control route", async () => {
+    const projectRoot = await createTempProjectRoot();
+    const controlUiDir = join(projectRoot, "packaged-control-ui");
+    const indexHtml = [
+      "<!doctype html>",
+      "<title>Neonika Mission Control</title>",
+      "<neon-control-app></neon-control-app>",
+      '<script type="module" src="/control-ui/assets/app.js"></script>'
+    ].join("\n");
+
+    try {
+      await mkdir(join(controlUiDir, "assets"), { recursive: true });
+      await writeFile(join(controlUiDir, "index.html"), indexHtml, "utf8");
+      await writeFile(join(controlUiDir, "assets", "app.js"), "export const ready = true;\n", "utf8");
+      await writeFile(join(projectRoot, "secret.txt"), "must-not-serve\n", "utf8");
+
+      const handle = await listenNeonGatewayHttpServer(
+        { projectRoot, controlUiDir },
+        { host: "127.0.0.1", port: 0 }
+      );
+
+      try {
+        const [gatewayResponse, sitesResponse, assetResponse, traversalResponse] = await Promise.all([
+          fetch(`${handle.url}/mission-control/gateway`),
+          fetch(`${handle.url}/mission-control/sites`),
+          fetch(`${handle.url}/control-ui/assets/app.js`),
+          fetch(`${handle.url}/control-ui/%2e%2e/secret.txt`)
+        ]);
+
+        assert.equal(gatewayResponse.status, 200);
+        assert.equal(sitesResponse.status, 200);
+        assert.equal(await gatewayResponse.text(), indexHtml);
+        assert.equal(await sitesResponse.text(), indexHtml);
+        assert.match(assetResponse.headers.get("content-type") ?? "", /javascript/);
+        assert.match(await assetResponse.text(), /ready = true/);
+        assert.equal(traversalResponse.status, 404);
+        assert.doesNotMatch(await traversalResponse.text(), /must-not-serve/);
       } finally {
         await handle.close();
       }

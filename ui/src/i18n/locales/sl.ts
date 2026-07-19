@@ -2,10 +2,11 @@ import type { TranslationMap } from "../lib/types.js";
 
 // Slovenščina.
 export const sl: TranslationMap = {
-  brand: { eyebrow: "Control", title: "Neon" },
-  groups: { Chat: "Klepet", Control: "Nadzor", Agent: "Agent", Settings: "Nastavitve" },
+  brand: { eyebrow: "Mission Control", title: "Neonika" },
+  groups: { Chat: "Klepet", Control: "Nadzor", Agent: "Agent", Sites: "Strani", Settings: "Nastavitve" },
   tabs: {
     chat: "Klepet",
+    sites: "Strani",
     overview: "Pregled",
     activity: "Aktivnost",
     workboard: "Delovna plošča",
@@ -34,6 +35,7 @@ export const sl: TranslationMap = {
     idle: "Nedejavno",
     error: "Napaka",
     ok: "V redu",
+    close: "Zapri",
   },
   state: {
     loading: "Nalaganje…",
@@ -42,6 +44,12 @@ export const sl: TranslationMap = {
     retry: "Poskusi znova",
   },
   gateway: { status: "Gateway", connected: "povezano" },
+  workboard: {
+    loadMore: "Naloži več ({count} preostalih)",
+    detailNoRun: "Ni povezane izvedbe",
+    detailResult: "Rezultat",
+    detailEvents: "Dogodki ({count})",
+  },
   overview: {
     sub: "{count} sej zabeleženih · izvajanje v živo",
     recentSessions: "Nedavne seje",

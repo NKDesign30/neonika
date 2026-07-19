@@ -49,7 +49,7 @@ export class NeonSidebar extends LitElement {
     return html`
       <nav class="nav">
         <div class="nav__head">
-          <span class="nav__logo" role="img" aria-label="Neon">${brandMark()}</span>
+          <span class="nav__logo" role="img" aria-label="Neonika">${brandMark()}</span>
           <div class="nav__brandcopy">
             <span class="nav__eyebrow">${t("brand.eyebrow")}</span>
             <span class="nav__title">${t("brand.title")}</span>
@@ -84,7 +84,7 @@ export class NeonSidebar extends LitElement {
         </div>
 
         <div class="nav__foot">
-          <div class="nav__avatar">NK</div>
+          <div class="nav__avatar">NI</div>
           <div class="nav__footcopy">
             <div class="nav__footname">Operator</div>
             <div class="nav__footmeta">Neonika</div>

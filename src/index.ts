@@ -2150,6 +2150,18 @@ export {
   type TNeonGatewayRunControlHttpState
 } from "./gateway/httpServer.js";
 export {
+  createNeonSiteAnalyticsSnapshot,
+  createNeonSitesSnapshot,
+  neonSiteAnalyticsCommandEnvKey,
+  neonSitesJsonEnvKey,
+  type ICreateNeonSiteAnalyticsOptions,
+  type INeonSite,
+  type INeonSiteAnalyticsRunnerOptions,
+  type INeonSitesSnapshot,
+  type TNeonSiteAnalyticsResult,
+  type TNeonSiteAnalyticsRunner
+} from "./gateway/neonSites.js";
+export {
   authorizeNeonHttpMutation,
   NEON_GATEWAY_HTTP_MUTATION_TOKEN_ENV,
   type INeonHttpMutationAuthDecision,

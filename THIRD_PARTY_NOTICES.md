@@ -9,6 +9,21 @@ This list is maintained by hand. When you port anything else from an upstream
 project, add it here **and** leave a header in the file itself: a notices file
 does not survive someone vendoring a single directory out of this repo.
 
+## NK Design Mission Control
+
+The Sites view, full Workboard replay detail and their related styles were
+adapted from NK Design's first-party Neon Mission Control implementation for
+Neonika. Copyright (c) NK Design; included with owner permission under this
+repository's MIT license.
+
+| Neonika file | Adapted surface |
+| --- | --- |
+| `ui/src/ui/views/sites.ts` | Sites reach and analytics view |
+| `ui/src/ui/views/workboard.ts` | Workboard pagination and replay detail |
+| `ui/src/ui/views/workboard.test.ts` | Workboard replay-detail tests |
+| `ui/src/styles/app.css` | Workboard detail overlay styles |
+| `ui/src/styles/views.css` | Sites view styles |
+
 ## OpenClaw
 
 Copyright (c) 2026 OpenClaw Foundation — MIT (full text below).

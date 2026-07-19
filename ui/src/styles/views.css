@@ -194,26 +194,118 @@
   .live-index__records { grid-template-columns: 1fr; }
 }
 
+/* ============================================================
+   Adapted from NK Design's Mission Control Sites view for Neonika.
+   Copyright (c) NK Design; used with owner permission. See THIRD_PARTY_NOTICES.md.
+   Neonika Sites — analytics dashboard
+   Matched to the Mission Control component language.
+   Every rule is scoped to <neon-sites> so it overrides the
+   shared .stat/.seg/.cols/.chart/.card__head from app.css only
+   inside this view — Overview/Usage stay untouched. Font-icon
+   selectors use `i` (Phosphor); the chart's own SVG classes
+   (.bar-rect/.vis-line/…) target the hand-drawn <svg>.
+   ============================================================ */
+neon-sites { display: block; }
+neon-sites .eyebrow-m { font-family: var(--font-mono); font-size: 10px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-tertiary); }
 
 /* Header */
+neon-sites .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
+neon-sites .head__title { font-family: var(--font-display); font-size: 38px; line-height: 1.0; letter-spacing: -0.02em; color: var(--text-primary); margin: 0; }
+neon-sites .head__sub { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--text-secondary); margin: 9px 0 0; flex-wrap: wrap; }
+neon-sites .head__src { display: inline-flex; align-items: center; gap: 6px; }
+neon-sites .src-dot { width: 6px; height: 6px; border-radius: 9999px; }
 
 /* Layout: site rail + content */
+neon-sites .grid { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 24px; align-items: start; }
 
 /* Site rail */
+neon-sites .rail { position: sticky; top: 24px; display: flex; flex-direction: column; gap: 3px; }
+neon-sites .rail__label { padding: 0 10px 8px; }
+neon-sites .site { position: relative; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; width: 100%; padding: 9px 11px; border: 0.5px solid transparent; border-radius: var(--radius-lg); background: transparent; cursor: pointer; text-align: left; transition: background var(--duration-instant) var(--easing-out), border-color var(--duration-fast) var(--easing-out); }
+neon-sites .site:hover { background: var(--surface-row-hover); }
+neon-sites .site--active { background: var(--surface-card); border-color: var(--stroke-hairline); }
+neon-sites .site__dot { width: 9px; height: 9px; border-radius: 9999px; box-shadow: 0 0 0 3px var(--color-alpha-white-04); }
+neon-sites .site--active .site__dot { box-shadow: 0 0 0 3px var(--color-alpha-white-08); }
+neon-sites .site__copy { display: flex; flex-direction: column; min-width: 0; }
+neon-sites .site__name { font-size: 13.5px; font-weight: 600; color: var(--text-secondary); line-height: 1.15; }
+neon-sites .site--active .site__name { color: var(--text-primary); }
+neon-sites .site__domain { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-quaternary); line-height: 1.3; margin-top: 1px; }
+neon-sites .site__req { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; opacity: 0; transition: opacity var(--duration-fast) var(--easing-out); }
+neon-sites .site:hover .site__req, neon-sites .site--active .site__req { opacity: 1; }
 
 /* Controls */
+neon-sites .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+neon-sites .seg { display: inline-flex; padding: 3px; gap: 2px; border: 0.5px solid var(--stroke-hairline); border-radius: var(--radius-md); background: var(--color-alpha-white-02); }
+neon-sites .seg__btn { height: 28px; padding: 0 13px; border: none; background: transparent; border-radius: 4px; color: var(--text-tertiary); font: 500 12.5px var(--font-body); cursor: pointer; transition: background var(--duration-instant) var(--easing-out), color var(--duration-instant) var(--easing-out); }
+neon-sites .seg__btn:hover { color: var(--text-secondary); }
+neon-sites .seg__btn--active { background: var(--brand-primary); color: var(--text-on-brand); font-weight: 600; }
+neon-sites .bar__meta { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); }
 
 /* Stat cards (brand signature: mono eyebrow -> serif display) */
+neon-sites .stats { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; margin-bottom: 16px; }
+neon-sites .stat { position: relative; padding: 15px 16px 16px; background: var(--surface-card); border: 0.5px solid var(--stroke-hairline); border-radius: var(--radius-xl); overflow: hidden; }
+neon-sites .stat__label { display: flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 10px; font-weight: 500; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-tertiary); }
+neon-sites .stat__label i { color: var(--text-quaternary); font-size: 12px; }
+neon-sites .stat__src { margin-left: auto; font-family: var(--font-mono); font-size: 8.5px; letter-spacing: 0.08em; padding: 2px 5px; border-radius: var(--radius-sm); border: 0.5px solid var(--stroke-hairline); color: var(--text-quaternary); }
+neon-sites .stat__src--cf { color: var(--brand-bright); border-color: color-mix(in srgb, var(--brand-primary) 40%, transparent); }
+neon-sites .stat__value { font-family: var(--font-display); font-size: 40px; line-height: 1; letter-spacing: -0.02em; color: var(--text-primary); margin: 14px 0 9px; font-variant-numeric: tabular-nums; }
+neon-sites .stat__value--brand { color: var(--brand-primary); }
+neon-sites .stat__foot { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+neon-sites .stat__hint { font-size: 11.5px; color: var(--text-tertiary); white-space: nowrap; }
 
 /* Cards */
+neon-sites .card { background: var(--surface-card); border: 0.5px solid var(--stroke-hairline); border-radius: var(--radius-xl); }
+neon-sites .card__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 17px; border-bottom: 0.5px solid var(--stroke-hairline); }
+neon-sites .card__title { font-size: 14px; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
+neon-sites .tag-cf, neon-sites .tag-ga { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.06em; padding: 3px 7px; border-radius: var(--radius-sm); border: 0.5px solid var(--stroke-hairline); }
+neon-sites .tag-cf { color: var(--brand-bright); }
+neon-sites .tag-ga { color: var(--text-tertiary); }
 
 /* Chart */
+neon-sites .chart { padding: 18px 18px 10px; position: relative; display: block; height: auto; }
+neon-sites .chartwrap { position: relative; width: 100%; }
+neon-sites .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+neon-sites .bar-rect { transition: fill var(--duration-fast) var(--easing-out); }
+neon-sites .bar-hit { fill: transparent; cursor: pointer; }
+neon-sites .bar-hit:hover + .bar-rect, neon-sites .bar-rect.is-hover { fill: var(--brand-primary); }
+neon-sites .grid-line { stroke: var(--stroke-hairline); stroke-width: 1; }
+neon-sites .axis-text { font-family: var(--font-mono); font-size: 16px; fill: var(--text-quaternary); }
+neon-sites .peak-text { font-family: var(--font-mono); font-size: 16px; fill: var(--text-tertiary); }
+neon-sites .vis-line { fill: none; stroke: var(--brand-bright); stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
+neon-sites .vis-dot { fill: var(--surface-card); stroke: var(--brand-bright); stroke-width: 2; }
+neon-sites .legend { display: flex; align-items: center; gap: 18px; padding: 12px 4px 2px; }
+neon-sites .legend__item { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--text-secondary); }
+neon-sites .legend__sw { width: 11px; height: 11px; border-radius: 3px; }
+neon-sites .legend__line { width: 16px; height: 2.4px; border-radius: 2px; background: var(--brand-bright); }
 
 /* Tooltip */
+neon-sites .tip { position: absolute; transform: translate(-50%, -100%); pointer-events: none; z-index: 5; padding: 9px 11px; border-radius: var(--radius-lg); background: var(--surface-elevated); border: 0.5px solid var(--stroke-default); box-shadow: var(--shadow-md); white-space: nowrap; }
+neon-sites .tip__date { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em; color: var(--text-tertiary); margin-bottom: 6px; }
+neon-sites .tip__row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+neon-sites .tip__row + .tip__row { margin-top: 3px; }
+neon-sites .tip__sw { width: 8px; height: 8px; border-radius: 2px; }
+neon-sites .tip__k { color: var(--text-secondary); }
+neon-sites .tip__v { margin-left: auto; font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-primary); font-weight: 500; }
 
 /* Two-up */
+neon-sites .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; align-items: start; }
 
 /* Bar list (top pages / countries) */
+neon-sites .blist { display: flex; flex-direction: column; padding: 7px 8px; }
+neon-sites .brow { display: grid; grid-template-columns: minmax(96px, 0.9fr) 1.6fr auto; align-items: center; gap: 14px; padding: 9px 9px; border-radius: var(--radius-md); transition: background var(--duration-instant) var(--easing-out); }
+neon-sites .brow:hover { background: var(--surface-row-hover); }
+neon-sites .brow__keywrap { display: flex; align-items: center; gap: 9px; min-width: 0; }
+neon-sites .brow__key { font-size: 12.5px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+neon-sites .brow__key--mono { font-family: var(--font-mono); font-size: 11.5px; }
+neon-sites .brow__track { height: 8px; border-radius: 9999px; background: var(--color-alpha-white-06); overflow: hidden; }
+neon-sites .brow__fill { height: 100%; border-radius: 9999px; background: var(--brand-primary); transition: width var(--duration-slow) var(--easing-out); }
+neon-sites .brow__val { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); font-variant-numeric: tabular-nums; min-width: 30px; text-align: right; }
+neon-sites .flag { width: 17px; height: 12px; border-radius: 2px; flex-shrink: 0; overflow: hidden; box-shadow: 0 0 0 0.5px var(--stroke-hairline); position: relative; display: inline-block; }
 
 @media (max-width: 1080px) {
+  neon-sites .grid { grid-template-columns: 1fr; }
+  neon-sites .rail { position: static; flex-direction: row; flex-wrap: wrap; }
+  neon-sites .site { width: auto; }
+  neon-sites .stats { grid-template-columns: repeat(2, 1fr); }
+  neon-sites .cols { grid-template-columns: 1fr; }
 }

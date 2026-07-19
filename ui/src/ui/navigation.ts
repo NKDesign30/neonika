@@ -4,6 +4,7 @@ import type { IconName } from "./icons.js";
 // Chat / Control / Agent / Settings.
 export type Tab =
   | "chat"
+  | "sites"
   | "overview"
   | "activity"
   | "workboard"
@@ -59,6 +60,10 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     ],
   },
   {
+    label: "Sites",
+    items: [{ id: "sites", name: "Sites", icon: "globe" }],
+  },
+  {
     label: "Settings",
     items: [
       { id: "config", name: "Settings", icon: "settings" },
@@ -70,6 +75,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
 
 const TAB_TITLES: Record<Tab, string> = {
   chat: "Chat",
+  sites: "Sites",
   overview: "Overview",
   activity: "Activity",
   workboard: "Workboard",

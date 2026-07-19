@@ -378,6 +378,26 @@ body {
 .bd__fill { height: 100%; border-radius: 9999px; }
 .bd__val { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 
+/* Adapted from NK Design's Mission Control Workboard detail overlay.
+   Copyright (c) NK Design; used with owner permission. See THIRD_PARTY_NOTICES.md. */
+/* ---------- Workboard card-detail overlay (backdrop: .palette-overlay) ---------- */
+.detail__panel {
+  width: min(620px, 92vw); max-height: 74vh; align-self: flex-start;
+  display: flex; flex-direction: column;
+  background: var(--surface-elevated); border: 0.5px solid var(--stroke-default);
+  border-radius: var(--radius-2xl); box-shadow: var(--shadow-xl); overflow: hidden;
+  animation: pop 160ms var(--easing-out); outline: none;
+}
+[data-theme="dark"] .detail__panel { background: #232320; }
+.detail__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 16px; border-bottom: 0.5px solid var(--stroke-hairline);
+}
+.detail__body { padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+.detail__meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.detail__section { display: flex; flex-direction: column; gap: 6px; }
+.detail__section p { margin: 0; font-size: 13px; color: var(--text-primary); line-height: 1.5; }
+
 /* ---------- Misc ---------- */
 .divlabel { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
 .divlabel__line { flex: 1; height: 0.5px; background: var(--stroke-hairline); }

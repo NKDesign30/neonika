@@ -23,6 +23,7 @@ const TAB_META: Record<Tab, { icon: IconName; sub: string }> = {
   config: { icon: "settings", sub: "Gateway, model and runtime configuration." },
   channels: { icon: "link", sub: "Connect Slack, Telegram, Discord, Signal and more." },
   logs: { icon: "scrollText", sub: "Live runtime logs and diagnostics." },
+  sites: { icon: "barChart", sub: "Reach and analytics for configured Neonika sites." },
 };
 
 export class NeonPlaceholder extends LitElement {

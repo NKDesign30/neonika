@@ -12,7 +12,7 @@ case "$release_dir" in
 esac
 
 bash scripts/verify-changelog.sh
-npm run build >/dev/null
+npm run build:package >/dev/null
 
 temporary_dir=$(mktemp -d "${TMPDIR:-/tmp}/neonika-release.XXXXXX")
 cleanup() {

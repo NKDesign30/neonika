@@ -9,6 +9,7 @@ import "./components/sidebar.js";
 import "./components/topbar.js";
 import "./components/command-palette.js";
 import "./views/overview.js";
+import "./views/sites.js";
 import "./views/sessions.js";
 import "./views/activity.js";
 import "./views/agents.js";
@@ -109,6 +110,8 @@ export class NeonControlApp extends LitElement {
     switch (this.tab) {
       case "overview":
         return html`<neon-overview></neon-overview>`;
+      case "sites":
+        return html`<neon-sites></neon-sites>`;
       case "sessions":
         return html`<neon-sessions></neon-sessions>`;
       case "activity":

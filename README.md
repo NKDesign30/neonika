@@ -23,6 +23,7 @@ npm install --global https://github.com/NKDesign30/neonika/releases/latest/downl
 neonika --help
 neonika onboard
 neonika onboarding-smoke
+neonika mission-control-serve        # http://127.0.0.1:8788/mission-control
 ```
 
 `neonika onboard` is an interactive first-use wizard in a terminal. For CI or
@@ -67,14 +68,14 @@ Requires Node.js 22.19+ (or 23.11+). No database, no services, no API key.
 ```bash
 git clone https://github.com/NKDesign30/neonika.git && cd neonika
 npm ci
-npm run build
+npm run build:package
 node dist/src/cli.js status
 ```
 
 That prints the product manifest. To see the operator dashboard:
 
 ```bash
-npm run serve                     # http://127.0.0.1:8788/mission-control/gateway
+npm run serve                     # http://127.0.0.1:8788/mission-control
 ```
 
 To check what the runtime thinks of its own environment:

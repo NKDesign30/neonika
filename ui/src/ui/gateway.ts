@@ -105,6 +105,8 @@ export const NEON_ENDPOINTS = {
   heartbeat: "/api/neon-heartbeat",
   workspace: "/api/neon-workspace",
   onboarding: "/api/neon-onboarding",
+  sites: "/api/neon-sites",
+  siteAnalytics: "/api/neon-sites/analytics",
 } as const;
 
 export class NeonControlClient {
@@ -153,6 +155,11 @@ export class NeonControlClient {
   workboardCards<T>(opts?: FetchOptions) {
     return this.get<T>(NEON_ENDPOINTS.workboardCards, opts);
   }
+  replay<T>(runId: string, opts?: FetchOptions & { events?: number }) {
+    const params = new URLSearchParams({ runId });
+    if (opts?.events) params.set("events", String(opts.events));
+    return this.get<T>(`${NEON_ENDPOINTS.replay}?${params.toString()}`, opts);
+  }
   cutover<T>(opts?: FetchOptions) {
     return this.get<T>(NEON_ENDPOINTS.cutover, opts);
   }
@@ -182,6 +189,13 @@ export class NeonControlClient {
   }
   routes<T>(opts?: FetchOptions) {
     return this.get<T>(NEON_ENDPOINTS.gatewayRoutes, opts);
+  }
+  sites<T>(opts?: FetchOptions) {
+    return this.get<T>(NEON_ENDPOINTS.sites, opts);
+  }
+  siteAnalytics<T>(property: string, days: number, opts?: FetchOptions) {
+    const params = new URLSearchParams({ property, days: String(days) });
+    return this.get<T>(`${NEON_ENDPOINTS.siteAnalytics}?${params.toString()}`, opts);
   }
 }
 

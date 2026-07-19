@@ -97,6 +97,7 @@ import { createNeonTranscriptSnapshot } from "../indexer/transcriptSnapshot.js";
 import { createMergedNeonMemoryProvider } from "../memory/mergedMemoryProvider.js";
 import { resolveNeonMemoryDbWriteGate } from "../memory/neonMemoryDbWriter.js";
 import { createNeonUsageSnapshot } from "./usageSnapshot.js";
+import { createNeonSiteAnalyticsSnapshot, createNeonSitesSnapshot } from "./neonSites.js";
 import { createNeonRunTaskProjection } from "../tasks/runTaskProjection.js";
 import { extractNeonDocument, type INeonDocExtractProvider, type INeonDocExtractRequest } from "../tools/documentExtract.js";
 import { createNeonPdfExtractProvider } from "../tools/pdfExtractProvider.js";
@@ -129,6 +130,12 @@ import {
 
 export interface INeonGatewayHttpServerOptions {
   readonly projectRoot: string;
+  /**
+   * Absolute path to the packaged Vite build. Kept separate from projectRoot
+   * so a globally installed CLI can serve its bundled dashboard while reading
+   * runtime state from the operator's current workspace.
+   */
+  readonly controlUiDir?: string;
   readonly runControl?: INeonGatewayRunControlRuntime;
   /**
    * Transcript-indexer ingest root (~/.claude/projects by default). An injection
@@ -551,6 +558,16 @@ async function handleGatewayRequest(
       return;
     }
 
+    if (requestUrl.pathname === "/api/neon-sites/analytics") {
+      await handleNeonSiteAnalytics(context);
+      return;
+    }
+
+    if (requestUrl.pathname === "/api/neon-sites") {
+      handleNeonSites(context);
+      return;
+    }
+
     if (requestUrl.pathname === "/api/neon-run-tasks") {
       await handleNeonRunTasks(context);
       return;
@@ -767,7 +784,7 @@ async function handleGatewayRequest(
     }
 
     if (requestUrl.pathname.startsWith("/control-ui/")) {
-      await handleControlUiAsset(context);
+      await handleControlUiAsset(context, options);
       return;
     }
 
@@ -1596,6 +1613,24 @@ async function handleNeonUsage(context: IRouteContext): Promise<void> {
   writeJson(context.response, 200, createNeonUsageSnapshot(runs));
 }
 
+function handleNeonSites(context: IRouteContext): void {
+  writeJson(context.response, 200, createNeonSitesSnapshot());
+}
+
+async function handleNeonSiteAnalytics(context: IRouteContext): Promise<void> {
+  const result = await createNeonSiteAnalyticsSnapshot(
+    readQueryText(context.requestUrl, "property"),
+    readQueryText(context.requestUrl, "days")
+  );
+
+  if (!result.ok) {
+    writeJson(context.response, result.status, { error: result.error });
+    return;
+  }
+
+  writeJson(context.response, 200, result.value);
+}
+
 async function handleNeonRunTasks(context: IRouteContext): Promise<void> {
   const limit = readLimit(context.requestUrl) ?? 100;
   const runs = await readNeonGatewayRuns(context.projectRoot, { maxRuns: limit });
@@ -1781,14 +1816,21 @@ const CONTROL_UI_CONTENT_TYPES: Readonly<Record<string, string>> = {
 
 // Map a /control-ui/<rel> request to an absolute file path inside dist/control-ui,
 // rejecting anything that would escape the directory (path-traversal guard).
-function resolveControlUiAssetPath(projectRoot: string, pathname: string): string | undefined {
+function resolveControlUiDir(options: INeonGatewayHttpServerOptions): string {
+  return resolve(options.controlUiDir ?? resolve(options.projectRoot, CONTROL_UI_DIR_NAME));
+}
+
+function resolveControlUiAssetPath(
+  options: INeonGatewayHttpServerOptions,
+  pathname: string
+): string | undefined {
   const relative = pathname.slice("/control-ui/".length);
 
   if (relative === "" || relative.includes("\0")) {
     return undefined;
   }
 
-  const baseDir = resolve(projectRoot, CONTROL_UI_DIR_NAME);
+  const baseDir = resolveControlUiDir(options);
   const candidate = resolve(baseDir, relative);
 
   if (candidate !== baseDir && !candidate.startsWith(baseDir + sep)) {
@@ -1798,8 +1840,11 @@ function resolveControlUiAssetPath(projectRoot: string, pathname: string): strin
   return candidate;
 }
 
-async function handleControlUiAsset(context: IRouteContext): Promise<void> {
-  const filePath = resolveControlUiAssetPath(context.projectRoot, context.requestUrl.pathname);
+async function handleControlUiAsset(
+  context: IRouteContext,
+  options: INeonGatewayHttpServerOptions
+): Promise<void> {
+  const filePath = resolveControlUiAssetPath(options, context.requestUrl.pathname);
 
   if (!filePath) {
     writeJson(context.response, 404, { error: "not-found" });
@@ -1827,9 +1872,11 @@ async function handleControlUiAsset(context: IRouteContext): Promise<void> {
 
 // Returns the built SPA index.html when the control UI has been built, else
 // undefined so callers fall back to the server-rendered gateway HTML.
-async function readControlUiIndexHtml(projectRoot: string): Promise<string | undefined> {
+async function readControlUiIndexHtml(
+  options: INeonGatewayHttpServerOptions
+): Promise<string | undefined> {
   try {
-    return await readFile(resolve(projectRoot, CONTROL_UI_DIR_NAME, "index.html"), "utf8");
+    return await readFile(resolve(resolveControlUiDir(options), "index.html"), "utf8");
   } catch {
     return undefined;
   }
@@ -1839,18 +1886,13 @@ async function handleMissionControlGatewayHtml(
   context: IRouteContext,
   options: INeonGatewayHttpServerOptions
 ): Promise<void> {
-  // /mission-control/gateway is the always-available server-rendered fallback
-  // (no build required). Every other /mission-control/<view> path serves the
-  // built SPA when present, and falls back to server-rendered HTML otherwise.
-  const normalizedPath = context.requestUrl.pathname.replace(/\/+$/u, "") || "/mission-control";
+  // Every Mission Control route serves the same built SPA when present. The
+  // server-rendered surface remains the zero-build fallback for source trees.
+  const indexHtml = await readControlUiIndexHtml(options);
 
-  if (normalizedPath !== "/mission-control/gateway") {
-    const indexHtml = await readControlUiIndexHtml(context.projectRoot);
-
-    if (indexHtml !== undefined) {
-      writeHtml(context.response, 200, indexHtml);
-      return;
-    }
+  if (indexHtml !== undefined) {
+    writeHtml(context.response, 200, indexHtml);
+    return;
   }
 
   const limit = readLimit(context.requestUrl) ?? 8;

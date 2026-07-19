@@ -58,15 +58,21 @@ const allowed = paths.every((path) =>
   path === "README.md" ||
   path === "LICENSE" ||
   path === "THIRD_PARTY_NOTICES.md" ||
-  path.startsWith("dist/src/")
+  path.startsWith("dist/src/") ||
+  path.startsWith("dist/control-ui/")
 );
-if (!allowed || !paths.includes("dist/src/cli.js")) {
+if (
+  !allowed ||
+  !paths.includes("dist/src/cli.js") ||
+  !paths.includes("dist/control-ui/index.html")
+) {
   throw new Error("release package contains files outside the runtime allowlist");
 }
 NODE
 else
   pack_report="$smoke_dir/pack.json"
-  npm pack --json --pack-destination "$smoke_dir" >"$pack_report"
+  npm run build:package >/dev/null
+  npm pack --json --ignore-scripts --pack-destination "$smoke_dir" >"$pack_report"
 
   package_file=$(node - "$pack_report" <<'NODE'
 const { readFileSync } = require("node:fs");
@@ -91,9 +97,14 @@ const allowed = paths.every((path) =>
   path === "README.md" ||
   path === "LICENSE" ||
   path === "THIRD_PARTY_NOTICES.md" ||
-  path.startsWith("dist/src/")
+  path.startsWith("dist/src/") ||
+  path.startsWith("dist/control-ui/")
 );
-if (!allowed || !paths.includes("dist/src/cli.js")) {
+if (
+  !allowed ||
+  !paths.includes("dist/src/cli.js") ||
+  !paths.includes("dist/control-ui/index.html")
+) {
   throw new Error("npm package contains files outside the runtime allowlist");
 }
 process.stdout.write(packed.filename);
@@ -141,6 +152,11 @@ if [ ! -f "$package_root/dist/src/cli.js" ]; then
   exit 1
 fi
 
+if [ ! -f "$package_root/dist/control-ui/index.html" ]; then
+  printf 'Extracted npm package has no Mission Control SPA\n' >&2
+  exit 1
+fi
+
 gitleaks dir "$package_root" \
   --config scripts/npm-package-gitleaks.toml \
   --no-banner \
@@ -164,6 +180,7 @@ fi
   "$neonika_bin" onboard --yes --config-root "$config_root" >/dev/null
   "$neonika_bin" onboarding-smoke --config-root "$config_root" >/dev/null
   "$neonika_bin" whatsapp-status --config-root "$config_root" | grep -q '^WhatsApp companion: disabled$'
+  "$neonika_bin" mission-control-ui-smoke | grep -q '^UI: spa '
 )
 
 node - "$config_root" <<'NODE'
@@ -190,4 +207,5 @@ printf 'Package: %s\n' "$package_file"
 printf 'Version: %s\n' "$installed_version"
 printf 'Leak scan: clean (%s files, %s bytes)\n' "$package_files" "$package_bytes"
 printf 'Fresh onboarding: private config and local memory ready\n'
+printf 'Mission Control: packaged SPA ready\n'
 printf 'Uninstall: clean\n'

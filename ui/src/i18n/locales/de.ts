@@ -2,10 +2,11 @@ import type { TranslationMap } from "../lib/types.js";
 
 // Deutsch — mit Umlauten, keine ae/oe/ue-Ersatzschreibweisen.
 export const de: TranslationMap = {
-  brand: { eyebrow: "Control", title: "Neon" },
-  groups: { Chat: "Chat", Control: "Steuerung", Agent: "Agent", Settings: "Einstellungen" },
+  brand: { eyebrow: "Mission Control", title: "Neonika" },
+  groups: { Chat: "Chat", Control: "Steuerung", Agent: "Agent", Sites: "Seiten", Settings: "Einstellungen" },
   tabs: {
     chat: "Chat",
+    sites: "Seiten",
     overview: "Überblick",
     activity: "Aktivität",
     workboard: "Workboard",
@@ -34,6 +35,7 @@ export const de: TranslationMap = {
     idle: "Inaktiv",
     error: "Fehler",
     ok: "OK",
+    close: "Schließen",
   },
   state: {
     loading: "Lädt…",
@@ -42,6 +44,12 @@ export const de: TranslationMap = {
     retry: "Erneut",
   },
   gateway: { status: "Gateway", connected: "verbunden" },
+  workboard: {
+    loadMore: "Mehr laden ({count} weitere)",
+    detailNoRun: "Kein Run verknüpft",
+    detailResult: "Ergebnis",
+    detailEvents: "Ereignisse ({count})",
+  },
   overview: {
     sub: "{count} Runs erfasst · Live-Laufzeit",
     recentSessions: "Letzte Sessions",

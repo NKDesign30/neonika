@@ -4,6 +4,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
+import { fileURLToPath } from "node:url";
 
 import { ThreadAutoArchiveDuration, type ChatInputCommandInteraction, type Message } from "discord.js";
 import WebSocket, { type RawData as WsRawData } from "ws";
@@ -569,6 +570,8 @@ interface ICommand {
 }
 
 let discordTapClientPool: CodexAppServerClientPool | undefined;
+
+const PACKAGED_CONTROL_UI_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "control-ui");
 
 const commands: Record<string, ICommand> = {
   status: {
@@ -12346,7 +12349,8 @@ function renderMissionControlSnapshot(snapshot: INeonMissionControlGatewaySnapsh
 async function runMissionControlUiSmoke(): Promise<string> {
   const handle = await listenNeonGatewayHttpServer(
     {
-      projectRoot: process.cwd()
+      projectRoot: process.cwd(),
+      controlUiDir: PACKAGED_CONTROL_UI_DIR
     },
     {
       host: "127.0.0.1",
@@ -12357,9 +12361,9 @@ async function runMissionControlUiSmoke(): Promise<string> {
   try {
     const response = await fetch(`${handle.url}/mission-control/gateway`);
     const html = await response.text();
-    const requiredMarkers = [
+    const fallbackMarkers = [
       "Neonika Mission Control",
-      "NEON CORE",
+      "NEONIKA",
       "data-view=\"chat\"",
       "data-view=\"overview\"",
       "data-view=\"activity\"",
@@ -12461,9 +12465,7 @@ async function runMissionControlUiSmoke(): Promise<string> {
       "/api/neon-automation",
       "initialSnapshot"
     ];
-    const ok = response.ok && requiredMarkers.every((marker) => html.includes(marker));
-
-    if (!ok) {
+    if (!response.ok) {
       throw new Error(`Mission Control UI smoke failed with HTTP ${response.status}`);
     }
 
@@ -12478,11 +12480,16 @@ async function runMissionControlUiSmoke(): Promise<string> {
       throw new Error(`Mission Control overview smoke failed with HTTP ${overviewResponse.status}`);
     }
 
-    const assetMatch = overviewHtml.match(/\/control-ui\/assets\/[A-Za-z0-9._-]+\.js/u);
+    const gatewayAssetMatch = html.match(/\/control-ui\/assets\/[A-Za-z0-9._-]+\.js/u);
+    const overviewAssetMatch = overviewHtml.match(/\/control-ui\/assets\/[A-Za-z0-9._-]+\.js/u);
     let uiMode: string;
 
-    if (assetMatch) {
-      const assetPath = assetMatch[0];
+    if (gatewayAssetMatch && overviewAssetMatch) {
+      if (!html.includes("<neon-control-app></neon-control-app>") || !html.includes("Neonika Mission Control")) {
+        throw new Error("Mission Control SPA is missing the Neonika shell markers");
+      }
+
+      const assetPath = gatewayAssetMatch[0];
       const assetResponse = await fetch(`${handle.url}${assetPath}`);
       const assetContentType = assetResponse.headers.get("content-type") ?? "";
 
@@ -12493,15 +12500,21 @@ async function runMissionControlUiSmoke(): Promise<string> {
       }
 
       uiMode = `spa (asset ${assetPath})`;
-    } else if (overviewHtml.includes('data-view="overview"')) {
+    } else if (
+      gatewayAssetMatch === null &&
+      overviewAssetMatch === null &&
+      fallbackMarkers.every((marker) => html.includes(marker)) &&
+      overviewHtml.includes('data-view="overview"')
+    ) {
       uiMode = "server-rendered fallback (run npm run ui:build for the SPA)";
     } else {
-      throw new Error("Mission Control overview returned neither the SPA bundle nor the server-rendered fallback");
+      throw new Error("Mission Control routes returned neither one shared SPA nor the server-rendered fallback");
     }
 
     return [
       "Mission Control UI: ok",
-      `Gateway URL: ${handle.url}/mission-control/gateway`,
+      `Dashboard URL: ${handle.url}/mission-control`,
+      `Gateway alias: ${handle.url}/mission-control/gateway`,
       `Overview URL: ${handle.url}/mission-control/overview`,
       `UI: ${uiMode}`,
       `Bytes: ${html.length}`
@@ -12517,7 +12530,7 @@ async function runMissionControlServe(): Promise<undefined> {
   console.log(
     [
       "Mission Control server: ready",
-      `URL: ${handle.url}/mission-control/gateway`,
+      `URL: ${handle.url}/mission-control`,
       `API: ${handle.url}/api/neon-mission-control/gateway`,
       "Stop: Ctrl+C"
     ].join("\n")
@@ -12573,7 +12586,8 @@ async function listenMissionControlServer(): Promise<INeonGatewayHttpServerHandl
   try {
     return await listenNeonGatewayHttpServer(
       {
-        projectRoot: process.cwd()
+        projectRoot: process.cwd(),
+        controlUiDir: PACKAGED_CONTROL_UI_DIR
       },
       {
         host,
@@ -12587,7 +12601,8 @@ async function listenMissionControlServer(): Promise<INeonGatewayHttpServerHandl
 
     return await listenNeonGatewayHttpServer(
       {
-        projectRoot: process.cwd()
+        projectRoot: process.cwd(),
+        controlUiDir: PACKAGED_CONTROL_UI_DIR
       },
       {
         host,

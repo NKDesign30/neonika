@@ -13,6 +13,7 @@
   },
   "files": [
     "dist/src",
+    "dist/control-ui",
     "README.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md"
@@ -21,7 +22,8 @@
     "check": "tsc --noEmit",
     "prebuild": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "tsc -p tsconfig.json",
-    "prepare": "npm run build",
+    "build:package": "npm run build && npm run ui:install && npm run ui:build",
+    "prepare": "npm run build:package",
     "test": "npm run build && node --test dist/test/*.test.js",
     "start": "node dist/src/cli.js status",
     "serve": "node dist/src/cli.js mission-control-serve",
