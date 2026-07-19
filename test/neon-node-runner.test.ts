@@ -67,7 +67,7 @@ describe("Neonika Node Runner", () => {
         {
           type: "page",
           title: "Neonika Mission Control",
-          url: "http://localhost:8788/mission-control?token=secret-query-token"
+          url: "http://localhost:8798/mission-control?token=secret-query-token"
         },
         { type: "page", title: "GitHub", url: "https://github.com/neondev/neonika" },
         {
@@ -97,7 +97,7 @@ describe("Neonika Node Runner", () => {
       assert.equal(result.tabs?.length, 3);
       assert.equal(result.totalEntries, 3);
       assert.deepEqual(result.tabs, [
-        { title: "Neonika Mission Control", host: "localhost:8788" },
+        { title: "Neonika Mission Control", host: "localhost:8798" },
         { title: "GitHub", host: "github.com" },
         { title: "App Tab", host: "app.example.com" }
       ]);

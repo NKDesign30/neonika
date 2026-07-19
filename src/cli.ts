@@ -12581,7 +12581,7 @@ function verifyOperatorShellDashboard(dashboard: INeonTuiDashboard): void {
 
 async function listenMissionControlServer(): Promise<INeonGatewayHttpServerHandle> {
   const host = process.env["NEONIKA_HOST"] ?? "127.0.0.1";
-  const preferredPort = readOptionalPort(process.env["NEONIKA_PORT"]) ?? 8788;
+  const preferredPort = readOptionalPort(process.env["NEONIKA_PORT"]) ?? 8798;
 
   try {
     return await listenNeonGatewayHttpServer(
