@@ -1,7 +1,7 @@
 import { access } from "node:fs/promises";
 import { join } from "node:path";
 
-import { createNeonAgentsSnapshot } from "../agents/registry.js";
+import { createNeonAgentsSnapshot, loadNeonAgentProfiles } from "../agents/registry.js";
 import { createNeonDoctorSnapshot } from "../doctor/neonDoctor.js";
 import { readNeonGatewayStatus, resolveGatewayStatePaths } from "../gateway/runStore.js";
 import {
@@ -105,7 +105,7 @@ export async function createNeonOnboardingSnapshot(
     inspectNeonWhatsAppAuthState(setupPaths.whatsappAuthPath)
   ]);
   const memoryReady = memorySearchReady || memoryDbReady;
-  const agents = createNeonAgentsSnapshot();
+  const agents = createNeonAgentsSnapshot((await loadNeonAgentProfiles(projectRoot)).profiles);
   const configPreview = createConfigPreview(env, setupConfig);
   const steps = [
     buildWorkspaceStep(workspaceReady),

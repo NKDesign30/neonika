@@ -2,7 +2,12 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { readFile } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 
-import { createNeonAgentsSnapshot, defaultNeonAgentId, resolveNeonAgentProfile } from "../agents/registry.js";
+import {
+  createNeonAgentsSnapshot,
+  defaultNeonAgentId,
+  loadNeonAgentProfiles,
+  resolveNeonAgentProfile
+} from "../agents/registry.js";
 import { createNeonCronStoreAutomationSnapshot } from "../automation/cronStoreSnapshot.js";
 import { resolveNeonHeartbeatAgentsFromEnv } from "../automation/heartbeatRuntimeConfig.js";
 import { createNeonWorkspaceSnapshot } from "../workspace/workspaceNotes.js";
@@ -958,7 +963,8 @@ function handleNeonActivityStream(context: IRouteContext): void {
 }
 
 async function handleNeonAgents(context: IRouteContext): Promise<void> {
-  writeJson(context.response, 200, createNeonAgentsSnapshot());
+  const roster = await loadNeonAgentProfiles(context.projectRoot);
+  writeJson(context.response, 200, createNeonAgentsSnapshot(roster.profiles));
 }
 
 async function handleNeonAutomation(context: IRouteContext): Promise<void> {
@@ -1118,7 +1124,8 @@ async function handleNeonChatSend(context: IRouteContext): Promise<void> {
 
   try {
     const result = await submitNeonChatSend(context.projectRoot, input, {
-      harness: createDryRunHarness()
+      harness: createDryRunHarness(),
+      agentProfiles: (await loadNeonAgentProfiles(context.projectRoot)).profiles
     });
 
     writeJson(context.response, 201, {
@@ -1444,8 +1451,9 @@ async function handleNeonSkillPolicy(context: IRouteContext): Promise<void> {
   // Read-only declarative policy source: a missing or invalid file yields an
   // empty config, so the reference-only default-allow baseline stays stable.
   const policySource = await loadNeonSkillPolicySource(context.projectRoot);
+  const roster = await loadNeonAgentProfiles(context.projectRoot);
   const policy = resolveAgentSkillPolicy(agentId, inventory.skills, policySource.config, {
-    resolveAgentId: (candidate) => resolveNeonAgentProfile(candidate)?.id
+    resolveAgentId: (candidate) => resolveNeonAgentProfile(candidate, roster.profiles)?.id
   });
 
   writeJson(context.response, 200, {

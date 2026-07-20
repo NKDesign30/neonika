@@ -1,4 +1,5 @@
 import type { IAgentAttachment } from "../harness/types.js";
+import { readNeonAgentRoster } from "./agentRoster.js";
 
 export type TNeonAgentRuntime = "codex" | "claude" | "hybrid" | "human-gate";
 
@@ -228,26 +229,35 @@ export const neonAgentProfiles = [
   }
 ] satisfies readonly INeonAgentProfile[];
 
-export function listNeonAgentProfiles(): readonly INeonAgentProfile[] {
-  return neonAgentProfiles;
+export function listNeonAgentProfiles(
+  profiles: readonly INeonAgentProfile[] = neonAgentProfiles
+): readonly INeonAgentProfile[] {
+  return profiles;
 }
 
-export function listNeonAgentSummaries(): readonly INeonAgentSummary[] {
-  return neonAgentProfiles.map(toAgentSummary);
+export function listNeonAgentSummaries(
+  profiles: readonly INeonAgentProfile[] = neonAgentProfiles
+): readonly INeonAgentSummary[] {
+  return profiles.map(toAgentSummary);
 }
 
-export function createNeonAgentsSnapshot(): INeonAgentsSnapshot {
+export function createNeonAgentsSnapshot(
+  profiles: readonly INeonAgentProfile[] = neonAgentProfiles
+): INeonAgentsSnapshot {
   return {
     state: "ready",
     defaultAgentId: defaultNeonAgentId,
-    agents: listNeonAgentSummaries()
+    agents: listNeonAgentSummaries(profiles)
   };
 }
 
-export function resolveNeonAgentProfile(agentId: string): INeonAgentProfile | undefined {
+export function resolveNeonAgentProfile(
+  agentId: string,
+  profiles: readonly INeonAgentProfile[] = neonAgentProfiles
+): INeonAgentProfile | undefined {
   const normalizedAgentId = normalizeAgentId(agentId);
 
-  return neonAgentProfiles.find((profile) => {
+  return profiles.find((profile) => {
     if (normalizeAgentId(profile.id) === normalizedAgentId) {
       return true;
     }
@@ -256,8 +266,11 @@ export function resolveNeonAgentProfile(agentId: string): INeonAgentProfile | un
   });
 }
 
-export function resolveNeonAgentAttachment(agentId: string): IAgentAttachment | undefined {
-  const profile = resolveNeonAgentProfile(agentId);
+export function resolveNeonAgentAttachment(
+  agentId: string,
+  profiles: readonly INeonAgentProfile[] = neonAgentProfiles
+): IAgentAttachment | undefined {
+  const profile = resolveNeonAgentProfile(agentId, profiles);
 
   if (!profile) {
     return undefined;
@@ -289,6 +302,100 @@ export function buildNeonAgentMemoryQuery(agent: IAgentAttachment, prompt: strin
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 240);
+}
+
+export interface INeonAgentRosterLoad {
+  readonly profiles: readonly INeonAgentProfile[];
+  readonly rosterPath: string;
+  /** True when a roster file exists, whether or not every entry was usable. */
+  readonly rosterPresent: boolean;
+  /** How many built-in profiles the roster replaced by id. */
+  readonly overriddenCount: number;
+  /** How many profiles the roster added beyond the built-ins. */
+  readonly addedCount: number;
+  readonly issues: readonly string[];
+}
+
+/**
+ * Resolves the effective roster: built-in profiles with the operator's roster
+ * merged over them by id, mirroring how the cron snapshot layers store jobs over
+ * its base set. An absent roster yields exactly the built-ins, so the default
+ * install behaves as though this seam did not exist.
+ *
+ * A roster is never fatal. Unusable entries are dropped and reported, because an
+ * agent registry that refuses to load leaves the runtime with no identities at
+ * all — strictly worse than running the built-ins and saying what was ignored.
+ */
+export async function loadNeonAgentProfiles(projectRoot: string): Promise<INeonAgentRosterLoad> {
+  const roster = await readNeonAgentRoster(projectRoot);
+
+  const byId = new Map<string, INeonAgentProfile>();
+  for (const profile of neonAgentProfiles) {
+    byId.set(normalizeAgentId(profile.id), profile);
+  }
+
+  const issues = [...roster.issues];
+  let overriddenCount = 0;
+  let addedCount = 0;
+
+  for (const profile of roster.profiles) {
+    const key = normalizeAgentId(profile.id);
+    if (key.length === 0) {
+      issues.push(`agent roster id "${profile.id}" normalizes to nothing and cannot be addressed`);
+      continue;
+    }
+    if (byId.has(key)) {
+      overriddenCount += 1;
+    } else {
+      addedCount += 1;
+    }
+    byId.set(key, profile);
+  }
+
+  const profiles = [...byId.values()];
+  issues.push(...findShadowedAliases(profiles));
+
+  return {
+    profiles,
+    rosterPath: roster.rosterPath,
+    rosterPresent: roster.present,
+    overriddenCount,
+    addedCount,
+    issues
+  };
+}
+
+/**
+ * An alias only resolves if no earlier profile claims it. That is invisible in
+ * the file, so a roster whose alias is already an id (or an earlier alias) would
+ * silently never resolve. Report it rather than let list order decide identity.
+ */
+function findShadowedAliases(profiles: readonly INeonAgentProfile[]): readonly string[] {
+  const claimed = new Map<string, string>();
+  const issues: string[] = [];
+
+  for (const profile of profiles) {
+    claimed.set(normalizeAgentId(profile.id), profile.id);
+  }
+
+  for (const profile of profiles) {
+    for (const alias of profile.aliases) {
+      const key = normalizeAgentId(alias);
+      if (key.length === 0) {
+        continue;
+      }
+      const owner = claimed.get(key);
+      if (owner === undefined) {
+        claimed.set(key, profile.id);
+        continue;
+      }
+      if (owner !== profile.id) {
+        issues.push(`alias "${alias}" on agent "${profile.id}" is already taken by "${owner}" and will not resolve`);
+      }
+    }
+  }
+
+  return issues;
 }
 
 function toAgentSummary(profile: INeonAgentProfile): INeonAgentSummary {

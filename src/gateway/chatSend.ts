@@ -29,6 +29,7 @@ import {
   isNeonDeliveryQueueVisibleChannel,
   type TNeonDeliveryQueueState
 } from "./deliveryQueue.js";
+import { resolveNeonAgentAttachment, type INeonAgentProfile } from "../agents/registry.js";
 import { writeNeonGatewayRun } from "./runStore.js";
 import { runNeonGatewayShadow } from "./shadowGateway.js";
 
@@ -85,6 +86,12 @@ export interface INeonChatSendOptions {
   readonly harness: ICodexHarness;
   readonly memory?: IMemoryAttachment;
   readonly now?: () => Date;
+  /**
+   * Agent profiles to resolve `agentId` against. Omitted -> the built-in
+   * registry. Without the operator roster here, an agent the dashboard just
+   * listed as available fails to resolve and surfaces as a validation error.
+   */
+  readonly agentProfiles?: readonly INeonAgentProfile[];
 }
 
 function requireNonEmpty(
@@ -141,6 +148,12 @@ export async function submitNeonChatSend(
     },
     {
       harness: options.harness,
+      ...(options.agentProfiles
+        ? {
+            resolveAgent: (candidateId: string) =>
+              resolveNeonAgentAttachment(candidateId, options.agentProfiles)
+          }
+        : {}),
       ...(options.now ? { now: options.now } : {})
     }
   );

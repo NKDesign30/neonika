@@ -2,7 +2,11 @@ import type { Stats } from "node:fs";
 import { lstat, readlink, readdir, readFile, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
-import { createNeonAgentsSnapshot } from "../agents/registry.js";
+import {
+  createNeonAgentsSnapshot,
+  loadNeonAgentProfiles,
+  type INeonAgentRosterLoad
+} from "../agents/registry.js";
 import {
   listNeonChannelManifests,
   renderNeonChannelManifestLine,
@@ -234,7 +238,7 @@ export async function createNeonDoctorSnapshot(
     buildChannelsCheck(runs),
     buildChannelAuthCheck(routeInspection),
     buildChannelManifestCheck(),
-    buildAgentsCheck(),
+    buildAgentsCheck(await loadNeonAgentProfiles(projectRoot), projectRoot),
     memoryCheck,
     memoryFilesCheck,
     buildDeliveryCheck(runs, currentStage),
@@ -709,18 +713,36 @@ function buildChannelManifestCheck(): INeonDoctorCheck {
   };
 }
 
-function buildAgentsCheck(): INeonDoctorCheck {
-  const snapshot = createNeonAgentsSnapshot();
+function buildAgentsCheck(roster: INeonAgentRosterLoad, projectRoot: string): INeonDoctorCheck {
+  const snapshot = createNeonAgentsSnapshot(roster.profiles);
   const defaultAgentExists = snapshot.agents.some((agent) => agent.id === snapshot.defaultAgentId);
+  // Guard, not a reachable state today: the roster merge only adds or replaces
+  // by id, so the default agent cannot disappear and the list cannot empty. It
+  // stays as the check that would catch a future merge that can remove.
+  const usable = defaultAgentExists && snapshot.agents.length > 0;
+
+  // A roster problem is a warning, not a failure: the built-ins still resolve, so
+  // the runtime has identities either way. What must not happen is a roster that
+  // is silently half-applied — the ignored entries are named here.
+  const state = usable ? (roster.issues.length > 0 ? "warn" : "pass") : "fail";
+  const rosterSummary = roster.rosterPresent
+    ? `roster +${roster.addedCount}/~${roster.overriddenCount}`
+    : "built-ins only";
 
   return {
     id: "agents",
     label: "Agents",
-    state: defaultAgentExists && snapshot.agents.length > 0 ? "pass" : "fail",
-    summary: `${snapshot.agents.length} Neon agent(s), default=${snapshot.defaultAgentId}.`,
+    state,
+    summary: `${snapshot.agents.length} Neon agent(s), default=${snapshot.defaultAgentId}, ${rosterSummary}.`,
     details: [
       `state=${snapshot.state}`,
-      `defaultExists=${String(defaultAgentExists)}`
+      `defaultExists=${String(defaultAgentExists)}`,
+      `rosterPresent=${String(roster.rosterPresent)}`,
+      // Relative, like `skills/skillPolicySource.ts` reports its source: this
+      // snapshot is served over HTTP, and the absolute path carries the home
+      // directory without telling the operator anything they need.
+      ...(roster.rosterPresent ? [`rosterPath=${relative(projectRoot, roster.rosterPath)}`] : []),
+      ...roster.issues
     ]
   };
 }

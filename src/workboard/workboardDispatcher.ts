@@ -1,5 +1,6 @@
 import { redactText } from "../harness/redaction.js";
 import type { ICodexHarness, THarnessRunMode, TNeonChannel } from "../harness/types.js";
+import { resolveNeonAgentAttachment, type INeonAgentProfile } from "../agents/registry.js";
 import { runNeonGatewayShadow } from "../gateway/shadowGateway.js";
 import { writeNeonGatewayRun } from "../gateway/runStore.js";
 import type { INeonGatewayInboundMessage, INeonGatewayShadowRun } from "../gateway/types.js";
@@ -83,6 +84,12 @@ export interface INeonWorkboardAutoDispatchBatchResult {
 
 export interface INeonGatewayWorkboardExecutorOptions {
   readonly harness: ICodexHarness;
+  /**
+   * Agent profiles to resolve a card's `agentId` against. Omitted -> the
+   * built-in registry. A card may name any agent, so without the operator
+   * roster here a card pointing at a configured agent fails to dispatch.
+   */
+  readonly agentProfiles?: readonly INeonAgentProfile[] | undefined;
   readonly mode?: THarnessRunMode | undefined;
   readonly now?: (() => Date) | undefined;
   readonly writeRun?: ((projectRoot: string, run: INeonGatewayShadowRun) => Promise<void>) | undefined;
@@ -236,6 +243,12 @@ export function createNeonGatewayShadowWorkboardExecutor(
       },
       {
         harness: options.harness,
+        ...(options.agentProfiles
+          ? {
+              resolveAgent: (candidateId: string) =>
+                resolveNeonAgentAttachment(candidateId, options.agentProfiles)
+            }
+          : {}),
         ...(options.now ? { now: options.now } : {})
       }
     );

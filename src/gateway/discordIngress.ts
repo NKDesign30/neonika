@@ -1,3 +1,4 @@
+import { resolveNeonAgentAttachment, type INeonAgentProfile } from "../agents/registry.js";
 import { deriveCodexSessionKey } from "../harness/sessionKey.js";
 import type {
   ICodexHarness,
@@ -170,6 +171,12 @@ export type TNeonDiscordIngressDecision =
 export interface INeonDiscordShadowIngressOptions {
   readonly projectRoot: string;
   readonly harness: ICodexHarness;
+  /**
+   * Agent profiles to resolve inbound `agentId`s against. Omitted -> the
+   * built-in registry. The caller loads the operator roster once at startup and
+   * passes it here; resolving per message would read the file per message.
+   */
+  readonly agentProfiles?: readonly INeonAgentProfile[];
   readonly resolveHarness?: (message: INeonGatewayInboundMessage) => ICodexHarness | undefined;
   readonly resolveContext?: (
     message: INeonGatewayInboundMessage,
@@ -323,6 +330,12 @@ export async function runNeonDiscordShadowIngress(
       },
       {
         harness,
+        ...(options.agentProfiles
+          ? {
+              resolveAgent: (agentId: string) =>
+                resolveNeonAgentAttachment(agentId, options.agentProfiles)
+            }
+          : {}),
         ...(options.now ? { now: options.now } : {}),
         ...(options.resolveAbortSignal ? { resolveAbortSignal: options.resolveAbortSignal } : {}),
         ...(options.onHarnessEvent ? { onHarnessEvent: options.onHarnessEvent } : {}),

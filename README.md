@@ -164,6 +164,35 @@ NEON_DISCORD_ALLOWED_CHANNELS=...
 node dist/src/cli.js discord-shadow-tap
 ```
 
+The agent registry ships built-in profiles and layers an optional operator
+roster over them. Drop a `config/agents.json` next to the project root — an
+array of profiles, or an object with an `agents` array:
+
+```json
+{
+  "agents": [
+    {
+      "id": "archivist",
+      "aliases": ["arch"],
+      "displayName": "Archivist",
+      "role": "Archive and retrieval specialist.",
+      "runtime": "claude",
+      "instructions": ["Answer archive questions."],
+      "memoryQuerySeeds": ["document archive"],
+      "capabilities": ["archive"]
+    }
+  ]
+}
+```
+
+An entry whose `id` matches a built-in replaces it; every other entry is added.
+No file means the built-ins alone. A roster is never fatal: unusable entries are
+skipped and named (`agents-smoke`, and `doctor` reports the check as `warn`),
+because a registry that refuses to load would leave the runtime with no
+identities at all. `runtime` must be one of `codex`, `claude`, `hybrid`,
+`human-gate`. The file is local operator input and is gitignored — `instructions`
+is prompt surface, so it is deliberately a local path with no remote loader.
+
 The Claude harness pins each tier to a model id (`sonnet` -> `claude-sonnet-4-6`,
 `haiku` -> `claude-haiku-4-5`). Those pins age as new models ship, so each is
 overridable without forking:

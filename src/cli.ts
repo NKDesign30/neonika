@@ -400,8 +400,10 @@ import {
   computeNeonNextRunAtMs,
   describeNeonCronSchedule,
   renderNeonSessionsReport,
+  loadNeonAgentProfiles,
   resolveNeonAgentAttachment,
   selectNeonHarness,
+  type INeonAgentProfile,
   recordNeonNodePairingApproval,
   approveNeonNodeRunnerServiceAction,
   createNeonNodeRunnerSnapshot,
@@ -2133,10 +2135,11 @@ async function runClaudeHarnessLiveSmoke(): Promise<string> {
   ].join("\n");
 }
 
-function runAgentsSmoke(): string {
+async function runAgentsSmoke(): Promise<string> {
   const requestedAgentId = readTrailingArgument("chaty");
-  const snapshot = createNeonAgentsSnapshot();
-  const agent = resolveNeonAgentAttachment(requestedAgentId);
+  const roster = await loadNeonAgentProfiles(process.cwd());
+  const snapshot = createNeonAgentsSnapshot(roster.profiles);
+  const agent = resolveNeonAgentAttachment(requestedAgentId, roster.profiles);
 
   if (!agent) {
     throw new Error(`Unknown Neon agent: ${requestedAgentId}`);
@@ -2146,6 +2149,10 @@ function runAgentsSmoke(): string {
     `Neonika Agents: ${snapshot.state}`,
     `Count: ${snapshot.agents.length}`,
     `Default: ${snapshot.defaultAgentId}`,
+    roster.rosterPresent
+      ? `Roster: ${roster.rosterPath} (+${roster.addedCount} added, ${roster.overriddenCount} overridden)`
+      : "Roster: none — built-in profiles only",
+    ...roster.issues.map((issue) => `Roster issue: ${issue}`),
     renderNeonAgentIdentity(agent)
   ].join("\n");
 }
@@ -5172,7 +5179,10 @@ async function runDiscordShadowTap(): Promise<undefined> {
   const harness = await createDiscordTapHarness(harnessMode, lifecycleGate, inFlightRuns);
   const harnessRegistry = await createDiscordTapHarnessRegistry(harness, lifecycleGate, inFlightRuns);
   const writeLiveRun = harnessMode === "codex" && lifecycleGate.enabled ? writeNeonGatewayRunLatest : undefined;
-  const resolveMemory = createDiscordMemoryResolver();
+  // Read the roster once for the life of the tap. Re-reading per message would
+  // put a file read on the inbound path for a set that does not change mid-run.
+  const tapRoster = await loadNeonAgentProfiles(process.cwd());
+  const resolveMemory = createDiscordMemoryResolver(tapRoster.profiles);
   const workboardAutopilotEnabled = isReadyLike(process.env["NEON_WORKBOARD_AUTOPILOT_ENABLED"]);
   const workboardAutopilotOptions = workboardAutopilotEnabled
     ? await createWorkboardAutopilotDispatchOptions()
@@ -5330,7 +5340,7 @@ async function runDiscordShadowTap(): Promise<undefined> {
     if (selected) {
       return createDiscordHarnessForRuntimeSelection(selected, inFlightRuns);
     }
-    const agent = resolveNeonAgentAttachment(message.agentId);
+    const agent = resolveNeonAgentAttachment(message.agentId, tapRoster.profiles);
     if (capacityGate && (agent?.runtime ?? "codex") === "codex") {
       const decision = resolveNeonDiscordCapacityDecision(message);
       return createDiscordCodexTapHarness(
@@ -5404,6 +5414,7 @@ async function runDiscordShadowTap(): Promise<undefined> {
           { message: recoveryEnvelope, policy: tapPolicy, resolveMemory },
           {
             projectRoot: process.cwd(),
+            agentProfiles: tapRoster.profiles,
             harness,
             resolveHarness: resolveTapHarness,
             resolveContext: resolveDiscordGatewayContext,
@@ -5476,6 +5487,7 @@ async function runDiscordShadowTap(): Promise<undefined> {
           },
           {
             projectRoot: process.cwd(),
+            agentProfiles: tapRoster.profiles,
             harness,
             resolveHarness: resolveTapHarness,
             resolveContext: resolveDiscordGatewayContext,
@@ -5595,6 +5607,7 @@ async function runDiscordShadowTap(): Promise<undefined> {
           { message: envelope, policy: tapPolicy, resolveMemory },
           {
             projectRoot: process.cwd(),
+            agentProfiles: tapRoster.profiles,
             harness: selectedHarness,
             resolveContext: resolveDiscordGatewayContext,
             sessionQueue,
@@ -5681,6 +5694,7 @@ async function runDiscordShadowTap(): Promise<undefined> {
           { message: envelope, policy: tapPolicy, resolveMemory },
           {
             projectRoot: process.cwd(),
+            agentProfiles: tapRoster.profiles,
             harness,
             resolveHarness: resolveTapHarness,
             resolveContext: resolveDiscordGatewayContext,
@@ -6658,18 +6672,27 @@ async function runDiscordIngressControlLiveSmoke(): Promise<string> {
   }
 }
 
-function createDiscordMemoryResolver(): (message: INeonGatewayInboundMessage) => ReturnType<typeof createNeonMemoryAttachment> {
+// `profiles` is resolved once at construction, never per message: the roster is
+// a file read, and this resolver sits on the inbound path. Callers that omit it
+// keep the built-in profiles, which is what every path did before the roster
+// existed.
+function createDiscordMemoryResolver(
+  profiles?: readonly INeonAgentProfile[]
+): (message: INeonGatewayInboundMessage) => ReturnType<typeof createNeonMemoryAttachment> {
   const provider = createMergedNeonMemoryProvider();
 
   return async (message) => {
-    return await createNeonMemoryAttachment(provider, createDiscordMemoryQuery(message), {
+    return await createNeonMemoryAttachment(provider, createDiscordMemoryQuery(message, profiles), {
       maxHits: 12
     });
   };
 }
 
-function createDiscordMemoryQuery(message: INeonGatewayInboundMessage): string {
-  const agent = resolveNeonAgentAttachment(message.agentId);
+function createDiscordMemoryQuery(
+  message: INeonGatewayInboundMessage,
+  profiles?: readonly INeonAgentProfile[]
+): string {
+  const agent = resolveNeonAgentAttachment(message.agentId, profiles);
   const prompt = [
     message.userDisplayName ?? message.userId,
     message.agentId,
@@ -13225,6 +13248,7 @@ async function createWorkboardAutopilotExecutor(
   if (mode === "gateway-dry") {
     return createNeonGatewayShadowWorkboardExecutor({
       harness: createDryRunHarness(),
+      agentProfiles: (await loadNeonAgentProfiles(process.cwd())).profiles,
       mode: runMode
     });
   }
@@ -13240,6 +13264,7 @@ async function createWorkboardAutopilotExecutor(
 
   return createNeonGatewayShadowWorkboardExecutor({
     harness: await createDiscordTapHarness("codex", lifecycleGate),
+    agentProfiles: (await loadNeonAgentProfiles(process.cwd())).profiles,
     mode: runMode,
     writeRun: writeNeonGatewayRunLatest
   });

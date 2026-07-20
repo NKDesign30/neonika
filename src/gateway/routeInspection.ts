@@ -1,4 +1,4 @@
-import { resolveNeonAgentProfile } from "../agents/registry.js";
+import { loadNeonAgentProfiles, resolveNeonAgentProfile } from "../agents/registry.js";
 import type { TDiscordMentionPolicy } from "./discordIngress.js";
 import {
   parseDiscordApplicationIdFromToken,
@@ -104,7 +104,7 @@ export async function createNeonGatewayRouteInspectionSnapshot(
   const botIdentityConsistency = resolveDiscordBotIdentityConsistency(applicationId, botUserId);
   const mentionPolicy = readMentionPolicy(env);
   const harnessMode = readOptionalEnv(env, "NEON_DISCORD_TAP_HARNESS") ?? "dry";
-  const agent = resolveNeonAgentProfile(agentId);
+  const agent = resolveNeonAgentProfile(agentId, (await loadNeonAgentProfiles(projectRoot)).profiles);
   const [status, discordProbe] = await Promise.all([
     readNeonGatewayStatus(projectRoot),
     readNeonDiscordRouteProbe(projectRoot, accountId)

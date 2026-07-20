@@ -24,3 +24,6 @@ scripts/oss-audit-denylist.sha256
 # of this repository. A repo-level .gitignore outranks core.excludesFile, so the
 # negation here is what makes AGENTS.md's pointer to it true.
 !CLAUDE.md
+
+# Operator-supplied agent roster (local input, like .env — never repo content)
+config/agents.json

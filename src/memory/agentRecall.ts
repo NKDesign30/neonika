@@ -15,7 +15,7 @@
 // unit-testable with a fake provider. All redaction/excerpt handling is reused
 // from `createNeonMemoryAttachment`.
 
-import { resolveNeonAgentProfile } from "../agents/registry.js";
+import { resolveNeonAgentProfile, type INeonAgentProfile } from "../agents/registry.js";
 import type { IMemoryAttachment } from "../harness/types.js";
 import {
   createNeonMemoryAttachment,
@@ -39,6 +39,12 @@ export interface INeonAgentRecallOptions {
    * recall behaviour stays unchanged unless explicitly opted in.
    */
   readonly expandKeywords?: boolean;
+  /**
+   * Profiles to resolve the agent against. Omitted -> the built-in registry,
+   * which is what every caller did before an operator roster existed. Pass the
+   * loaded roster to give a configured agent its own `memoryQuerySeeds`.
+   */
+  readonly profiles?: readonly INeonAgentProfile[];
 }
 
 export interface INeonAgentScopedRecall extends INeonMemorySearchResult {
@@ -61,7 +67,10 @@ export async function recallNeonAgentMemory(
   query: string,
   options: INeonAgentRecallOptions = {}
 ): Promise<INeonAgentScopedRecall> {
-  const profile = options.useProfileSeeds === false ? undefined : resolveNeonAgentProfile(agentId);
+  const profile =
+    options.useProfileSeeds === false
+      ? undefined
+      : resolveNeonAgentProfile(agentId, options.profiles);
   const scopeTerms = dedupeScopeTerms([
     ...(profile?.memoryQuerySeeds ?? []),
     ...(options.focus ?? [])

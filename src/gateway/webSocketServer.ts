@@ -4,7 +4,7 @@ import type { Socket } from "node:net";
 
 import WebSocket, { WebSocketServer, type RawData } from "ws";
 
-import { createNeonAgentsSnapshot } from "../agents/registry.js";
+import { createNeonAgentsSnapshot, loadNeonAgentProfiles } from "../agents/registry.js";
 import { createNeonCutoverGateSnapshot } from "../core/cutoverGate.js";
 import { createNeonMirrorEvidenceSnapshot } from "../core/mirrorEvidence.js";
 import { createNeonDoctorSnapshot } from "../doctor/neonDoctor.js";
@@ -593,7 +593,7 @@ async function resolveGatewayRpcPayload(
     case "mirror.evidence":
       return await createNeonMirrorEvidenceSnapshot(options.projectRoot, limit ? { maxRecords: limit } : {});
     case "agents.list":
-      return createNeonAgentsSnapshot();
+      return createNeonAgentsSnapshot((await loadNeonAgentProfiles(options.projectRoot)).profiles);
     case "skills.list":
       return await createNeonSkillInventorySnapshot(options.projectRoot);
     case "extensions.list":

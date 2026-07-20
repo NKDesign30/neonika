@@ -1165,15 +1165,22 @@ export {
   defaultNeonAgentId,
   listNeonAgentProfiles,
   listNeonAgentSummaries,
+  loadNeonAgentProfiles,
   neonAgentProfiles,
   renderNeonAgentIdentity,
   resolveNeonAgentAttachment,
   resolveNeonAgentProfile,
   type INeonAgentProfile,
+  type INeonAgentRosterLoad,
   type INeonAgentSummary,
   type INeonAgentsSnapshot,
   type TNeonAgentRuntime
 } from "./agents/registry.js";
+export {
+  readNeonAgentRoster,
+  resolveNeonAgentRosterPath,
+  type INeonAgentRosterRead
+} from "./agents/agentRoster.js";
 export {
   codexAppServerMethods,
   validateStartOptions,
