@@ -104,6 +104,11 @@ export interface ICreateNeonCliLlmInvokerOptions {
 export type ICreateNeonClaudeCliLlmInvokerOptions = ICreateNeonCliLlmInvokerOptions;
 export type ICreateNeonCodexCliLlmInvokerOptions = ICreateNeonCliLlmInvokerOptions;
 
+export interface ICreateNeonClaudeCliProcessRunnerOptions {
+  /** Model-id overrides are read from here. Omitted -> `process.env`. */
+  readonly env?: Readonly<Record<string, string | undefined>>;
+}
+
 // Head-agnostic gated invoker body. A real model call requires the env gate
 // armed AND an injected runner; either missing yields `called: false`. Even when
 // armed it only ever reaches the injected runner (a `claude -p` / `codex exec`
@@ -148,6 +153,8 @@ export function createNeonCodexCliLlmInvoker(
   return createGatedCliLlmInvoker(options);
 }
 
+// Default model ids per head tier. These are the values a fresh install runs on;
+// they age as new models ship, which is why `resolveClaudeModelArg` exists.
 const claudeModelArg: Record<TNeonClaudeModel, string> = {
   haiku: "claude-haiku-4-5",
   sonnet: "claude-sonnet-4-6"
@@ -157,10 +164,37 @@ function isClaudeModel(model: TNeonLlmModel): model is TNeonClaudeModel {
   return model === "haiku" || model === "sonnet";
 }
 
+// A resolved model id is passed straight into argv. Anything that could read as
+// a further CLI flag (or smuggle whitespace-separated arguments) is rejected in
+// favour of the default — an operator typo must not become an injected flag.
+const claudeModelIdPattern = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+export function neonClaudeModelEnvKey(model: TNeonClaudeModel): string {
+  return `NEON_CLAUDE_MODEL_${model.toUpperCase()}`;
+}
+
+// The seam that keeps a pinned tier upgradable without a code change: set
+// `NEON_CLAUDE_MODEL_SONNET` to move the sonnet tier onto a newer model id.
+// An absent, blank, or malformed value falls back to the shipped default, so a
+// bad override degrades to today's behaviour rather than to a broken spawn.
+export function resolveClaudeModelArg(
+  model: TNeonClaudeModel,
+  env: Readonly<Record<string, string | undefined>>
+): string {
+  const override = env[neonClaudeModelEnvKey(model)]?.trim();
+  if (override !== undefined && claudeModelIdPattern.test(override)) {
+    return override;
+  }
+  return claudeModelArg[model];
+}
+
 // Real process runner: spawns the `claude -p` Max-Plan CLI over stdin/stdout.
 // Never used by default — a caller must inject it into the gated invoker. The
 // prompt goes via stdin (not argv) so it cannot leak into the process table.
-export function createNeonClaudeCliProcessRunner(): INeonLlmProcessRunner {
+export function createNeonClaudeCliProcessRunner(
+  options: ICreateNeonClaudeCliProcessRunnerOptions = {}
+): INeonLlmProcessRunner {
+  const env = options.env ?? process.env;
   return {
     run(request: INeonLlmRequest): Promise<INeonLlmProcessResult> {
       // Defensive narrowing: the Claude runner only maps Claude-head models. A
@@ -171,7 +205,7 @@ export function createNeonClaudeCliProcessRunner(): INeonLlmProcessRunner {
       }
       const model = request.model;
       return new Promise<INeonLlmProcessResult>((resolve) => {
-        const child = spawn("claude", ["-p", "--model", claudeModelArg[model]], {
+        const child = spawn("claude", ["-p", "--model", resolveClaudeModelArg(model, env)], {
           stdio: ["pipe", "pipe", "ignore"]
         });
 

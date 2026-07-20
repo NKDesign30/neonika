@@ -164,6 +164,20 @@ NEON_DISCORD_ALLOWED_CHANNELS=...
 node dist/src/cli.js discord-shadow-tap
 ```
 
+The Claude harness pins each tier to a model id (`sonnet` -> `claude-sonnet-4-6`,
+`haiku` -> `claude-haiku-4-5`). Those pins age as new models ship, so each is
+overridable without forking:
+
+```bash
+NEON_CLAUDE_MODEL_SONNET=claude-sonnet-5
+NEON_CLAUDE_MODEL_HAIKU=claude-haiku-5
+```
+
+An unset or malformed value keeps the shipped default — the value is spliced
+into argv, so anything that could read as a further CLI flag is refused rather
+than passed through. The Codex harness needs no equivalent: it runs whatever the
+local `codex` CLI is configured with and pins nothing.
+
 ## Development
 
 ```bash
