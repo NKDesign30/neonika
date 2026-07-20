@@ -22,8 +22,10 @@ describe("Neonika Cutover gates", () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
+      // Stage set explicitly: this exercises the migration ladder from its bottom
+      // rung, which is no longer where an unconfigured install starts.
       const snapshot = await createNeonCutoverGateSnapshot(projectRoot, {
-        env: {},
+        env: { NEON_CUTOVER_STAGE: "shadow" },
         now: () => new Date("2026-05-31T20:00:00.000Z")
       });
 
@@ -44,7 +46,7 @@ describe("Neonika Cutover gates", () => {
       await writeNeonGatewayRun(projectRoot, createCutoverRun("run-cutover-1"));
 
       const snapshot = await createNeonCutoverGateSnapshot(projectRoot, {
-        env: createRouteReadyEnv(),
+        env: { ...createRouteReadyEnv(), NEON_CUTOVER_STAGE: "shadow" },
         now: () => new Date("2026-05-31T20:05:00.000Z")
       });
 

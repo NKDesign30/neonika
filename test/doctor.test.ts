@@ -59,7 +59,9 @@ describe("Neonika Doctor", () => {
           .map((check) => `${check.id}=${check.state}:${check.summary}`)
           .join(" | ")}`
       );
-      assert.equal(snapshot.currentStage, "shadow");
+      // No stage stated in the env, so this is the default an unconfigured install
+      // resolves to — and a healthy install on it reports pass, not warn.
+      assert.equal(snapshot.currentStage, "primary");
       assert.equal(snapshot.totals.fail, 0);
       assert.ok(snapshot.checks.some((check) => check.id === "memory" && check.state === "pass"));
       assert.ok(snapshot.checks.some((check) => check.id === "node-runtime" && check.state === "pass"));

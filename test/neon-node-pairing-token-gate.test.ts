@@ -21,6 +21,7 @@ describe("Neonika Node Pairing Token Gate", () => {
     try {
       const request = await createApprovedRequest(projectRoot);
       const snapshot = await createNeonNodePairingTokenGateSnapshot(projectRoot, {
+        cutoverSnapshot: createShadowCutoverSnapshot(),
         now: () => new Date("2026-06-01T00:02:00.000Z")
       });
 
@@ -76,6 +77,7 @@ describe("Neonika Node Pairing Token Gate", () => {
       await createApprovedRequest(projectRoot);
       const report = renderNeonNodePairingTokenGateReport(
         await createNeonNodePairingTokenGateSnapshot(projectRoot, {
+          cutoverSnapshot: createShadowCutoverSnapshot(),
           now: () => new Date("2026-06-01T00:02:00.000Z")
         })
       );
@@ -122,6 +124,27 @@ async function createApprovedRequest(projectRoot: string): Promise<{ readonly re
 
   return {
     requestId: request.requestId
+  };
+}
+
+/**
+ * A pre-canary cutover snapshot, stated explicitly. This suite asserts that pairing
+ * stays locked *before* canary, which is a migration position — no longer where an
+ * unconfigured install starts, so it has to be named rather than assumed.
+ */
+function createShadowCutoverSnapshot(): INeonCutoverGateSnapshot {
+  return {
+    ...createCanaryCutoverSnapshot(),
+    state: "needs-evidence",
+    currentStage: "shadow",
+    nextStage: "mirror",
+    gates: [
+      createGate("shadow", "Shadow", "warn"),
+      createGate("mirror", "Mirror", "locked"),
+      createGate("canary", "Canary", "locked"),
+      createGate("primary", "Primary", "locked"),
+      createGate("retire", "Retire", "locked")
+    ]
   };
 }
 

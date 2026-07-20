@@ -69,7 +69,10 @@ describe("Neonika Canary Outbound Sender", () => {
 
     assert.equal(result.outboundSent, false);
     assert.equal(result.reason, "canary-gate-closed");
-    assert.equal(result.cutoverStage, "shadow");
+    // The reported stage is the default an unconfigured install resolves to. It is
+    // outbound-capable, and the gate stays shut anyway: approval, arming and a
+    // transport are each still required.
+    assert.equal(result.cutoverStage, "primary");
     assert.equal(result.bodyPreview, "default gate-closed probe");
   });
 

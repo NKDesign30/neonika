@@ -701,7 +701,7 @@ describe("Neonika Gateway HTTP server", () => {
         const body = (await response.json()) as INeonCutoverGateSnapshot;
 
         assert.equal(response.status, 200);
-        assert.equal(body.currentStage, "shadow");
+        assert.equal(body.currentStage, "primary");
         assert.equal(body.gates.length, 5);
         assert.ok(body.gates.some((gate) => gate.id === "canary"));
       } finally {
@@ -910,7 +910,10 @@ describe("Neonika Gateway HTTP server", () => {
         assert.equal(body.state, "locked");
         assert.equal(body.totals.eligibleApprovals, 1);
         assert.equal(body.eligibleApprovals[0]?.tokenIssued, false);
-        assert.equal(body.blockers.some((blocker) => blocker.id === "cutover-stage-before-canary"), true);
+        // The stage blocker does not fire at the default stage; the gate stays locked
+        // on the remaining blockers, which is what this endpoint must keep reporting.
+        assert.equal(body.blockers.some((blocker) => blocker.id === "cutover-stage-before-canary"), false);
+        assert.equal(body.blockers.some((blocker) => blocker.id === "cutover-gate-not-ready"), true);
       } finally {
         await handle.close();
       }
@@ -1397,7 +1400,7 @@ describe("Neonika Gateway HTTP server", () => {
         const body = (await response.json()) as INeonDoctorSnapshot;
 
         assert.equal(response.status, 200);
-        assert.equal(body.currentStage, "shadow");
+        assert.equal(body.currentStage, "primary");
         assert.ok(body.checks.some((check) => check.id === "gateway"));
         assert.ok(body.checks.some((check) => check.id === "secrets"));
       } finally {

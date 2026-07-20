@@ -1,6 +1,7 @@
 import {
   isNeonOutboundStage,
   readReadyCutoverEnv,
+  resolveCutoverStageFromEnv,
   type TCutoverStageId,
   type TNeonOutboundStage
 } from "../core/cutover.js";
@@ -201,9 +202,11 @@ export function evaluateNeonCanaryLivePreconditions(
   const channelId = singleChannel ? channelIds[0] : undefined;
 
   const tokenPresent = Boolean((env[canaryBotTokenEnvKey] ?? "").trim());
-  const stage = env[canaryStageEnvKey];
+  // Resolved, not read raw: an install that states no stage is on the default, and
+  // the precondition must agree with the sender about which stage that is.
+  const stage = resolveCutoverStageFromEnv(env);
   const stageIsCanary = stage === "canary";
-  const stageAllowsOutbound = stage === "canary" || stage === "primary";
+  const stageAllowsOutbound = isNeonOutboundStage(stage);
   // Same readiness convention as the canary sender's gate facts: accepts
   // ready/true/1/yes, so the precondition can never disagree with the sender.
   const canaryApproved = readReadyCutoverEnv(env, canaryApprovedEnvKey);
@@ -261,13 +264,6 @@ export interface INeonCanaryOutboundSenderOptions {
 
 const outboundBodyPreviewMaxLength = 280;
 const outboundBodyMaxLength = 16_000;
-const cutoverStageIds: readonly TCutoverStageId[] = [
-  "shadow",
-  "mirror",
-  "canary",
-  "primary",
-  "retire"
-];
 
 /**
  * No-op Outbound-Sender. Sendet NICHTS und gibt immer `outboundSent: false`
@@ -335,7 +331,7 @@ export function createNeonDryRunOutboundSender(
 /**
  * Gated Outbound-Sender. KANN senden, sendet aber nur, wenn ALLE vier
  * Bedingungen erfüllt sind:
- *   1. cutoverStage === "canary",
+ *   1. cutoverStage ist eine Outbound-Stage (canary oder primary),
  *   2. canaryApproved === true (NEON_CUTOVER_CANARY_APPROVED),
  *   3. outboundEnabled === true (NEON_CUTOVER_OUTBOUND_ENABLED),
  *   4. ein Transport ist injiziert.
@@ -548,13 +544,10 @@ function createGateFactsResolver(
 }
 
 function readCutoverStage(env: Readonly<Record<string, string | undefined>>): TCutoverStageId {
-  const stage = env["NEON_CUTOVER_STAGE"]?.trim();
-
-  if (stage && cutoverStageIds.includes(stage as TCutoverStageId)) {
-    return stage as TCutoverStageId;
-  }
-
-  return "shadow";
+  // Shares the one fallback with every other reader. Resolving to `primary` here does
+  // not open the gate on its own: the sender still requires the approval flag, the
+  // enabled flag and an injected transport, none of which a fresh install has.
+  return resolveCutoverStageFromEnv(env);
 }
 
 function resolveBodyPreviewMaxLength(value: number | undefined): number {

@@ -56,9 +56,42 @@ export function isNeonOutboundStage(stage: TCutoverStageId): stage is TNeonOutbo
 }
 
 /**
+ * The stages that are a resting place rather than a step. `shadow` is where an
+ * install sits while it only observes, `primary` is where it sits while it serves,
+ * and `retire` is where it sits once the previous runtime is gone.
+ *
+ * `mirror` and `canary` are the transitional rungs: an install passing through them
+ * is mid-migration and has an unfinished comparison or a partly-routed channel behind
+ * it. That is what deserves an operator's attention — not the stage id itself.
+ */
+export function isNeonSteadyCutoverStage(stage: TCutoverStageId): boolean {
+  return stage === "shadow" || stage === "primary" || stage === "retire";
+}
+
+/**
+ * The stage an installation resolves to when nothing states otherwise — neither a
+ * live `NEON_CUTOVER_STAGE`, nor a persisted promotion.
+ *
+ * `primary` rather than `shadow`, because the ladder below it exists to compare an
+ * old runtime against a new one. A fresh install has no old runtime, so it can never
+ * clear the mirror rung and would sit at the bottom of a climb it has no reason to
+ * make. Starting at primary does not make it speak: outbound needs the approval flag,
+ * the enabled flag and an injected transport on top of the stage, and a fresh install
+ * has none of them.
+ *
+ * Promoted installations are unaffected — both a live env value and a persisted
+ * promotion take precedence over this fallback.
+ */
+export const neonDefaultCutoverStage: TCutoverStageId = "primary";
+
+/**
  * Reads and validates the cutover stage from an env record (the `NEON_CUTOVER_STAGE`
- * key). Returns undefined when absent or not a known stage id, so callers can fall
- * back to their own default (usually "shadow").
+ * key). Returns undefined when absent or not a known stage id.
+ *
+ * Prefer {@link resolveCutoverStageFromEnv} — it answers "which stage am I on", which
+ * is what nearly every caller wants. Reach for this one only to tell a *stated* stage
+ * from a defaulted one, which is a question about operator intent rather than about
+ * runtime state.
  */
 export function readCutoverStageFromEnv(
   env: Readonly<Record<string, string | undefined>>
@@ -67,6 +100,17 @@ export function readCutoverStageFromEnv(
   return neonikaCutoverStages.some((stage) => stage.id === raw)
     ? (raw as TCutoverStageId)
     : undefined;
+}
+
+/**
+ * Resolves the effective cutover stage: the env value when it names a known stage,
+ * otherwise {@link neonDefaultCutoverStage}. This is the single place the fallback
+ * lives, so readers cannot drift apart on what an unconfigured install is.
+ */
+export function resolveCutoverStageFromEnv(
+  env: Readonly<Record<string, string | undefined>>
+): TCutoverStageId {
+  return readCutoverStageFromEnv(env) ?? neonDefaultCutoverStage;
 }
 
 export interface IShadowExitGateFacts {

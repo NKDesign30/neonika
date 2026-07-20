@@ -354,6 +354,9 @@ import {
   renderNeonNodeRunnerSnapshotReport,
   issueNeonNodePairingCanaryToken,
   renderNeonCutoverGateReport,
+  neonDefaultCutoverStage,
+  resolveCutoverStageFromEnv,
+  loadNeonCutoverEnv,
   writeNeonCutoverPromotion,
   readNeonCutoverPromotion,
   renderNeonCutoverPromotionReport,
@@ -602,6 +605,15 @@ const commands: Record<string, ICommand> = {
   "cutover-smoke": {
     description: "Start a local API server and verify cutover gates.",
     run: runCutoverSmoke
+  },
+  "arm-outbound": {
+    description:
+      "Show where replies would go and arm outbound sending (preview only without --yes).",
+    run: runArmOutbound
+  },
+  "disarm-outbound": {
+    description: "Clear the persisted outbound arming so nothing leaves this process.",
+    run: runDisarmOutbound
   },
   "mirror-evidence": {
     description: "Print stored old-vs-new mirror comparison evidence.",
@@ -6946,7 +6958,7 @@ async function runCutoverPromote(): Promise<string> {
   const projectRoot = process.cwd();
   const path = resolveNeonCutoverPromotionPath(projectRoot);
   const candidate = sanitizeNeonCutoverPromotionEnv(process.env);
-  const stage = candidate["NEON_CUTOVER_STAGE"] ?? "shadow";
+  const stage = candidate["NEON_CUTOVER_STAGE"] ?? `none (falls back to ${neonDefaultCutoverStage})`;
   const persistKeys = Object.keys(candidate).sort();
   const enabled = process.env["NEON_CUTOVER_PROMOTE_ENABLED"]?.trim() === "ready";
 
@@ -6957,12 +6969,96 @@ async function runCutoverPromote(): Promise<string> {
       `Would persist stage: ${stage}`,
       `Would persist keys (no secrets): ${persistKeys.length > 0 ? persistKeys.join(", ") : "none"}`,
       `Promotion file: ${path}`,
-      `Currently persisted: ${existing ? existing.env["NEON_CUTOVER_STAGE"] ?? "shadow" : "none"}`
+      `Currently persisted: ${existing?.env["NEON_CUTOVER_STAGE"] ?? `none (falls back to ${neonDefaultCutoverStage})`}`
     ].join("\n");
   }
 
   const promotion = await writeNeonCutoverPromotion(projectRoot, process.env);
   return [renderNeonCutoverPromotionReport(promotion), `Promotion file: ${path}`].join("\n");
+}
+
+/**
+ * Renders where a reply would actually go, so the operator confirms a picture rather
+ * than a word. The bot token is reported as present or missing and never printed.
+ */
+function renderOutboundTargets(env: Readonly<Record<string, string | undefined>>): string {
+  const preconditions = evaluateNeonCanaryLivePreconditions(env);
+  const allowlist = resolveNeonCanaryChannelAllowlist(env);
+  const channels = [...allowlist.channels];
+
+  return [
+    `Stage: ${resolveCutoverStageFromEnv(env)} (${preconditions.stageAllowsOutbound ? "outbound-capable" : "suppressed"})`,
+    `Bot token: ${preconditions.tokenPresent ? "present" : "missing"}`,
+    `Approval flag: ${preconditions.canaryApproved ? "ready" : "unset"}`,
+    `Currently armed: ${preconditions.outboundEnabled ? "yes" : "no"}`,
+    channels.length > 0
+      ? `Channels that could receive replies (${channels.length}):\n${channels.map((id) => `  - ${id}`).join("\n")}`
+      : "Channels that could receive replies: none configured"
+  ].join("\n");
+}
+
+async function runArmOutbound(): Promise<string> {
+  const projectRoot = process.cwd();
+  const env = await loadNeonCutoverEnv(projectRoot);
+  const targets = renderOutboundTargets(env);
+
+  if (!process.argv.includes("--yes")) {
+    return [
+      "Arm outbound: PREVIEW — nothing has changed.",
+      "",
+      targets,
+      "",
+      "Check the targets above. Re-run with --yes to arm."
+    ].join("\n");
+  }
+
+  const existing = await readNeonCutoverPromotion(projectRoot);
+  const promotion = await writeNeonCutoverPromotion(projectRoot, {
+    ...existing?.env,
+    NEON_CUTOVER_OUTBOUND_ENABLED: "ready"
+  });
+  // Re-read after writing: the preview above was taken before the change, and
+  // reporting the pre-arm state under an "ARMED" headline would contradict itself.
+  const armedEnv = await loadNeonCutoverEnv(projectRoot);
+  const armed = evaluateNeonCanaryLivePreconditions(armedEnv);
+
+  return [
+    "Arm outbound: ARMED.",
+    "",
+    renderOutboundTargets(armedEnv),
+    "",
+    armed.ready
+      ? "Replies can now leave this process."
+      : "Armed, but sending still blocked — see the missing requirements above.",
+    `Persisted at: ${promotion.promotedAt}`,
+    "Run disarm-outbound to return to silence."
+  ].join("\n");
+}
+
+async function runDisarmOutbound(): Promise<string> {
+  const projectRoot = process.cwd();
+  const existing = await readNeonCutoverPromotion(projectRoot);
+
+  if (!existing?.env["NEON_CUTOVER_OUTBOUND_ENABLED"]) {
+    return [
+      "Disarm outbound: already disarmed — nothing persisted to clear.",
+      "",
+      "Note: a live NEON_CUTOVER_OUTBOUND_ENABLED in the environment still wins over",
+      "persisted state. Unset it in the shell if outbound is armed there."
+    ].join("\n");
+  }
+
+  // Written back without the arming key: sanitisation drops empty values, so
+  // omitting it is how the flag is cleared.
+  const { NEON_CUTOVER_OUTBOUND_ENABLED: _cleared, ...rest } = existing.env;
+  const promotion = await writeNeonCutoverPromotion(projectRoot, rest);
+
+  return [
+    "Disarm outbound: DISARMED — nothing leaves this process.",
+    `Persisted at: ${promotion.promotedAt}`,
+    "",
+    renderOutboundTargets(await loadNeonCutoverEnv(projectRoot))
+  ].join("\n");
 }
 
 function renderGatewayStatus(status: INeonGatewayStatus): string {

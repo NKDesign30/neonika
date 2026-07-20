@@ -124,14 +124,19 @@ describe("Neonika Node Runner Service", () => {
       assert.equal(snapshot.credentialsSource, "missing");
       assert.equal(snapshot.executorMode, "disabled");
       assert.equal(snapshot.rollbackConfigured, false);
-      assert.equal(snapshot.cutoverStage, "shadow");
+      // Empty env, so this is the default stage — and the point stands there too:
+      // reaching primary does not unblock the canary service on its own.
+      assert.equal(snapshot.cutoverStage, "primary");
       assert.notEqual(snapshot.currentGateState, "pass");
       assert.equal(snapshot.safety.canaryMutationAllowed, false);
       assert.equal(snapshot.blockers.some((blocker) => blocker.id === "credentials-missing"), true);
       assert.equal(snapshot.blockers.some((blocker) => blocker.id === "runner-control-stopped"), true);
       assert.equal(snapshot.blockers.some((blocker) => blocker.id === "rollback-missing"), true);
       assert.equal(snapshot.blockers.some((blocker) => blocker.id === "executor-not-armed"), true);
-      assert.equal(snapshot.blockers.some((blocker) => blocker.id === "cutover-stage-before-canary"), true);
+      // Not raised at the default stage — primary is past canary, so the stage is no
+      // longer evidence of "too early". The service stays blocked on its own merits,
+      // which is the guarantee that matters here.
+      assert.equal(snapshot.blockers.some((blocker) => blocker.id === "cutover-stage-before-canary"), false);
       assert.equal(snapshot.blockers.some((blocker) => blocker.id === "cutover-gate-not-ready"), true);
       assert.equal(snapshot.blockers.some((blocker) => blocker.id === "service-blocked"), true);
       assert.equal(snapshot.safety.serviceMutationExecuted, false);

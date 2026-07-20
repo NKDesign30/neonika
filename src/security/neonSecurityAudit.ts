@@ -1,4 +1,9 @@
-import { readReadyCutoverEnv } from "../core/cutover.js";
+import {
+  isNeonOutboundStage,
+  readCutoverStageFromEnv,
+  readReadyCutoverEnv,
+  resolveCutoverStageFromEnv
+} from "../core/cutover.js";
 import { resolveNeonGatedSideEffectPosture } from "../core/gatedSideEffectsPosture.js";
 import { resolveNeonGatewayAllowedOrigins } from "../gateway/webSocketServer.js";
 
@@ -82,14 +87,27 @@ export function runNeonSecurityAudit(
     });
   }
 
-  // Axis 4: cutover stage vs approval.
-  const stage = (env["NEON_CUTOVER_STAGE"] ?? "shadow").trim();
-  if (stage === "canary" || stage === "primary") {
+  // Axis 4: deliberate outbound posture vs approval.
+  //
+  // The finding reports an inconsistent intent: an operator reaching for outbound
+  // without granting approval. Since `primary` became the default stage, sitting on
+  // an outbound stage is no longer evidence of that intent by itself — it would flag
+  // every fresh, silent install as critical.
+  //
+  // Intent is therefore read from two signals, either of which is a deliberate act:
+  // naming a stage explicitly (nothing defaults to `canary`), or arming outbound.
+  const stage = resolveCutoverStageFromEnv(env);
+  const stageWasStated = readCutoverStageFromEnv(env) !== undefined;
+  const outboundArmed = readReadyCutoverEnv(env, "NEON_CUTOVER_OUTBOUND_ENABLED");
+  if (isNeonOutboundStage(stage) && (stageWasStated || outboundArmed)) {
     if (!readReadyCutoverEnv(env, "NEON_CUTOVER_CANARY_APPROVED")) {
+      const posture = outboundArmed
+        ? `outbound is armed at stage ${stage}`
+        : `cutover stage is set to ${stage}`;
       findings.push({
         axis: "cutover-stage",
         severity: "critical",
-        detail: `cutover stage is ${stage} without NEON_CUTOVER_CANARY_APPROVED — productive side-effects could fire unapproved`
+        detail: `${posture} without NEON_CUTOVER_CANARY_APPROVED — productive side-effects could fire unapproved`
       });
     }
   }

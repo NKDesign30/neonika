@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
+import { neonDefaultCutoverStage } from "./cutover.js";
 import { resolveGatewayStatePaths } from "../gateway/runStore.js";
 
 /**
@@ -125,7 +126,7 @@ export async function loadNeonCutoverEnv(
 export function renderNeonCutoverPromotionReport(promotion: INeonCutoverPromotion): string {
   const keys = Object.keys(promotion.env).sort();
   return [
-    `Cutover promotion written: ${promotion.env["NEON_CUTOVER_STAGE"] ?? "shadow"}`,
+    `Cutover promotion written: ${promotion.env["NEON_CUTOVER_STAGE"] ?? `none (falls back to ${neonDefaultCutoverStage})`}`,
     `Promoted at: ${promotion.promotedAt}`,
     `Persisted keys (no secrets): ${keys.join(", ")}`
   ].join("\n");

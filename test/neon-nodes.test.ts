@@ -91,7 +91,9 @@ describe("Neonika Nodes", () => {
       assert.equal(snapshot.totals.runnerSubmitted, 0);
       assert.equal(snapshot.totals.runnerFailed, 0);
       assert.equal(snapshot.totals.runnerServiceBlockers, 3);
-      assert.equal(snapshot.totals.runnerServiceCanaryBlockers, 7);
+      // Six, not seven: the "stage is before canary" blocker no longer fires at the
+      // default stage. The remaining six still hold the canary shut.
+      assert.equal(snapshot.totals.runnerServiceCanaryBlockers, 6);
       assert.equal(snapshot.totals.runnerServiceActions, 0);
       assert.equal(snapshot.totals.runnerServicePendingApprovals, 0);
       assert.equal(snapshot.totals.runnerServiceExecutions, 0);

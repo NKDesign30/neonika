@@ -12,16 +12,18 @@ import {
   deriveCutoverGateStates,
   evaluateShadowExitGate,
   isNeonOutboundStage,
+  isNeonSteadyCutoverStage,
   neonikaCutoverStages,
-  readCutoverStageFromEnv,
   readOptionalCutoverEnv,
   readReadyCutoverEnv,
+  resolveCutoverStageFromEnv,
   type ICutoverGateState,
   type IShadowExitGateEvidence,
   type TCutoverStageId
 } from "../core/cutover.js";
 import { loadNeonCutoverEnv } from "../core/cutoverPromotion.js";
 import { createNeonMirrorEvidenceSnapshot } from "../core/mirrorEvidence.js";
+import { evaluateNeonCanaryLivePreconditions } from "../gateway/outboundSender.js";
 import {
   assessNeonNodeRuntime,
   type INeonNodeRuntimeAssessment
@@ -106,7 +108,8 @@ export type TNeonDoctorCheckId =
   | "indexer"
   | "transcript"
   | "heartbeat-daemon"
-  | "cutover";
+  | "cutover"
+  | "outbound";
 
 export interface INeonDoctorCheck {
   readonly id: TNeonDoctorCheckId;
@@ -175,13 +178,13 @@ export async function createNeonDoctorSnapshot(
     createNeonGatewayRouteInspectionSnapshot(projectRoot, routeInspectionOptions),
     createNeonMirrorEvidenceSnapshot(projectRoot, { now: () => generatedAt })
   ]);
-  const cutoverEnv = options.env ?? process.env;
-  // When the caller does not pin a stage, derive it from the persisted cutover
-  // promotion (merged under process.env, live wins) so display callers like the
-  // /api/neon-doctor endpoint agree with the cutover gate instead of defaulting
-  // to shadow and mislabelling legitimate primary deliveries.
-  const currentStage =
-    options.currentStage ?? readCutoverStageFromEnv(await loadNeonCutoverEnv(projectRoot)) ?? "shadow";
+  // The persisted cutover promotion merged under the live environment (live wins), so
+  // every cutover-aware check reads the same effective state the runtime does. Reading
+  // process.env alone made the doctor blind to anything persisted — it would report an
+  // armed install as disarmed, and default the stage to shadow while the gate said
+  // otherwise.
+  const cutoverEnv = options.env ?? (await loadNeonCutoverEnv(projectRoot));
+  const currentStage = options.currentStage ?? resolveCutoverStageFromEnv(cutoverEnv);
   const memoryStatus =
     options.includeMemoryStatus || options.memoryStatusProvider
       ? await readNeonMemoryStatus({
@@ -271,7 +274,8 @@ export async function createNeonDoctorSnapshot(
   });
   const checks = [
     ...checksBeforeCutover,
-    buildCutoverCheck(currentStage, evaluateShadowExitGate(status), cutoverGateStates)
+    buildCutoverCheck(currentStage, evaluateShadowExitGate(status), cutoverGateStates),
+    buildOutboundCheck(cutoverEnv)
   ];
   const totals = countDoctorStates(checks);
 
@@ -425,6 +429,8 @@ function recommendedDoctorAction(check: INeonDoctorCheck): string {
       return "Inspect node dist/src/cli.js heartbeat-daemon-status; a stale daemon means the loop crashed — restart it with heartbeat-daemon-run.";
     case "cutover":
       return "Review node dist/src/cli.js cutover-gate for the next gate requirement.";
+    case "outbound":
+      return "Run node dist/src/cli.js arm-outbound to review targets and arm sending.";
   }
 }
 
@@ -1854,7 +1860,7 @@ function buildCutoverCheck(
   return {
     id: "cutover",
     label: "Cutover",
-    state: currentStage === "shadow" ? "pass" : "warn",
+    state: isNeonSteadyCutoverStage(currentStage) ? "pass" : "warn",
     summary: `Current stage is ${stage?.label ?? currentStage}.`,
     details: [
       stage?.meaning ?? "Unknown stage.",
@@ -1863,6 +1869,74 @@ function buildCutoverCheck(
       `shadowExitGateMet=${shadowExitGate.met}`,
       ...shadowExitGate.reasons.map((reason) => `shadowExitGate: ${reason}`)
     ]
+  };
+}
+
+/**
+ * Answers the one question an operator asks after installing: will this send?
+ *
+ * Deliberately built on the same precondition evaluation the sender consults, so the
+ * two can never disagree. Reporting "armed" while the sender would still refuse is
+ * worse than reporting nothing at all.
+ *
+ * Silence is not a problem to flag — a disarmed install is doing exactly what it
+ * promises. What earns a warning is a contradiction: arming turned on while some
+ * other requirement is missing, where an operator believes they are sending and are
+ * not.
+ */
+function buildOutboundCheck(
+  env: Readonly<Record<string, string | undefined>>
+): INeonDoctorCheck {
+  const preconditions = evaluateNeonCanaryLivePreconditions(env);
+  const missing: string[] = [];
+
+  if (!preconditions.tokenPresent) {
+    missing.push("bot token");
+  }
+  if (!preconditions.channelConfigured) {
+    missing.push("channel allowlist");
+  }
+  if (!preconditions.canaryApproved) {
+    missing.push("approval flag");
+  }
+  if (!preconditions.stageAllowsOutbound) {
+    missing.push("outbound-capable stage");
+  }
+
+  const details = [
+    `stage=${preconditions.stageAllowsOutbound ? "outbound-capable" : "suppressed"}`,
+    `token=${preconditions.tokenPresent ? "present" : "missing"}`,
+    `allowlist=${preconditions.channelConfigured ? "configured" : "unset"}`,
+    `approval=${preconditions.canaryApproved ? "ready" : "unset"}`,
+    `armed=${preconditions.outboundEnabled ? "yes" : "no"}`
+  ];
+
+  if (preconditions.ready) {
+    return {
+      id: "outbound",
+      label: "Outbound",
+      state: "pass",
+      summary: "Outbound is armed — replies can leave this process.",
+      details
+    };
+  }
+
+  if (preconditions.outboundEnabled) {
+    return {
+      id: "outbound",
+      label: "Outbound",
+      state: "warn",
+      summary: `Outbound is armed but cannot send: ${missing.join(", ")} missing.`,
+      details: [...details, "Arming alone does not send; every requirement must hold."]
+    };
+  }
+
+  return {
+    id: "outbound",
+    label: "Outbound",
+    state: "pass",
+    summary: "Outbound is disarmed — nothing leaves this process.",
+    details: [...details, `To arm: ${missing.length > 0 ? `provide ${missing.join(", ")}, then ` : ""}run arm-outbound.`]
   };
 }
 

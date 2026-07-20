@@ -5,6 +5,7 @@ import {
   evaluatePrimaryExitGate,
   evaluateRetireExitGate,
   neonikaCutoverStages,
+  neonDefaultCutoverStage,
   nextCutoverStage,
   readOptionalCutoverEnv,
   readReadyCutoverEnv,
@@ -95,7 +96,7 @@ export async function createNeonCutoverGateSnapshot(
   options: ICreateNeonCutoverGateSnapshotOptions = {}
 ): Promise<INeonCutoverGateSnapshot> {
   const env = options.env ?? (await loadNeonCutoverEnv(projectRoot));
-  const currentStage = options.currentStage ?? readCutoverStage(env) ?? "shadow";
+  const currentStage = options.currentStage ?? readCutoverStage(env) ?? neonDefaultCutoverStage;
   const now = options.now ?? (() => new Date());
   const [doctor, routes, status, activeRuns, mirrorEvidence] = await Promise.all([
     createNeonDoctorSnapshot(projectRoot, {

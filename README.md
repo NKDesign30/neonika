@@ -9,10 +9,10 @@ An agent runtime in TypeScript: it takes messages in from a channel, runs an
 agent against them, and shows an operator what happened. Runs are persisted,
 redacted, and replayable. Nothing is sent back out until you explicitly arm it.
 
-**Status: shadow.** The runtime observes, records, and reports. Outbound
-delivery is suppressed at the seam, not merely unconfigured. Treat this as
-software you can read, run, and inspect — not as something to point at a
-production channel.
+**Status: silent by default.** A fresh install is a complete runtime — it takes
+messages in, runs agents, records everything. It sends nothing until you arm
+outbound, and arming shows you the targets first. Suppression sits at the seam,
+not merely unconfigured.
 
 ## Install
 
@@ -111,13 +111,14 @@ node dist/src/cli.js doctor-smoke             # every health check
 node dist/src/cli.js tui                      # read-only terminal dashboard
 ```
 
-## The shadow contract
+## The silence contract
 
 This is the invariant most of the architecture follows, and the reason you can
 run it without worrying:
 
-- **Outbound is suppressed.** Delivery records carry `state: "suppressed"`.
-  There is a sender seam, and the no-op implementation is the default one.
+- **Outbound is disarmed.** Delivery records carry `state: "suppressed"` until
+  you arm sending. There is a sender seam, and the no-op implementation is the
+  default one.
 - **Runs are terminal-only.** The store holds completed and failed runs. There
   is no live in-flight run to interrupt, by design.
 - **Everything crossing a boundary is redacted.** Tokens, keys, paths and
@@ -125,14 +126,24 @@ run it without worrying:
   HTTP response, or the dashboard. The test suite asserts the absence of the
   literal secret, not the presence of a mask.
 
-Moving beyond shadow is a staged, gated decision:
+Breaking the silence is one deliberate act, not a climb:
 
-```text
-shadow -> mirror -> canary -> primary -> retire
+```bash
+node dist/src/cli.js arm-outbound        # shows the targets, changes nothing
+node dist/src/cli.js arm-outbound --yes  # arms sending
+node dist/src/cli.js disarm-outbound     # back to silence
 ```
 
-Each stage requires recorded evidence before the next one unlocks. See
-`src/core/cutoverGate.ts`.
+`doctor` answers "will this send" at any point, and names what is missing when
+the answer is no. Arming needs a token, a channel allowlist and an approval
+flag alongside it — arming alone never sends.
+
+Migrating off an existing runtime is a different case, and there is machinery
+for it: a staged ladder (`shadow -> mirror -> canary -> primary -> retire`)
+where each rung needs recorded comparison evidence before the next unlocks. A
+fresh install does not walk it — the mirror rung compares an old runtime
+against a new one. See `src/core/cutoverGate.ts` if you are coming from
+something else.
 
 ## External dependencies
 
