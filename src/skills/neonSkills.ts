@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { lstat, opendir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   scanReferenceExtensions,
@@ -48,6 +49,10 @@ export function resolveDefaultReferenceRoot(
   return raw === undefined || raw === "" ? join(homedir(), ".neon", "reference") : raw;
 }
 
+export function resolveBundledSkillRoot(): string {
+  return resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "skills");
+}
+
 const skillFileName = "SKILL.md";
 const maxSkillFileBytes = 128 * 1024;
 const defaultSkillSearchDepth = 5;
@@ -67,6 +72,7 @@ export type TNeonSkillRootKind =
   | "project-agent"
   | "codex"
   | "agents"
+  | "bundled"
   | "claude-memory"
   | "upstream-reference"
   | "custom";
@@ -380,12 +386,27 @@ function createDefaultSkillRoots(
   projectRoot: string,
   source: INeonSkillInventorySource
 ): readonly INeonSkillRootConfig[] {
+  const workspaceSkillRoot = join(resolve(projectRoot), "skills");
+  const bundledSkillRoot = resolveBundledSkillRoot();
+  const bundledRoots: readonly INeonSkillRootConfig[] =
+    workspaceSkillRoot === bundledSkillRoot
+      ? []
+      : [
+          {
+            id: "neonika-bundled-skills",
+            label: "Neonika bundled skills",
+            kind: "bundled",
+            path: bundledSkillRoot,
+            trust: "trusted-local"
+          }
+        ];
+
   return [
     {
       id: "workspace-skills",
       label: "Workspace skills",
       kind: "workspace",
-      path: join(resolve(projectRoot), "skills"),
+      path: workspaceSkillRoot,
       trust: "trusted-project"
     },
     {
@@ -409,6 +430,7 @@ function createDefaultSkillRoots(
       path: join(source.homeDir, ".agents", "skills"),
       trust: "trusted-local"
     },
+    ...bundledRoots,
     {
       id: "claude-agent-memory",
       label: "Claude agent memory",
@@ -657,7 +679,10 @@ function parseSkillFrontmatter(source: string, fallbackName: string): ISkillFron
   return {
     name: normalizeOptionalText(values.get("name")) ?? fallbackName,
     description: normalizeOptionalText(values.get("description")) ?? firstInstructionLine(source),
-    disableModelInvocation: parseBoolean(values.get("disableModelInvocation")) ?? false
+    disableModelInvocation:
+      parseBoolean(
+        values.get("disable-model-invocation") ?? values.get("disableModelInvocation")
+      ) ?? false
   };
 }
 

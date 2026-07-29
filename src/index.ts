@@ -1071,6 +1071,7 @@ export {
   referenceRootEnvKey,
   renderNeonExtensionsReport,
   renderNeonSkillInventoryReport,
+  resolveBundledSkillRoot,
   resolveDefaultReferenceRoot,
   type ICreateNeonSkillInventoryOptions,
   type INeonExtensionInventorySnapshot,

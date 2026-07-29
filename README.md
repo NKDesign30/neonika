@@ -111,6 +111,22 @@ node dist/src/cli.js doctor-smoke             # every health check
 node dist/src/cli.js tui                      # read-only terminal dashboard
 ```
 
+## Bundled skills
+
+Fresh installations include Neonika's reviewed adaptation of Matt Pocock's
+engineering skill workflow: Wayfinder, Teach, TDD, domain modeling, architecture
+improvement, prototyping, triage and the related handoff skills.
+
+```bash
+neonika skills          # inventory, ownership and security posture
+neonika skill-commands  # available /skill:<name> commands
+```
+
+Workspace, Codex and agent skill roots keep precedence. A local skill with the
+same normalized name overrides the bundled fallback without modifying the
+installed package. See [the bundled collection manifest](skills/MATT_POCOCK_SKILLS.md)
+and [third-party notices](THIRD_PARTY_NOTICES.md).
+
 ## The silence contract
 
 This is the invariant most of the architecture follows, and the reason you can

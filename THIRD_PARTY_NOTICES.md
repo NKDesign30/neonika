@@ -45,6 +45,49 @@ owner permission under this repository's MIT license.
 | `test/neon-memory-embedding-backfill.test.ts` | Backfill coverage |
 | `test/summary-quality-cli.test.ts` | Summary CLI coverage |
 
+## Matt Pocock Skills
+
+The prompt and reference files under the paths below were adapted from
+[mattpocock/skills](https://github.com/mattpocock/skills), reviewed against
+commit `2ab958093e83e0ec752e6c1c5932da465bf23e0c`. Maintainer-specific paths,
+host commands and account assumptions were removed for the portable Neonika
+bundle. The exact included and intentionally excluded skills are recorded in
+`skills/MATT_POCOCK_SKILLS.md`.
+
+Copyright (c) 2026 Matt Pocock — MIT (full text below).
+
+| Neonika path | Upstream surface |
+| --- | --- |
+| `skills/{codebase-design,diagnose,domain-modeling,grill-with-docs,improve-codebase-architecture,prototype,resolving-merge-conflicts,tdd,to-spec,to-tickets,triage,wayfinder}/` | `skills/engineering/` |
+| `skills/{grilling,teach,writing-great-skills}/` | `skills/productivity/` |
+| `skills/neon-grill-me/` | Neonika wrapper adapted from the upstream grilling workflow |
+
+### MIT License
+
+```
+MIT License
+
+Copyright (c) 2026 Matt Pocock
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ## OpenClaw
 
 Copyright (c) 2026 OpenClaw Foundation — MIT (full text below).

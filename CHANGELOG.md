@@ -4,6 +4,10 @@
 
 - Next changes are collected here.
 
+## [0.4.0] - 2026-07-29
+
+- Bundled the portable Matt Pocock engineering skill collection, including Wayfinder and Teach, with local-skill overrides, security scanning, attribution, and fresh-install coverage.
+
 ## [0.3.1] - 2026-07-29
 
 - Made release packaging resilient to npm lifecycle output under Node 22 while preserving the exact-artifact install smoke.

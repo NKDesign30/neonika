@@ -20,7 +20,11 @@ const SCANNABLE_SCRIPT_EXTENSIONS = new Set([
   ".mts",
   ".cts",
   ".jsx",
-  ".tsx"
+  ".tsx",
+  ".sh",
+  ".bash",
+  ".zsh",
+  ".py"
 ]);
 
 const defaultMaxScriptDepth = 3;
