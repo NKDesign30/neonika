@@ -23,7 +23,7 @@ describe("Neonika WhatsApp auth evidence", () => {
       assert.equal(markerOnly.reason, "credentials-missing");
 
       const credentialsPath = join(authPath, "creds.json");
-      await writeFile(credentialsPath, '{"registered":true}\n', {
+      await writeFile(credentialsPath, '{"me":{"id":"15551234567:9@s.whatsapp.net"}}\n', {
         encoding: "utf8",
         mode: 0o644
       });
@@ -31,13 +31,27 @@ describe("Neonika WhatsApp auth evidence", () => {
       assert.equal(publicCredentials.state, "invalid");
       assert.equal(publicCredentials.reason, "unsafe-permissions");
 
+      // `registered` is a pairing-code flag the QR path never sets, and the
+      // pairing-code path sets it locally before the server replies. On its own
+      // it proves nothing.
       await chmod(credentialsPath, 0o600);
-      await writeFile(credentialsPath, '{"registered":false}\n', "utf8");
-      const unregistered = await inspectNeonWhatsAppAuthState(authPath);
-      assert.equal(unregistered.state, "invalid");
-      assert.equal(unregistered.reason, "invalid-credentials");
-
       await writeFile(credentialsPath, '{"registered":true}\n', "utf8");
+      const withoutIdentity = await inspectNeonWhatsAppAuthState(authPath);
+      assert.equal(withoutIdentity.state, "invalid");
+      assert.equal(withoutIdentity.reason, "invalid-credentials");
+
+      await writeFile(credentialsPath, '{"registered":true,"me":{"id":"15551234567"}}\n', "utf8");
+      const partialIdentity = await inspectNeonWhatsAppAuthState(authPath);
+      assert.equal(partialIdentity.state, "invalid");
+      assert.equal(partialIdentity.reason, "invalid-credentials");
+
+      // The QR path stays unregistered for the whole session; the server-issued
+      // account identity is what makes it verifiable.
+      await writeFile(
+        credentialsPath,
+        '{"registered":false,"me":{"id":"15551234567:9@s.whatsapp.net"}}\n',
+        "utf8"
+      );
       const linked = await inspectNeonWhatsAppAuthState(authPath);
       assert.equal(linked.state, "linked");
       assert.equal(linked.reason, "verified");

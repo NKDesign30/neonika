@@ -247,7 +247,7 @@ describe("Neonika Onboarding", () => {
 
       await writeFile(
         join(authPath, "creds.json"),
-        '{"registered":true}\n',
+        '{"registered":false,"me":{"id":"15551234567:9@s.whatsapp.net"}}\n',
         { encoding: "utf8", mode: 0o600 }
       );
       const linked = await createNeonOnboardingSnapshot(projectRoot, {

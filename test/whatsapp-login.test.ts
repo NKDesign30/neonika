@@ -30,7 +30,7 @@ describe("Neonika WhatsApp linked-device login", () => {
       const authPath = resolveNeonSetupPaths(configRoot).whatsappAuthPath;
       const runtime = createFakeRuntime(
         authPath,
-        [{ qr: qrValue }, { credentials: true }, { connection: "open" }],
+        [{ qr: qrValue }, { credentials: true, paired: true }, { connection: "open" }],
         () => {
           saveCount += 1;
         },
@@ -130,6 +130,113 @@ describe("Neonika WhatsApp linked-device login", () => {
     }
   });
 
+  it("verifies a QR session that never sets the pairing-code registration flag", async () => {
+    const configRoot = join(tmpdir(), `neonika-whatsapp-qr-flag-${process.pid}-${Date.now()}`);
+    let saveCount = 0;
+    try {
+      await runNeonSetup({
+        configRoot,
+        whatsapp: { enabled: true, ownerPeerId: "+15551234567" }
+      });
+      const paths = resolveNeonSetupPaths(configRoot);
+      const runtime = createRestartingRuntime(paths.whatsappAuthPath, () => {
+        saveCount += 1;
+      });
+      const result = await runNeonWhatsAppLogin({
+        configRoot,
+        loadRuntime: () => Promise.resolve(runtime),
+        showQr: () => undefined,
+        now: () => new Date("2026-07-29T09:00:00.000Z"),
+        timeoutMs: 1_000
+      });
+      const credentials = JSON.parse(
+        await readFile(join(paths.whatsappAuthPath, "creds.json"), "utf8")
+      ) as Record<string, unknown>;
+      const marker = JSON.parse(
+        await readFile(join(paths.whatsappAuthPath, "session.json"), "utf8")
+      ) as Record<string, unknown>;
+
+      // The QR path leaves `registered` false forever; only the server-issued
+      // account identity proves the pairing completed.
+      assert.equal(credentials["registered"], false);
+      assert.equal(result.state, "linked");
+      assert.equal(result.transportRestarts, 1);
+      assert.equal(marker["state"], "linked");
+      assert.equal(marker["verifiedAt"], "2026-07-29T09:00:00.000Z");
+      assert.equal((await stat(join(paths.whatsappAuthPath, "creds.json"))).mode & 0o777, 0o600);
+      // Four credential events: one before the restart, three after it.
+      assert.equal(saveCount, 4);
+    } finally {
+      await rm(configRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("refuses to mark a session linked when the credentials carry no account identity", async () => {
+    const configRoot = join(tmpdir(), `neonika-whatsapp-no-identity-${process.pid}-${Date.now()}`);
+    try {
+      await runNeonSetup({
+        configRoot,
+        whatsapp: { enabled: true, ownerPeerId: "+15551234567" }
+      });
+      const paths = resolveNeonSetupPaths(configRoot);
+      const runtime = createFakeRuntime(
+        paths.whatsappAuthPath,
+        [{ qr: "one-time-qr" }, { credentials: true }, { connection: "open" }],
+        () => undefined,
+        () => undefined
+      );
+
+      await assert.rejects(
+        () =>
+          runNeonWhatsAppLogin({
+            configRoot,
+            loadRuntime: () => Promise.resolve(runtime),
+            showQr: () => undefined,
+            timeoutMs: 1_000
+          }),
+        /credentials were not persisted/u
+      );
+      await assert.rejects(
+        () => readFile(join(paths.whatsappAuthPath, "session.json"), "utf8"),
+        /ENOENT/u
+      );
+    } finally {
+      await rm(configRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("reports an unconfirmed protocol version instead of hiding the fallback", async () => {
+    const configRoot = join(tmpdir(), `neonika-whatsapp-version-${process.pid}-${Date.now()}`);
+    try {
+      await runNeonSetup({
+        configRoot,
+        whatsapp: { enabled: true, ownerPeerId: "+15551234567" }
+      });
+      const paths = resolveNeonSetupPaths(configRoot);
+      const runtime = createFakeRuntime(
+        paths.whatsappAuthPath,
+        [{ credentials: true, paired: true }, { connection: "open" }],
+        () => undefined,
+        () => undefined
+      );
+      const staleRuntime: INeonBaileysRuntime = {
+        ...runtime,
+        fetchProtocolVersion: () => Promise.resolve({ version: [2, 3000, 1], isCurrent: false })
+      };
+      const result = await runNeonWhatsAppLogin({
+        configRoot,
+        loadRuntime: () => Promise.resolve(staleRuntime),
+        showQr: () => undefined,
+        timeoutMs: 1_000
+      });
+
+      assert.equal(result.protocolVersionCurrent, false);
+      assert.match(renderNeonWhatsAppLoginReport(result), /Protocol version: unconfirmed/u);
+    } finally {
+      await rm(configRoot, { force: true, recursive: true });
+    }
+  });
+
   it("refuses login before loading a transport when WhatsApp is not configured", async () => {
     const configRoot = join(tmpdir(), `neonika-whatsapp-unconfigured-${process.pid}-${Date.now()}`);
     let runtimeLoaded = false;
@@ -198,19 +305,20 @@ function createFakeRuntime(
   onSave: () => void,
   onEnd: () => void
 ): INeonBaileysRuntime {
+  // Mirrors Baileys: `creds.me` only appears once the server answered the
+  // pairing with `pair-success`. Credentials flushed before that carry no
+  // account identity, and `registered` stays false for the whole QR flow.
+  let paired = false;
   return {
     useMultiFileAuthState: () =>
       Promise.resolve({
         state: { private: true },
         saveCreds: async () => {
-          await writeFile(join(authPath, "creds.json"), '{"registered":true}\n', {
-            encoding: "utf8",
-            mode: 0o600
-          });
+          await writeFakeCredentials(authPath, paired);
           onSave();
         }
       }),
-    fetchLatestBaileysVersion: () => Promise.resolve({ version: [2, 3000, 1] }),
+    fetchProtocolVersion: () => Promise.resolve({ version: [2, 3000, 1], isCurrent: true }),
     createSocket: () => {
       const listeners = new Map<string, (value: unknown) => void>();
       const socket: INeonWhatsAppSocket = {
@@ -226,6 +334,9 @@ function createFakeRuntime(
       queueMicrotask(() => {
         for (const update of updates) {
           if (update["credentials"] === true) {
+            if (update["paired"] === true) {
+              paired = true;
+            }
             listeners.get("creds.update")?.({});
           } else {
             listeners.get("connection.update")?.(update);
@@ -237,19 +348,35 @@ function createFakeRuntime(
   };
 }
 
-function createRestartingRuntime(authPath: string): INeonBaileysRuntime {
+async function writeFakeCredentials(authPath: string, paired: boolean): Promise<void> {
+  const credentials = paired
+    ? { registrationId: 4242, registered: false, me: { id: "15551234567:9@s.whatsapp.net", name: "~" } }
+    : { registrationId: 4242, registered: false };
+  await writeFile(join(authPath, "creds.json"), `${JSON.stringify(credentials)}\n`, {
+    encoding: "utf8",
+    mode: 0o600
+  });
+}
+
+/**
+ * Replays the observed Baileys 7 QR sequence:
+ * `qr -> creds.update -> close(515) -> restart -> creds.update -> open ->
+ * final creds.update`. The account identity only appears after the restart,
+ * and `registered` stays false throughout, exactly as the real QR path behaves.
+ */
+function createRestartingRuntime(authPath: string, onSave: () => void = () => undefined): INeonBaileysRuntime {
   let socketCount = 0;
+  let paired = false;
   return {
     useMultiFileAuthState: () =>
       Promise.resolve({
         state: { private: true },
-        saveCreds: () =>
-          writeFile(join(authPath, "creds.json"), '{"registered":true}\n', {
-            encoding: "utf8",
-            mode: 0o600
-          })
+        saveCreds: async () => {
+          await writeFakeCredentials(authPath, paired);
+          onSave();
+        }
       }),
-    fetchLatestBaileysVersion: () => Promise.resolve({ version: [2, 3000, 1] }),
+    fetchProtocolVersion: () => Promise.resolve({ version: [2, 3000, 1], isCurrent: true }),
     createSocket: () => {
       socketCount += 1;
       const currentSocket = socketCount;
@@ -270,9 +397,13 @@ function createRestartingRuntime(authPath: string): INeonBaileysRuntime {
             connection: "close",
             lastDisconnect: { error: { output: { statusCode: 515 } } }
           });
-        } else {
-          listeners.get("connection.update")?.({ connection: "open" });
+          return;
         }
+        paired = true;
+        listeners.get("creds.update")?.({});
+        listeners.get("creds.update")?.({});
+        listeners.get("connection.update")?.({ connection: "open" });
+        listeners.get("creds.update")?.({});
       });
       return socket;
     }

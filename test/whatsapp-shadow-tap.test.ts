@@ -170,12 +170,12 @@ function createScriptedRuntime(
       Promise.resolve({
         state: {},
         saveCreds: () =>
-          writeFile(join(authPath, "creds.json"), '{"registered":true}\n', {
+          writeFile(join(authPath, "creds.json"), '{"registered":false,"me":{"id":"15551234567:9@s.whatsapp.net"}}\n', {
             encoding: "utf8",
             mode: 0o600
           })
       }),
-    fetchLatestBaileysVersion: () => Promise.resolve({ version: [2, 3000, 1] }),
+    fetchProtocolVersion: () => Promise.resolve({ version: [2, 3000, 1], isCurrent: true }),
     createSocket: () => {
       const listeners = new Map<string, (value: unknown) => void>();
       const socket: INeonWhatsAppSocket = {
