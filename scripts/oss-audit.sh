@@ -233,12 +233,14 @@ fi
 #
 #    Positive whitelist, same reason as check 2: reserved documentation domains,
 #    the contact address the project publishes on purpose, and `git@github.com`,
-#    which is the user part of an ssh remote url rather than a mailbox.
+#    which is the user part of an ssh remote url rather than a mailbox. A numeric
+#    `@s.whatsapp.net` suffix is not a mailbox either; check 8 validates the full
+#    JID, including an optional linked-device suffix, without losing the number.
 # ---------------------------------------------------------------------------
 check "Email addresses outside the placeholder whitelist"
 if hits=$(git grep -ohE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' -- . ':!scripts/oss-audit.sh' 2>/dev/null \
     | sort -u \
-    | grep -vE '@(example\.(com|org|net)|db\.internal)$|\.test$|^info@design-nk\.de$|^git@github\.com$' ); then
+    | grep -vE '@(example\.(com|org|net)|db\.internal)$|\.test$|^info@design-nk\.de$|^git@github\.com$|^[0-9]+@s\.whatsapp\.net$' ); then
   fail "addresses that are neither reserved-for-documentation nor the published contact:"
   printf '%s\n' "$hits" | head -10 | sed 's/^/       /'
 else
@@ -256,8 +258,10 @@ fi
 #    two-letters-two-digits pattern matches every npm `sha512-` integrity hash.
 # ---------------------------------------------------------------------------
 check "Phone numbers, chat JIDs, and IBANs"
-if hits=$(git grep -inwE '[0-9]{7,15}@(s\.whatsapp\.net|c\.us|g\.us)|\+(49|43|41|386)[0-9]{6,}|DE[0-9]{20}|AT[0-9]{18}|CH[0-9]{19}|SI[0-9]{17}' \
-    -- . ':!scripts/oss-audit.sh' 2>/dev/null); then
+if hits=$(git grep -I -ohE '[0-9]{7,15}(:[0-9]{1,4})?@(s\.whatsapp\.net|c\.us|g\.us)|\+(49|43|41|386)[0-9]{6,}|DE[0-9]{20}|AT[0-9]{18}|CH[0-9]{19}|SI[0-9]{17}' \
+    -- . ':!scripts/oss-audit.sh' 2>/dev/null \
+    | sort -u \
+    | grep -vE '^15551234567(:[0-9]{1,4})?@s\.whatsapp\.net$'); then
   fail "contact identifiers:"
   printf '%s\n' "$hits" | head -10 | sed 's/^/       /'
 else
@@ -267,14 +271,53 @@ fi
 # ---------------------------------------------------------------------------
 # 9. Secret scan. The allowlist lives in .gitleaks.toml, where every entry
 #    carries its justification. An allowlist without a reason is a leak channel.
+#
+#    `gitleaks --no-git` ignores .gitignore and used to scan local runtime state
+#    that cannot be published. Build the scan tree from Git's own publishable
+#    set instead: tracked files plus untracked, non-ignored files. A force-added
+#    state file is still tracked and therefore still fails.
 # ---------------------------------------------------------------------------
+scan_gitleaks_working_tree() {
+  local audit_tree
+  local repo_path
+  audit_tree=$(mktemp -d) || return 2
+
+  while IFS= read -r -d '' repo_path; do
+    if [ ! -e "$repo_path" ] && [ ! -L "$repo_path" ]; then
+      continue
+    fi
+    mkdir -p "$audit_tree/$(dirname "$repo_path")" || {
+      rm -rf -- "$audit_tree"
+      return 2
+    }
+    cp -P -- "$repo_path" "$audit_tree/$repo_path" || {
+      rm -rf -- "$audit_tree"
+      return 2
+    }
+  done < <(git ls-files -z --cached --others --exclude-standard)
+
+  (
+    cd "$audit_tree" &&
+      gitleaks detect \
+        --no-git \
+        --source . \
+        --config .gitleaks.toml \
+        --no-banner \
+        --redact \
+        >/dev/null 2>&1
+  )
+  local scan_status=$?
+  rm -rf -- "$audit_tree"
+  return "$scan_status"
+}
+
 check "gitleaks (working tree)"
 if ! command -v gitleaks >/dev/null 2>&1; then
   fail "gitleaks not installed (brew install gitleaks)"
-elif gitleaks detect --no-git --no-banner --redact >/dev/null 2>&1; then
+elif scan_gitleaks_working_tree; then
   pass "no secrets in working tree"
 else
-  fail "gitleaks reported findings — run: gitleaks detect --no-git --redact -v"
+  fail "gitleaks reported findings in tracked or publishable untracked files"
 fi
 
 if [ "$SCAN_HISTORY" = "1" ]; then
