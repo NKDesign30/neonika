@@ -21,22 +21,20 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$release_dir"
-npm pack --json --ignore-scripts --pack-destination "$temporary_dir" >"$temporary_dir/pack.json"
-packed_name=$(node - "$temporary_dir/pack.json" <<'NODE'
-const { readFileSync } = require("node:fs");
-const report = JSON.parse(readFileSync(process.argv[2], "utf8"));
-if (!report[0] || typeof report[0].filename !== "string") {
-  throw new Error("npm pack did not return an artifact name");
-}
-process.stdout.write(report[0].filename);
-NODE
-)
+npm pack --ignore-scripts --pack-destination "$temporary_dir" >/dev/null
+shopt -s nullglob
+packed_artifacts=("$temporary_dir"/*.tgz)
+shopt -u nullglob
+if [ "${#packed_artifacts[@]}" -ne 1 ]; then
+  printf 'Expected exactly one npm pack artifact, found %d\n' "${#packed_artifacts[@]}" >&2
+  exit 1
+fi
 
 artifact="$release_dir/neonika.tgz"
 checksum_file="$release_dir/neonika.tgz.sha256"
 manifest_file="$release_dir/neonika.release.json"
 notes_file="$release_dir/neonika.release-notes.md"
-cp "$temporary_dir/$packed_name" "$artifact"
+cp "${packed_artifacts[0]}" "$artifact"
 checksum=$(shasum -a 256 "$artifact" | awk '{print $1}')
 printf '%s  %s\n' "$checksum" "neonika.tgz" >"$checksum_file"
 

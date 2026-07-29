@@ -4,6 +4,10 @@
 
 - Next changes are collected here.
 
+## [0.3.1] - 2026-07-29
+
+- Made release packaging resilient to npm lifecycle output under Node 22 while preserving the exact-artifact install smoke.
+
 ## [0.3.0] - 2026-07-29
 
 - Added guarded memory maintenance, database recovery, embedding backfill, recall telemetry, and stronger relation and importance handling.
