@@ -58,13 +58,16 @@ const allowed = paths.every((path) =>
   path === "README.md" ||
   path === "LICENSE" ||
   path === "THIRD_PARTY_NOTICES.md" ||
+  path.startsWith("skills/") ||
   path.startsWith("dist/src/") ||
   path.startsWith("dist/control-ui/")
 );
 if (
   !allowed ||
   !paths.includes("dist/src/cli.js") ||
-  !paths.includes("dist/control-ui/index.html")
+  !paths.includes("dist/control-ui/index.html") ||
+  !paths.includes("skills/wayfinder/SKILL.md") ||
+  !paths.includes("skills/teach/SKILL.md")
 ) {
   throw new Error("release package contains files outside the runtime allowlist");
 }
@@ -97,13 +100,16 @@ const allowed = paths.every((path) =>
   path === "README.md" ||
   path === "LICENSE" ||
   path === "THIRD_PARTY_NOTICES.md" ||
+  path.startsWith("skills/") ||
   path.startsWith("dist/src/") ||
   path.startsWith("dist/control-ui/")
 );
 if (
   !allowed ||
   !paths.includes("dist/src/cli.js") ||
-  !paths.includes("dist/control-ui/index.html")
+  !paths.includes("dist/control-ui/index.html") ||
+  !paths.includes("skills/wayfinder/SKILL.md") ||
+  !paths.includes("skills/teach/SKILL.md")
 ) {
   throw new Error("npm package contains files outside the runtime allowlist");
 }
@@ -181,6 +187,11 @@ fi
   "$neonika_bin" onboarding-smoke --config-root "$config_root" >/dev/null
   "$neonika_bin" whatsapp-status --config-root "$config_root" | grep -q '^WhatsApp companion: disabled$'
   "$neonika_bin" mission-control-ui-smoke | grep -q '^UI: spa '
+  HOME="$smoke_dir/home" "$neonika_bin" skills >"$smoke_dir/skills-report.txt"
+  grep -q -- '- root neonika-bundled-skills: readable / 17 skill files / trusted-local' "$smoke_dir/skills-report.txt"
+  HOME="$smoke_dir/home" "$neonika_bin" skill-commands >"$smoke_dir/skill-commands.txt"
+  grep -q -- '- /skill:teach: model-disabled / owner teach@neonika-bundled-skills' "$smoke_dir/skill-commands.txt"
+  grep -q -- '- /skill:wayfinder: active / owner wayfinder@neonika-bundled-skills' "$smoke_dir/skill-commands.txt"
 )
 
 node - "$config_root" <<'NODE'
@@ -208,4 +219,5 @@ printf 'Version: %s\n' "$installed_version"
 printf 'Leak scan: clean (%s files, %s bytes)\n' "$package_files" "$package_bytes"
 printf 'Fresh onboarding: private config and local memory ready\n'
 printf 'Mission Control: packaged SPA ready\n'
+printf 'Bundled skills: 17 ready (Wayfinder and Teach verified)\n'
 printf 'Uninstall: clean\n'
