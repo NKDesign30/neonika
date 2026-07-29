@@ -360,9 +360,9 @@ if [ "$SCAN_HISTORY" = "1" ]; then
   # Commit metadata is not a file, so no grep above can see it. Every commit in
   # `git log` names an author and a committer, and a published clone shows them.
   #
-  # Publishing under your own name is a choice. This only enforces the choice
-  # already recorded in the denylist: if the name should be public, drop its
-  # token from scripts/oss-audit-denylist.sha256.
+  # Publishing under your own name is a choice. The scanner allows only the
+  # maintainer spellings already public in this repository's GitHub metadata;
+  # every email and every other name still goes through the denylist.
   # -------------------------------------------------------------------------
   check "Commit author and committer identities"
   who=$(python3 scripts/oss-identity-scan.py authors); rc=$?

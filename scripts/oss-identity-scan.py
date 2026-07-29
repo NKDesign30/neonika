@@ -40,6 +40,10 @@ from pathlib import Path
 
 DENYLIST = Path(__file__).with_name("oss-audit-denylist.sha256")
 SELF = {"scripts/oss-identity-scan.py", "scripts/oss-audit-denylist.sha256"}
+PUBLISHED_MAINTAINER_NAMES = {
+    "Niko Knez",
+    "Niko.Knez",
+}
 
 # A run of letters, including the German ones — an ASCII-only class would split
 # "Grüße" into "gr" and "e" and quietly stop matching anything spelled properly.
@@ -184,6 +188,8 @@ def scan_authors(deny: set[str]) -> list[str]:
             continue
         commit, *values = line.split("\0")
         for name, value in zip(fields, values):
+            if name.endswith("-name") and value in PUBLISHED_MAINTAINER_NAMES:
+                continue
             if hit(value, deny):
                 findings.append(f"{commit[:12]}:{name}")
     return findings
