@@ -2,8 +2,8 @@ import type { TranslationMap } from "../lib/types.js";
 
 // Slovenščina.
 export const sl: TranslationMap = {
-  brand: { eyebrow: "Mission Control", title: "Neonika" },
-  groups: { Chat: "Klepet", Control: "Nadzor", Agent: "Agent", Sites: "Strani", Settings: "Nastavitve" },
+  brand: { eyebrow: "Control", title: "Neonika" },
+  groups: { Now: "Zdaj", Work: "Delo", System: "Sistem", Configure: "Konfiguracija" },
   tabs: {
     chat: "Klepet",
     sites: "Strani",
@@ -51,6 +51,9 @@ export const sl: TranslationMap = {
     detailEvents: "Dogodki ({count})",
   },
   overview: {
+    greetingMorning: "Dobro jutro",
+    greetingDay: "Dober dan",
+    greetingEvening: "Dober večer",
     sub: "{count} sej zabeleženih · izvajanje v živo",
     recentSessions: "Nedavne seje",
     liveActivity: "Aktivnost v živo",

@@ -81,7 +81,14 @@ describe("neon memory relation discovery (gated)", () => {
   });
 
   it("discovers related pairs above the threshold when armed", () => {
-    const result = discoverNeonMemoryRelations({ dbPath, gate: armedGate, dimensions: DIMS, threshold: 0.5 });
+    // minNeighbors: 0 isolates the pure threshold behaviour this test asserts.
+    const result = discoverNeonMemoryRelations({
+      dbPath,
+      gate: armedGate,
+      dimensions: DIMS,
+      threshold: 0.5,
+      minNeighbors: 0
+    });
     assert.equal(result.state, "discovered");
     assert.ok(result.inserted >= 1);
 
@@ -101,6 +108,46 @@ describe("neon memory relation discovery (gated)", () => {
     }
   });
 
+  it("leaves entries islanded when only the threshold runs", () => {
+    // 0.99 is above even the near-identical pair, so nothing qualifies.
+    const result = discoverNeonMemoryRelations({
+      dbPath,
+      gate: armedGate,
+      dimensions: DIMS,
+      threshold: 0.99,
+      minNeighbors: 0
+    });
+    assert.equal(result.state, "discovered");
+    assert.equal(result.inserted, 0);
+  });
+
+  it("gives every entry an edge via the nearest-neighbour pass", () => {
+    // Same unreachable threshold: every edge below must come from the k-NN pass.
+    const result = discoverNeonMemoryRelations({
+      dbPath,
+      gate: armedGate,
+      dimensions: DIMS,
+      threshold: 0.99,
+      minNeighbors: 2
+    });
+    assert.equal(result.state, "discovered");
+    assert.ok(result.inserted >= 1);
+
+    const database = new DatabaseSync(dbPath, { readOnly: true });
+    try {
+      const rel = database
+        .prepare("SELECT source_id, target_id, confidence FROM memory_relations")
+        .all() as Array<{ source_id: number; target_id: number; confidence: number }>;
+      // The unrelated entry (c.md, id 3) is the island the threshold never reaches.
+      assert.ok(rel.some((row) => row.source_id === 3 || row.target_id === 3));
+      // Weak edges are allowed, meaningless ones are not.
+      assert.ok(rel.every((row) => row.confidence > 0 && row.confidence <= 1));
+      assert.ok(rel.every((row) => row.source_id < row.target_id));
+    } finally {
+      database.close();
+    }
+  });
+
   it("is idempotent via the unique index (re-run updates, no duplicates)", () => {
     discoverNeonMemoryRelations({ dbPath, gate: armedGate, dimensions: DIMS, threshold: 0.5 });
     discoverNeonMemoryRelations({ dbPath, gate: armedGate, dimensions: DIMS, threshold: 0.5 });
@@ -113,5 +160,32 @@ describe("neon memory relation discovery (gated)", () => {
     } finally {
       database.close();
     }
+  });
+
+  it("says so when the entry cap truncates the sweep", () => {
+    // Zweimal dieselbe Falle: erst strandete ein 200er-Cap den Tail, dann wuchs
+    // die DB über den 2000er hinaus — und beide Male meldete der Lauf Erfolg,
+    // weil ein stilles LIMIT von aussen wie ein vollständiger Durchgang aussieht.
+    const truncated = discoverNeonMemoryRelations({
+      dbPath,
+      gate: armedGate,
+      dimensions: DIMS,
+      maxEntries: 2
+    });
+    assert.ok(
+      truncated.diagnostics.some((line) => line.includes("cap reached")),
+      "a truncated sweep must not report like a complete one"
+    );
+
+    const complete = discoverNeonMemoryRelations({
+      dbPath,
+      gate: armedGate,
+      dimensions: DIMS
+    });
+    assert.equal(
+      complete.diagnostics.some((line) => line.includes("cap reached")),
+      false,
+      "a complete sweep must stay quiet"
+    );
   });
 });

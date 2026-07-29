@@ -1,4 +1,4 @@
-import { DatabaseSync } from "node:sqlite";
+import { openNeonMemoryDatabase } from "./neonMemoryDbOpen.js";
 import { access, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -73,7 +73,7 @@ export async function createNeonMemoryBackup(
 
   // VACUUM INTO requires a string literal, not a bound parameter. The path is
   // ours (built from backupDir + sanitized stamp), and single quotes are escaped.
-  const source = new DatabaseSync(options.dbPath, { readOnly: true });
+  const source = openNeonMemoryDatabase(options.dbPath, { readOnly: true });
   let entries = 0;
   try {
     source.exec(`VACUUM INTO '${snapshotPath.replace(/'/g, "''")}'`);

@@ -3,13 +3,13 @@
 
 import { html, nothing, type TemplateResult } from "lit";
 import { state } from "lit/decorators.js";
-import type { PropertyValues } from "lit";
 import { t } from "../../i18n/index.js";
 import { renderBadge, statusBadge } from "../badges.js";
 import { fmtInt } from "../format.js";
 import { neonClient } from "../gateway.js";
 import { icon, type IconName } from "../icons.js";
-import { NeonView, renderEmpty, renderError, renderLoading } from "../components/state-pane.js";
+import { NeonView } from "../components/state-pane.js";
+import "../components/run-detail.js";
 
 type WorkboardStatus =
   | "triage"
@@ -55,38 +55,6 @@ interface IWorkboardCardsSnapshot {
   readonly statuses: readonly WorkboardStatus[];
 }
 
-// Card-detail overlay: read-only replay of the run behind a card. Terminal
-// runs only (shadow contract — no live in-flight streaming), see
-// /api/neon-replay in the gateway HTTP server.
-export interface IReplayEvent {
-  readonly id: string;
-  readonly kind: string;
-  readonly title?: string;
-  readonly summary?: string;
-  readonly preview?: string;
-}
-
-export interface IReplayRun {
-  readonly runId: string;
-  readonly status: string;
-  readonly channel?: string;
-  readonly agentId?: string;
-  readonly userDisplayName?: string;
-  readonly startedAt?: string;
-  readonly completedAt?: string;
-  readonly durationMs?: number;
-  readonly inboundPreview?: string;
-  readonly finalPreview?: string;
-  readonly eventCount: number;
-  readonly events: readonly IReplayEvent[];
-}
-
-export interface IReplaySnapshot {
-  readonly runs: readonly IReplayRun[];
-}
-
-type DetailPhase = "loading" | "ready" | "empty" | "error";
-
 interface IWorkboardTotals {
   readonly cards: number;
   readonly active: number;
@@ -114,27 +82,9 @@ const VISIBLE_STEP = 10;
 export class NeonWorkboard extends NeonView<IWorkboardCardsSnapshot> {
   @state() private visibleByStatus: Partial<Record<WorkboardStatus, number>> = {};
   @state() private detailCard: IWorkboardCard | null = null;
-  @state() private detailRun: IReplayRun | null = null;
-  @state() private detailPhase: DetailPhase = "empty";
-  @state() private detailErrorMessage = "";
-
-  private detailAbort: AbortController | null = null;
 
   protected load(signal: AbortSignal): Promise<IWorkboardCardsSnapshot> {
     return neonClient.workboardCards<IWorkboardCardsSnapshot>({ signal });
-  }
-
-  override updated(changed: PropertyValues): void {
-    if (changed.has("detailCard") && this.detailCard) {
-      queueMicrotask(() => {
-        this.querySelector<HTMLElement>(".detail__panel")?.focus();
-      });
-    }
-  }
-
-  override disconnectedCallback(): void {
-    super.disconnectedCallback();
-    this.detailAbort?.abort();
   }
 
   private visibleCount(status: WorkboardStatus): number {
@@ -148,126 +98,18 @@ export class NeonWorkboard extends NeonView<IWorkboardCardsSnapshot> {
     };
   }
 
-  // Lazy, click-triggered load of a card's run replay. Guards against races
-  // from fast card-switching by capturing the requested card id and only
-  // committing the result if the selection hasn't moved on.
-  private openDetail(card: IWorkboardCard): void {
-    this.detailAbort?.abort();
-    this.detailCard = card;
-    this.detailErrorMessage = "";
-
-    if (!card.runId) {
-      this.detailRun = null;
-      this.detailPhase = "empty";
-      return;
-    }
-
-    this.detailRun = null;
-    this.detailPhase = "loading";
-    const controller = new AbortController();
-    this.detailAbort = controller;
-    const requestedCardId = card.id;
-
-    neonClient
-      .replay<IReplaySnapshot>(card.runId, { signal: controller.signal, events: 200 })
-      .then((snapshot) => {
-        if (this.detailCard?.id !== requestedCardId) return;
-        const run = pickReplayRun(snapshot);
-        if (!run) {
-          this.detailPhase = "empty";
-          return;
-        }
-        this.detailRun = run;
-        this.detailPhase = "ready";
-      })
-      .catch((error: unknown) => {
-        if (this.detailCard?.id !== requestedCardId) return;
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        this.detailErrorMessage = error instanceof Error ? error.message : String(error);
-        this.detailPhase = "error";
-      });
-  }
-
-  private closeDetail(): void {
-    this.detailAbort?.abort();
-    this.detailAbort = null;
-    this.detailCard = null;
-    this.detailRun = null;
-  }
-
+  // The replay overlay itself (fetch, phases, focus, close) lives in
+  // <neon-run-detail>; the board only tracks which card is open.
   private renderDetailOverlay(): TemplateResult | typeof nothing {
     const card = this.detailCard;
     if (!card) return nothing;
-
-    return html`
-      <div
-        class="palette-overlay"
-        @click=${(event: Event) => {
-          if (event.target === event.currentTarget) this.closeDetail();
-        }}
-      >
-        <div
-          class="detail__panel"
-          role="dialog"
-          aria-label=${card.title}
-          tabindex="-1"
-          @keydown=${(event: KeyboardEvent) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              this.closeDetail();
-            }
-          }}
-        >
-          <div class="detail__head">
-            <span class="card__title">${card.title}</span>
-            <button class="btn btn--sm" @click=${() => this.closeDetail()}>${t("common.close")}</button>
-          </div>
-          <div class="detail__body">${this.renderDetailBody()}</div>
-        </div>
-      </div>
-    `;
-  }
-
-  private renderDetailBody(): TemplateResult {
-    if (this.detailPhase === "loading") return renderLoading();
-    if (this.detailPhase === "error") {
-      return renderError(this.detailErrorMessage, () => {
-        if (this.detailCard) this.openDetail(this.detailCard);
-      });
-    }
-    if (this.detailPhase === "empty" || !this.detailRun) {
-      return renderEmpty(t("workboard.detailNoRun"));
-    }
-
-    const run = this.detailRun;
-
-    return html`
-      <div class="detail__meta">
-        ${renderBadge(statusBadge(run.status))}
-        <span class="row__sub">${formatDetailMeta(run)}</span>
-      </div>
-      ${run.finalPreview
-        ? html`<div class="detail__section">
-            <div class="row__sub">${t("workboard.detailResult")}</div>
-            <p>${run.finalPreview}</p>
-          </div>`
-        : nothing}
-      <div class="detail__section">
-        <div class="row__sub">${t("workboard.detailEvents", { count: fmtInt(run.eventCount) })}</div>
-        <div class="rowlist">
-          ${run.events.map(
-            (event) => html`
-              <div class="row" style="grid-template-columns:minmax(0,1fr)">
-                <div style="min-width:0">
-                  <div class="row__key">${event.title ?? event.kind}</div>
-                  <div class="row__sub">${event.summary ?? event.preview ?? event.kind}</div>
-                </div>
-              </div>
-            `,
-          )}
-        </div>
-      </div>
-    `;
+    return html`<neon-run-detail
+      .runId=${card.runId ?? ""}
+      .heading=${card.title}
+      @detail-close=${() => {
+        this.detailCard = null;
+      }}
+    ></neon-run-detail>`;
   }
 
   protected renderData(data: IWorkboardCardsSnapshot): TemplateResult {
@@ -315,9 +157,9 @@ export class NeonWorkboard extends NeonView<IWorkboardCardsSnapshot> {
                 </div>
                 <div class="card__body">
                   ${cards.length === 0
-                    ? html`<div class="empty">${t("state.empty")}</div>`
+                    ? html`<div class="empty empty--inline">${t("state.empty")}</div>`
                     : html`<div class="rowlist">
-                        ${visible.map((card) => renderCardRow(card, () => this.openDetail(card)))}
+                        ${visible.map((card) => renderCardRow(card, () => { this.detailCard = card; }))}
                       </div>
                       ${hidden > 0
                         ? html`<button class="btn btn--sm" style="margin-top:10px" @click=${() => this.showMore(status)}>
@@ -333,25 +175,6 @@ export class NeonWorkboard extends NeonView<IWorkboardCardsSnapshot> {
       ${this.renderDetailOverlay()}
     `;
   }
-}
-
-// Pure, unit-tested: which run a replay snapshot's runs[] array resolves to
-// (noUncheckedIndexedAccess makes runs[0] possibly-undefined — an empty array
-// means the run fell out of the store, not an error).
-export function pickReplayRun(snapshot: IReplaySnapshot): IReplayRun | undefined {
-  return snapshot.runs[0];
-}
-
-// Pure, unit-tested: the compact meta line under the status badge.
-export function formatDetailMeta(run: IReplayRun): string {
-  return [
-    run.channel,
-    run.agentId ? `@${run.agentId}` : undefined,
-    run.userDisplayName,
-    typeof run.durationMs === "number" ? `${Math.round(run.durationMs / 1000)}s` : undefined,
-  ]
-    .filter((value): value is string => Boolean(value))
-    .join(" · ");
 }
 
 function computeTotals(cards: readonly IWorkboardCard[]): IWorkboardTotals {

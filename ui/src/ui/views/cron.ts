@@ -1,7 +1,7 @@
 import { html, type TemplateResult } from "lit";
 import { t } from "../../i18n/index.js";
 import { renderBadge, statusBadge } from "../badges.js";
-import { fmtInt } from "../format.js";
+import { fmtInt, relativeTime, relativeUntil } from "../format.js";
 import { neonClient } from "../gateway.js";
 import { icon } from "../icons.js";
 import { NeonView } from "../components/state-pane.js";
@@ -127,16 +127,16 @@ export class NeonCron extends NeonView<CronViewData> {
 
         ${this.renderCronDaemon(cron)}
 
-        <div class="card" style="margin-top:14px">
+        <div class="card">
           <div class="card__head"><span class="card__title">Scheduled jobs</span></div>
           <div class="tablewrap">
             <table class="dtable">
               <thead>
-                <tr><th style="width:30%">Job</th><th>Schedule</th><th>Policy</th><th>Last emitted</th><th>State</th></tr>
+                <tr><th style="width:30%">Job</th><th>Schedule</th><th>Policy</th><th>Next run</th><th>Last emitted</th><th>State</th></tr>
               </thead>
               <tbody>
                 ${jobs.length === 0
-                  ? html`<tr><td colspan="5"><div class="empty">${t("state.empty")}</div></td></tr>`
+                  ? html`<tr><td colspan="6"><div class="empty">${t("state.empty")}</div></td></tr>`
                   : jobs.map((job) => {
                       const automationJob = automation.jobs.find((entry) => entry.id === job.id);
                       return html`
@@ -147,7 +147,8 @@ export class NeonCron extends NeonView<CronViewData> {
                           </td>
                           <td><span class="cellmuted">${job.schedule}</span></td>
                           <td><span class="cellmuted">${automationJob?.policy ?? "—"}</span></td>
-                          <td><span class="cellmuted">${job.lastEmittedWindow ?? "none"}</span></td>
+                          <td><span class="cellmuted">${relativeUntil(job.nextRunAt)}</span></td>
+                          <td><span class="cellmuted">${job.lastEmittedWindow ? relativeTime(job.lastEmittedWindow) : "none"}</span></td>
                           <td>${renderBadge(statusBadge(job.state))}</td>
                         </tr>
                       `;
@@ -157,7 +158,7 @@ export class NeonCron extends NeonView<CronViewData> {
           </div>
         </div>
 
-        <div class="card" style="margin-top:14px">
+        <div class="card">
           <div class="card__head"><span class="card__title">Hooks</span></div>
           <div class="card__body">
             ${automation.hooks.length === 0
@@ -179,7 +180,7 @@ export class NeonCron extends NeonView<CronViewData> {
         </div>
 
         ${automation.recovery && automation.recovery.length > 0
-          ? html`<div class="card" style="margin-top:14px">
+          ? html`<div class="card">
               <div class="card__head"><span class="card__title">Recovery</span></div>
               <div class="card__body">
                 ${automation.recovery.map((r) => html`<div class="feed__item"><div class="feed__ico feed__ico--warn">${icon("alertTriangle", 13)}</div><div class="feed__text">${r}</div></div>`)}
@@ -212,7 +213,7 @@ export class NeonCron extends NeonView<CronViewData> {
             <div style="min-width:0">
               <div class="row__key">${cronTickSummary(cron)}</div>
               <div class="row__sub">
-                lastTick ${cron.daemon?.lastTickAt ?? "none"} · nextTick ${cron.daemon?.nextTickAt ?? "none"}
+                lastTick ${relativeTime(cron.daemon?.lastTickAt)} · nextTick ${relativeUntil(cron.daemon?.nextTickAt)}
               </div>
               <div class="row__sub">cursor ${cronCursorLabel(cron)}</div>
               <div class="row__sub">gate ${cron.gate.envKey} · ${cron.gate.reason}</div>

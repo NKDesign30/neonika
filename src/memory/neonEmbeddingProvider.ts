@@ -21,6 +21,9 @@ export const NEON_OLLAMA_EMBEDDING_DIMENSIONS = 768;
 export const DEFAULT_NEON_OLLAMA_EMBEDDING_MODEL = "nomic-embed-text";
 export const DEFAULT_NEON_OLLAMA_BASE_URL = "http://localhost:11434";
 
+/** Characters sent to the embedder at most; see the note in `embed`. */
+export const MAX_EMBED_INPUT_CHARS = 4000;
+
 /**
  * Embedding is async because the canonical provider (Ollama) is an HTTP call.
  * The local feature-hash provider is pure CPU but exposes the same async shape
@@ -173,10 +176,24 @@ export function createNeonOllamaEmbeddingProvider(
   const timeoutMs = options.timeoutMs ?? 30_000;
 
   async function embed(text: string): Promise<Float32Array> {
+    // kiss: hard character cap instead of real token counting. Ollama runs
+    // nomic-embed-text with a 2048-token context and answers HTTP 400
+    // ("the input length exceeds the context length") for anything longer —
+    // which is why 14 meeting notes sat in the DB with no vector at all,
+    // invisible to semantic recall and to relation discovery. German prose with
+    // names and timestamps runs well under three characters per token, so 4000
+    // characters stays inside the window with room to spare (verified against
+    // the longest entry in the live DB, 66k characters).
+    // Ceiling: a long note is embedded by its opening only. That is the right
+    // trade for these entries — meeting notes lead with title, date, TLDR and
+    // highlights — but it is a truncation, not a summary. Upgrade path when it
+    // starts costing recall: chunk the text, embed each chunk, average the
+    // vectors (or keep the best-matching chunk per entry).
+    const input = text.length > MAX_EMBED_INPUT_CHARS ? text.slice(0, MAX_EMBED_INPUT_CHARS) : text;
     const response = await fetch(`${baseUrl}/api/embed`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model, input: text }),
+      body: JSON.stringify({ model, input }),
       signal: AbortSignal.timeout(timeoutMs)
     });
     if (!response.ok) {

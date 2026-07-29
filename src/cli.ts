@@ -4,7 +4,10 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
+import { text as readStreamText } from "node:stream/consumers";
 import { fileURLToPath } from "node:url";
+
+import { runNeonSummaryQualityCheck } from "./indexer/summaryQualityCli.js";
 
 import { ThreadAutoArchiveDuration, type ChatInputCommandInteraction, type Message } from "discord.js";
 import WebSocket, { type RawData as WsRawData } from "ws";
@@ -1291,6 +1294,11 @@ const commands: Record<string, ICommand> = {
     description: "Verify transcript proposals stay planned (no call, no write) by default.",
     run: runTranscriptProposalsSmoke
   },
+  "summary-quality-check": {
+    description:
+      "Judge a session summary read from stdin. Prints the verdict as JSON, exits 1 when rejected.",
+    run: runSummaryQualityCheck
+  },
   "transcript-persist": {
     description: "Plan transcript proposal persistence (dry-run, writes nothing by default).",
     run: runTranscriptPersistReport
@@ -1706,6 +1714,19 @@ async function loadNeonSetupEnvironment(configRoot?: string): Promise<void> {
     return;
   }
   applyNeonSetupEnvironment(config, resolveNeonSetupPaths(configRoot));
+}
+
+// Thin wrapper: the stdin read is the only IO, the verdict itself is decided in
+// summaryQualityCli.ts where it can be tested without a process.
+async function runSummaryQualityCheck(): Promise<string> {
+  const raw = await readStreamText(process.stdin);
+  const outcome = runNeonSummaryQualityCheck(raw, process.argv.slice(3));
+
+  if (outcome.exitCode !== 0) {
+    process.exitCode = outcome.exitCode;
+  }
+
+  return outcome.output;
 }
 
 async function runAppServerSmoke(): Promise<string> {
@@ -2413,6 +2434,8 @@ async function runMemoryMaintain(): Promise<string> {
     dbPath,
     backupDir: join(process.cwd(), "state", "memory-backups"),
     gate: resolveNeonMemoryDbWriteGate(process.env),
+    // Repairs entries the writer had to store FTS-only because Ollama was down.
+    embedder: createNeonOllamaEmbeddingProvider({ model: "nomic-embed-text" }),
     applyPrune: process.argv.includes("--prune-apply")
   });
 

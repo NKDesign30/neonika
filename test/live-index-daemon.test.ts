@@ -108,6 +108,54 @@ describe("Neon live-index daemon", () => {
     }
   });
 
+  it("survives a failing write and retries the entry on the next scan", async () => {
+    // Regression: an uncaught throw in the write loop propagated out of scanNow
+    // and killed the daemon, so every later scan stopped happening. The entries
+    // must instead stay unmarked and be picked up once writing works again.
+    const fixture = await createDaemonFixture();
+    const now = (): Date => new Date("2026-06-08T12:00:00.000Z");
+    const workingDb = join(fixture.projectRoot, "isolated-semantic-memory.db");
+    // A path under a directory that does not exist: opening it throws.
+    const unwritableDb = join(fixture.projectRoot, "missing-dir", "nested", "memory.db");
+
+    const scan = (dbPath: string): ReturnType<typeof scanNeonLiveIndexDaemon> =>
+      scanNeonLiveIndexDaemon({
+        projectRoot: fixture.projectRoot,
+        transcriptProjectsDir: fixture.transcriptProjectsDir,
+        codexSessionsDir: fixture.codexSessionsDir,
+        memoryDbPath: dbPath,
+        memoryGate: resolveNeonMemoryDbWriteGate({ NEON_MEMORY_WRITE_ENABLED: "ready" }),
+        embedder: createNeonLocalEmbeddingProvider(),
+        now,
+        reason: "smoke"
+      });
+
+    try {
+      await scan(workingDb); // first scan only registers the records
+      const failing = await scan(unwritableDb);
+
+      // It returned instead of throwing, and it says so out loud.
+      assert.ok(failing.memoryPromotion.failedRecords > 0, "expected the failures to be counted");
+      assert.equal(failing.memoryPromotion.writes.filter((write) => write.state === "written").length, 0);
+      assert.ok(
+        failing.diagnostics.some((entry) => entry.includes("failed=")),
+        "expected the failure to appear in the diagnostics"
+      );
+
+      // Nothing was lost: the same records are promotable again and now land.
+      const recovered = await scan(workingDb);
+      assert.equal(recovered.memoryPromotion.failedRecords, 0);
+      assert.ok(
+        recovered.memoryPromotion.writes.filter((write) => write.state === "written").length > 0,
+        "expected the previously failed entries to be written on the retry"
+      );
+      const hits = searchNeonMemoryDb("Codex", { dbPath: workingDb, category: "live-index", limit: 5 });
+      assert.ok(hits.length > 0);
+    } finally {
+      await rm(fixture.projectRoot, { force: true, recursive: true });
+    }
+  });
+
   it("keeps rejected records unpromoted in a mixed batch without churn", async () => {
     const fixture = await createDaemonFixture();
     await writeSlopTranscriptFixture(fixture.transcriptProjectsDir);

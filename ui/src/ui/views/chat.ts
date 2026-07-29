@@ -133,11 +133,16 @@ export class NeonChat extends NeonView<ChatSnapshot> {
             ${active.messages.map((m) => {
               const isUser = m.direction === "inbound";
               const who = isUser ? m.userDisplayName ?? "user" : m.agentId ?? "agent";
+              const text = (m.textPreview ?? "").trim();
+              const toolEvents = !isUser && m.toolEvents ? m.toolEvents : undefined;
+              // Tool-only turns keep their events but drop the hollow bubble;
+              // turns with neither text nor events render nothing at all.
+              if (text.length === 0 && (!toolEvents || toolEvents.length === 0)) return html``;
               return html`
                 <div class=${"msg " + (isUser ? "msg--user" : "msg--assistant")}>
                   <span class="msg__who">${who}</span>
-                  <div class="msg__bubble">${m.textPreview ?? ""}</div>
-                  ${!isUser && m.toolEvents ? renderChatToolEvents(m.toolEvents) : html``}
+                  ${text.length > 0 ? html`<div class="msg__bubble">${text}</div>` : html``}
+                  ${toolEvents ? renderChatToolEvents(toolEvents) : html``}
                 </div>
               `;
             })}

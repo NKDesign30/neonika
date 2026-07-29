@@ -1,4 +1,5 @@
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
+import { openNeonMemoryDatabase } from "./neonMemoryDbOpen.js";
 import { createHash } from "node:crypto";
 
 import { readReadyCutoverEnv } from "../core/cutover.js";
@@ -233,7 +234,7 @@ export async function writeNeonMemoryDbEntry(
     }
   }
 
-  const database = new DatabaseSync(options.dbPath);
+  const database = openNeonMemoryDatabase(options.dbPath);
   try {
     bootstrapNeonMemorySchema(database);
     database.exec("BEGIN IMMEDIATE");

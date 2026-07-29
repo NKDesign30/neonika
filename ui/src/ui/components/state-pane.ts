@@ -6,7 +6,21 @@ import { icon } from "../icons.js";
 // Shared loading / empty / error renderers used across every view so states
 // look consistent and are never silently blank.
 export function renderLoading(): TemplateResult {
-  return html`<div class="empty">${t("state.loading")}</div>`;
+  // Calm skeleton surfaces instead of a bare text line: the page keeps its
+  // shape (title row + card of rows) while data is on its way.
+  return html`
+    <div class="page" aria-busy="true" aria-label=${t("state.loading")}>
+      <div class="skeleton skeleton--text" style="height:26px;max-width:280px"></div>
+      <div class="card">
+        <div class="card__body">
+          <div class="skeleton skeleton--row"></div>
+          <div class="skeleton skeleton--row" style="opacity:0.8"></div>
+          <div class="skeleton skeleton--row" style="opacity:0.6"></div>
+          <div class="skeleton skeleton--row" style="opacity:0.4"></div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 export function renderEmpty(message?: string): TemplateResult {

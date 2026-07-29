@@ -10,6 +10,11 @@
 // - Template pseudo-tags like <titel> leak through as literal output
 // - Whole summaries arrive wrapped in ```code fences```
 // - Empty or format-less output must never be promoted
+// - Models copy the prompt's example bullets instead of filling them in
+//   ("Punkt 1 / Punkt 2 / Entscheidung 1") — added 2026-07-26, ported back from
+//   the Python indexer where it was the rule that actually caught live damage:
+//   because summaries dedupe by session_id, one skeleton entry blocks the real
+//   content permanently. Both paths now read this rule from here.
 
 const boilerplatePrefixes: readonly RegExp[] = [
   /^okay,?\s+hier\s+ist\s+(eine\s+)?(aktualisierte\s+)?zusammenfassung[^\n]*\n*/i,
@@ -23,6 +28,35 @@ const templatePlaceholderPattern = /<[a-zäöüß][\w\s\-_äöüß]{0,80}>/i;
 
 // Explicit "nothing happened" lines are a valid summary shape, not a failure.
 const noopTokens: readonly string[] = ["_keine substantiellen aktivitäten._", "_no activity._"];
+
+// Skeleton bullets copied from the prompt's format example rather than filled in.
+const hollowBulletPattern =
+  /^(punkt|entscheidung|learning|erkenntnis|detail)\s*\d*$|^name\/code\/zahl.*$|^(titel|rationale|alternativen?)$/i;
+
+const bulletMarkers = ["-", "*", "•"] as const;
+
+/**
+ * True when the summary is mostly the format's own example lines.
+ *
+ * One skeleton bullet is not a failure — a model may legitimately name a point
+ * "Detail 2". It only stops being a summary once a meaningful share of the
+ * bullets is skeleton, so the threshold is two, or every bullet there is.
+ * Prose without bullets is out of scope: this rule reads bullet shape, and
+ * judging free text would need a different signal than a regex.
+ */
+function isHollowSummary(text: string): boolean {
+  const bullets = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => bulletMarkers.some((marker) => line.startsWith(marker)))
+    .map((line) => line.slice(1).trim().replace(/[:.]+$/, ""));
+
+  if (bullets.length === 0) {
+    return false;
+  }
+  const hollow = bullets.filter((bullet) => hollowBulletPattern.test(bullet)).length;
+  return hollow >= 2 || hollow === bullets.length;
+}
 
 export interface INeonSummaryQualityResult {
   readonly passed: boolean;
@@ -90,6 +124,14 @@ export function evaluateNeonSummaryQuality(
       passed: false,
       cleaned,
       issues: [...issues, "contains template placeholder like <xyz>"]
+    };
+  }
+
+  if (isHollowSummary(cleaned)) {
+    return {
+      passed: false,
+      cleaned,
+      issues: [...issues, "hollow summary — bullets copied from the format example"]
     };
   }
 

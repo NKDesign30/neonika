@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
+import { redactText } from "../harness/redaction.js";
 import {
   collectNeonLiveIndexRecords,
   type ICollectNeonLiveIndexOptions,
@@ -64,6 +65,13 @@ export interface INeonLiveIndexMemoryPromotionSnapshot {
   readonly promotableRecords: number;
   readonly rejectedRecords: number;
   readonly writes: readonly INeonMemoryDbWriteResult[];
+  /**
+   * Entries whose write threw. They stay unmarked in the daemon state, so the
+   * next scan sees them as changed again and retries them.
+   */
+  readonly failedRecords: number;
+  /** Redacted reasons for the first few failures, for the diagnostic line. */
+  readonly failureReasons?: readonly string[];
   readonly safety: { readonly targetedRealMemoryDb: boolean };
 }
 
@@ -144,6 +152,7 @@ export function createNeonLiveIndexDaemon(
       ...(options.memoryDbPath ? { dbPath: options.memoryDbPath } : {}),
       changedRecords: 0,
       promotableRecords: 0,
+      failedRecords: 0,
       rejectedRecords: 0,
       writes: [],
       safety: { targetedRealMemoryDb: false }
@@ -412,6 +421,7 @@ async function promoteRecordsToMemory(input: {
     promotableRecords: input.recordsToPromote.length,
     rejectedRecords: input.rejectedRecords,
     writes: [],
+    failedRecords: 0,
     safety: { targetedRealMemoryDb: false }
   });
 
@@ -424,8 +434,16 @@ async function promoteRecordsToMemory(input: {
   }
 
   const writes: INeonMemoryDbWriteResult[] = [];
+  const failures: string[] = [];
   for (const record of input.recordsToPromote) {
-    writes.push(
+    // One bad entry must not take the batch — or the daemon — down with it. An
+    // uncaught throw here propagated all the way out of scanNow and killed the
+    // process, which stopped every later scan until someone restarted it. The
+    // synthetic blocked result keeps `writes` index-aligned with
+    // `recordsToPromote`, so applyMemoryPromotion leaves this record unmarked
+    // and the next scan retries it.
+    try {
+      writes.push(
       await writeNeonMemoryDbEntry({
         dbPath,
         gate,
@@ -444,8 +462,22 @@ async function promoteRecordsToMemory(input: {
           : {}),
         ...(input.options.embedder ? { embedder: input.options.embedder } : {}),
         ...(input.options.now ? { now: input.options.now } : {})
-      })
-    );
+        })
+      );
+    } catch (error) {
+      failures.push(redactText(error instanceof Error ? error.message : String(error)));
+      writes.push({
+        state: "blocked",
+        inserted: false,
+        updated: false,
+        entryId: undefined,
+        contentHash: undefined,
+        embedded: false,
+        dbPath,
+        diagnostics: ["live-index write threw; entry left unmarked for the next scan"],
+        safety: { targetedRealMemoryDb: false }
+      });
+    }
   }
 
   const written = writes.filter((write) => write.state === "written").length;
@@ -456,6 +488,8 @@ async function promoteRecordsToMemory(input: {
     promotableRecords: input.recordsToPromote.length,
     rejectedRecords: input.rejectedRecords,
     writes,
+    failedRecords: failures.length,
+    ...(failures.length > 0 ? { failureReasons: failures.slice(0, 3) } : {}),
     safety: { targetedRealMemoryDb: writes.some((write) => write.safety.targetedRealMemoryDb) }
   };
 }
@@ -486,7 +520,12 @@ function applyMemoryPromotion(
 function renderMemoryPromotionDiagnostic(promotion: INeonLiveIndexMemoryPromotionSnapshot): string {
   const written = promotion.writes.filter((write) => write.state === "written").length;
   const blocked = promotion.writes.filter((write) => write.state === "blocked").length;
-  return `live-index memory promotion: ${promotion.state}, changed=${promotion.changedRecords}, promotable=${promotion.promotableRecords}, rejected=${promotion.rejectedRecords}, written=${written}, blocked=${blocked}, realDb=${promotion.safety.targetedRealMemoryDb}`;
+  // Failures are surfaced, never swallowed: a silent zero here would look like a
+  // quiet scan instead of entries that did not make it into memory.
+  const failed = promotion.failedRecords > 0
+    ? `, failed=${promotion.failedRecords} (${(promotion.failureReasons ?? []).join("; ")})`
+    : "";
+  return `live-index memory promotion: ${promotion.state}, changed=${promotion.changedRecords}, promotable=${promotion.promotableRecords}, rejected=${promotion.rejectedRecords}, written=${written}, blocked=${blocked}${failed}, realDb=${promotion.safety.targetedRealMemoryDb}`;
 }
 
 function countChanged(state: INeonLiveIndexDaemonState): number {

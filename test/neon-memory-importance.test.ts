@@ -117,6 +117,41 @@ describe("neon memory importance recalc (gated)", () => {
     }
   });
 
+  it("freezes the decay when no recall was registered inside the window", () => {
+    // Der Vorfall vom 24.07.2026: der Recall lief fünf Tage still im
+    // FTS-Fallback, access_count blieb bei 0 — und der Decay lief weiter. Ohne
+    // Telemetrie ist "nicht gefunden" kein Signal, sondern ein Symptom.
+    const database = new DatabaseSync(dbPath);
+    const stale = new Date(base - 72 * 3_600_000).toISOString();
+    database.prepare("UPDATE memory_entries SET last_accessed_at = ?").run(stale);
+    const before = (database
+      .prepare("SELECT utility_score FROM memory_entries WHERE source_file='old.md'")
+      .get() as { utility_score: number }).utility_score;
+    database.close();
+
+    const result = recalcNeonMemoryImportance({ dbPath, gate: armedGate, now });
+    assert.equal(result.state, "frozen");
+    assert.equal(result.updated, 0);
+    assert.ok(
+      result.diagnostics.some((line) => line.includes("decay frozen")),
+      "expected the freeze to be reported"
+    );
+
+    const after = new DatabaseSync(dbPath, { readOnly: true });
+    const unchanged = (after
+      .prepare("SELECT utility_score FROM memory_entries WHERE source_file='old.md'")
+      .get() as { utility_score: number }).utility_score;
+    after.close();
+    assert.equal(unchanged, before, "nothing may fade while the search is suspect");
+  });
+
+  it("still recalculates while recall telemetry is fresh", () => {
+    // Gegenprobe: der Schutz darf den Normalbetrieb nicht blockieren.
+    const result = recalcNeonMemoryImportance({ dbPath, gate: armedGate, now });
+    assert.equal(result.state, "recalculated");
+    assert.ok(result.updated > 0);
+  });
+
   it("is idempotent: a second recalc yields the same utility_score", () => {
     recalcNeonMemoryImportance({ dbPath, gate: armedGate, now });
     const first = new DatabaseSync(dbPath, { readOnly: true });

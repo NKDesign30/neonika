@@ -1,6 +1,6 @@
 import { html, type TemplateResult } from "lit";
 import { t } from "../../i18n/index.js";
-import { fmtInt, shortTime } from "../format.js";
+import { collapseConsecutive, fmtInt, shortTime } from "../format.js";
 import { neonClient } from "../gateway.js";
 import { icon } from "../icons.js";
 import { NeonView } from "../components/state-pane.js";
@@ -34,7 +34,11 @@ export class NeonLogs extends NeonView<ActivitySnapshot> {
   }
 
   protected renderData(data: ActivitySnapshot): TemplateResult {
-    const lines = data.entries.slice(0, 120);
+    // Same flood-collapse as the activity feed: adjacent identical events
+    // become one line with a repeat count, then the window applies.
+    const lines = collapseConsecutive(data.entries, (e) =>
+      [e.runId, e.kind, e.status ?? "", e.title ?? "", e.summary ?? "", e.channel ?? "", e.agentId ?? ""].join(" "),
+    ).slice(0, 120);
     return html`
       <div class="page">
         <div class="page__head">
@@ -49,14 +53,17 @@ export class NeonLogs extends NeonView<ActivitySnapshot> {
           <div class="logwrap scrolly">
             ${lines.length === 0
               ? html`<div class="empty">${t("state.empty")}</div>`
-              : lines.map((e) => {
+              : lines.map(({ item: e, count }) => {
                   const lvl = level(e.status);
                   return html`
                     <div class="logline">
                       <span class="logline__t">${shortTime(e.startedAt)}</span>
                       <span class=${"logline__lvl logline__lvl--" + lvl}>${lvl}</span>
                       <span class="logline__src">${e.agentId ?? e.channel ?? e.kind}</span>
-                      <span class="logline__msg">${e.title ?? e.kind}${e.summary ? ` — ${e.summary}` : ""}</span>
+                      <span class="logline__msg">
+                        ${e.title ?? e.kind}${e.summary ? ` — ${e.summary}` : ""}
+                        ${count > 1 ? html`<span class="mult">× ${fmtInt(count)}</span>` : ""}
+                      </span>
                     </div>
                   `;
                 })}

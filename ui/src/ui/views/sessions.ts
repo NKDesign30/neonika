@@ -1,4 +1,4 @@
-import { html, type TemplateResult } from "lit";
+import { html, nothing, type TemplateResult } from "lit";
 import { state } from "lit/decorators.js";
 import { t } from "../../i18n/index.js";
 import { renderBadge, statusBadge } from "../badges.js";
@@ -6,6 +6,7 @@ import { fmtInt, relativeTime } from "../format.js";
 import { neonClient } from "../gateway.js";
 import { icon } from "../icons.js";
 import { NeonView } from "../components/state-pane.js";
+import "../components/run-detail.js";
 
 interface SessionRow {
   readonly key: string;
@@ -17,6 +18,7 @@ interface SessionRow {
   readonly runCount?: number;
   readonly messageCount?: number;
   readonly failedRuns?: number;
+  readonly latestRunId?: string;
   readonly latestRunStatus?: string;
   readonly latestPreview?: string;
 }
@@ -42,6 +44,7 @@ function sessionStatus(s: SessionRow): "active" | "idle" | "error" {
 export class NeonSessions extends NeonView<SessionsSnapshot> {
   @state() private filter: Filter = "all";
   @state() private query = "";
+  @state() private detailSession: SessionRow | null = null;
 
   protected load(signal: AbortSignal): Promise<SessionsSnapshot> {
     return neonClient.sessions<SessionsSnapshot>({ signal });
@@ -52,6 +55,20 @@ export class NeonSessions extends NeonView<SessionsSnapshot> {
   }
   private onSearch(e: Event): void {
     this.query = (e.target as HTMLInputElement).value.toLowerCase();
+  }
+
+  // Master-detail (Mobbin P5): a row click opens the replay of the session's
+  // latest run in the shared <neon-run-detail> overlay.
+  private renderDetailOverlay(): TemplateResult | typeof nothing {
+    const session = this.detailSession;
+    if (!session) return nothing;
+    return html`<neon-run-detail
+      .runId=${session.latestRunId ?? ""}
+      .heading=${session.title ?? session.key}
+      @detail-close=${() => {
+        this.detailSession = null;
+      }}
+    ></neon-run-detail>`;
   }
 
   protected renderData(data: SessionsSnapshot): TemplateResult {
@@ -111,7 +128,7 @@ export class NeonSessions extends NeonView<SessionsSnapshot> {
                   : rows.map((s) => {
                       const st = sessionStatus(s);
                       return html`
-                        <tr>
+                        <tr @click=${() => { this.detailSession = s; }}>
                           <td>
                             <span class="cellkey">${s.key}</span>
                             <div class="cellmuted">${s.channel ?? "—"}${s.mode ? ` · ${s.mode}` : ""}</div>
@@ -129,6 +146,7 @@ export class NeonSessions extends NeonView<SessionsSnapshot> {
           </div>
         </div>
       </div>
+      ${this.renderDetailOverlay()}
     `;
   }
 }

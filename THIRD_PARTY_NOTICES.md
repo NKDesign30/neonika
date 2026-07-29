@@ -20,9 +20,30 @@ repository's MIT license.
 | --- | --- |
 | `ui/src/ui/views/sites.ts` | Sites reach and analytics view |
 | `ui/src/ui/views/workboard.ts` | Workboard pagination and replay detail |
-| `ui/src/ui/views/workboard.test.ts` | Workboard replay-detail tests |
+| `ui/src/ui/components/run-detail.ts` | Shared terminal-run detail overlay |
+| `ui/src/ui/components/run-detail.test.ts` | Run-detail tests |
 | `ui/src/styles/app.css` | Workboard detail overlay styles |
 | `ui/src/styles/views.css` | Sites view styles |
+
+## NK Design Neon Runtime
+
+The Memory and live-indexer hardening below was adapted from NK Design's
+first-party Neon runtime for Neonika. Copyright (c) NK Design; included with
+owner permission under this repository's MIT license.
+
+| Neonika file | Adapted surface |
+| --- | --- |
+| `src/indexer/memoryIndexActivity.ts` | Redacted live-indexer activity snapshots |
+| `src/indexer/summaryQualityCli.ts` | Callable summary-quality entry point |
+| `src/memory/memoryMaintenanceGate.ts` | Shared maintenance safety gate |
+| `src/memory/neonMemoryDbOpen.ts` | SQLite open policy |
+| `src/memory/neonMemoryEmbeddingBackfill.ts` | Gated embedding backfill |
+| `src/memory/neonMemoryRecallTelemetry.ts` | Recall-gap telemetry |
+| `test/memory-index-activity.test.ts` | Memory activity coverage |
+| `test/memory-maintenance-gate.test.ts` | Maintenance gate coverage |
+| `test/neon-memory-db-open.test.ts` | SQLite policy coverage |
+| `test/neon-memory-embedding-backfill.test.ts` | Backfill coverage |
+| `test/summary-quality-cli.test.ts` | Summary CLI coverage |
 
 ## OpenClaw
 
@@ -130,5 +151,5 @@ Two OFL conditions bind anyone redistributing this repository:
 - DM Serif Display carries the Reserved Font Name **Source**. A modified version
   of that font may not be distributed under a name containing it.
 
-Space Grotesk is additionally loaded from Google Fonts at runtime; the committed
-variable master is the offline fallback.
+Space Grotesk is loaded from the committed variable master; the UI does not
+depend on a runtime font CDN.
