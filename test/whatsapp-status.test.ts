@@ -26,7 +26,7 @@ describe("Neonika WhatsApp status", () => {
       assert.equal(pending.outbound, "suppressed");
 
       const authPath = resolveNeonSetupPaths(configRoot).whatsappAuthPath;
-      await writeFile(join(authPath, "creds.json"), '{"registered":true}\n', {
+      await writeFile(join(authPath, "creds.json"), '{"registered":false,"me":{"id":"15551234567:9@s.whatsapp.net"}}\n', {
         encoding: "utf8",
         mode: 0o600
       });

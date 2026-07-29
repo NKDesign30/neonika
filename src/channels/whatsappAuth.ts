@@ -1,3 +1,4 @@
+import type { Stats } from "node:fs";
 import { lstat, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -24,6 +25,12 @@ export interface INeonWhatsAppAuthEvidence {
  * Reads linked-device evidence without returning auth contents or filesystem
  * paths. A marker alone is never enough: a regular, non-empty Baileys
  * `creds.json` and private permissions must exist beside it.
+ *
+ * The account identity in `creds.me.id` is the linked-device proof. Baileys
+ * only fills it from the server's `pair-success` stanza, so it cannot exist
+ * without a completed handshake. `creds.registered` is not a substitute: the
+ * QR path never sets it, and the pairing-code path sets it locally before the
+ * server has answered.
  */
 export async function inspectNeonWhatsAppAuthState(
   authPath: string
@@ -66,11 +73,7 @@ export async function inspectNeonWhatsAppAuthState(
   if (marker.state === "invalid" || !isValidSessionMarker(marker.value)) {
     return invalidEvidence("invalid-session-marker", markerPresent, credentialsPresent);
   }
-  if (
-    credentials.state === "invalid" ||
-    !isRecord(credentials.value) ||
-    credentials.value["registered"] !== true
-  ) {
+  if (credentials.state === "invalid" || !hasLinkedAccountIdentity(credentials.value)) {
     return invalidEvidence("invalid-credentials", markerPresent, credentialsPresent);
   }
 
@@ -97,13 +100,30 @@ export async function assertNeonWhatsAppCredentialsPersisted(authPath: string): 
     throw new Error(`WhatsApp credentials are not private (${treeState})`);
   }
   const credentials = await readPrivateJsonFile(join(authPath, "creds.json"));
-  if (
-    credentials.state !== "ready" ||
-    !isRecord(credentials.value) ||
-    credentials.value["registered"] !== true
-  ) {
+  if (credentials.state !== "ready" || !hasLinkedAccountIdentity(credentials.value)) {
     throw new Error("WhatsApp credentials were not persisted");
   }
+}
+
+/**
+ * Accepts credentials that carry a server-issued account identity. The JID must
+ * name both a user and a domain; anything shorter is a partially written or
+ * hand-crafted file rather than a completed pairing.
+ */
+function hasLinkedAccountIdentity(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const me = value["me"];
+  if (!isRecord(me)) {
+    return false;
+  }
+  const id = me["id"];
+  if (typeof id !== "string") {
+    return false;
+  }
+  const separator = id.indexOf("@");
+  return separator > 0 && separator < id.length - 1;
 }
 
 type TPrivateJsonRead =
@@ -141,10 +161,24 @@ async function inspectPrivateAuthTree(
   if (depth > 5) {
     return "unsafe-filesystem-state";
   }
-  const entries = await readdir(path);
+  // Baileys rotates pre-key files while this walk runs. An entry that vanished
+  // between listing and inspection cannot expose anything, so it is skipped
+  // instead of being reported as an unsafe tree.
+  let entries: readonly string[];
+  try {
+    entries = await readdir(path);
+  } catch (error) {
+    if (isNodeErrorWithCode(error, "ENOENT")) {
+      return "safe";
+    }
+    throw error;
+  }
   for (const entry of entries) {
     const childPath = join(path, entry);
-    const stats = await lstat(childPath);
+    const stats = await lstatIfPresent(childPath);
+    if (stats === undefined) {
+      continue;
+    }
     if (stats.isSymbolicLink()) {
       return "unsafe-filesystem-state";
     }
@@ -233,6 +267,17 @@ function invalidEvidence(
   credentialsPresent: boolean
 ): INeonWhatsAppAuthEvidence {
   return { state: "invalid", reason, sessionMarkerPresent, credentialsPresent };
+}
+
+async function lstatIfPresent(path: string): Promise<Stats | undefined> {
+  try {
+    return await lstat(path);
+  } catch (error) {
+    if (isNodeErrorWithCode(error, "ENOENT")) {
+      return undefined;
+    }
+    throw error;
+  }
 }
 
 function permissionBits(mode: number): number {

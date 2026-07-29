@@ -115,7 +115,7 @@ describe("Neon channel registry", () => {
         })}\n`,
         { encoding: "utf8", mode: 0o600 }
       );
-      await writeFile(join(authPath, "creds.json"), '{"registered":true}\n', {
+      await writeFile(join(authPath, "creds.json"), '{"registered":false,"me":{"id":"15551234567:9@s.whatsapp.net"}}\n', {
         encoding: "utf8",
         mode: 0o600
       });

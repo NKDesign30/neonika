@@ -82,7 +82,7 @@ export async function startNeonWhatsAppShadowTap(
     }));
   const runtime = await (options.loadRuntime ?? loadNeonWhatsAppRuntime)();
   const auth = await runtime.useMultiFileAuthState(paths.whatsappAuthPath);
-  const { version } = await runtime.fetchLatestBaileysVersion();
+  const { version } = await runtime.fetchProtocolVersion();
   const tapLock = await acquireNeonWhatsAppTapLock(paths.whatsappTapLockPath, {
     ...(options.now ? { now: options.now } : {})
   });
