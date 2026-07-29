@@ -17,6 +17,7 @@ export interface INeonWhatsAppLoginResult {
   readonly transportRestarts: number;
   readonly sessionMarkerWritten: true;
   readonly secretsPrinted: false;
+  readonly protocolVersionCurrent: boolean;
 }
 
 export interface IRunNeonWhatsAppLoginOptions {
@@ -33,8 +34,19 @@ export interface INeonBaileysRuntime {
     readonly state: unknown;
     readonly saveCreds: () => Promise<void>;
   }>;
-  fetchLatestBaileysVersion(): Promise<{ readonly version: readonly number[] }>;
+  fetchProtocolVersion(): Promise<INeonWhatsAppProtocolVersion>;
   createSocket(options: Readonly<Record<string, unknown>>): INeonWhatsAppSocket;
+}
+
+export interface INeonWhatsAppProtocolVersion {
+  readonly version: readonly number[];
+  /**
+   * False when the resolver could not reach WhatsApp and fell back to the
+   * version bundled with the installed Baileys release. A stale protocol
+   * version is refused by current servers, so this must stay visible instead of
+   * failing later as an unexplained disconnect.
+   */
+  readonly isCurrent: boolean;
 }
 
 export interface INeonWhatsAppSocket {
@@ -68,7 +80,12 @@ export async function runNeonWhatsAppLogin(
   try {
     const runtime = await (options.loadRuntime ?? loadNeonWhatsAppRuntime)();
     const auth = await runtime.useMultiFileAuthState(paths.whatsappAuthPath);
-    const { version } = await runtime.fetchLatestBaileysVersion();
+    const { version, isCurrent } = await runtime.fetchProtocolVersion();
+    if (!isCurrent) {
+      process.stderr.write(
+        "WhatsApp protocol version could not be confirmed against WhatsApp Web; the server may refuse this login.\n"
+      );
+    }
     let qrShown = false;
     let transportRestarts = 0;
     let activeSocket: INeonWhatsAppSocket | undefined;
@@ -89,12 +106,13 @@ export async function runNeonWhatsAppLogin(
         finish(() => rejectLogin(new Error("WhatsApp linked-device login timed out")));
       }, timeoutMs);
 
+      // Only the write is serialised here. Hardening walks the whole auth tree
+      // and Baileys creates and unlinks pre-key files throughout pairing, so
+      // doing it per credential event races that churn. It runs once the burst
+      // has been flushed, just before the state is validated.
       const queueCredentialSave = (): void => {
         credentialSaveQueue = credentialSaveQueue
-          .then(async () => {
-            await auth.saveCreds();
-            await hardenNeonWhatsAppAuthDirectory(paths.whatsappAuthPath);
-          })
+          .then(() => auth.saveCreds())
           .catch(() => {
             credentialSaveFailed = true;
             finish(() => rejectLogin(new Error("WhatsApp credentials could not be persisted")));
@@ -136,15 +154,22 @@ export async function runNeonWhatsAppLogin(
           await (options.showQr ?? showNeonWhatsAppQr)(qr);
         }
         if (value["connection"] === "open") {
-          await credentialSaveQueue;
-          if (credentialSaveFailed) {
-            throw new Error("WhatsApp credentials could not be persisted");
-          }
-          await hardenNeonWhatsAppAuthDirectory(paths.whatsappAuthPath);
-          await assertNeonWhatsAppCredentialsPersisted(paths.whatsappAuthPath);
-          await writeLinkedSessionMarker(paths.whatsappAuthPath, options.now?.() ?? new Date());
-          await hardenNeonWhatsAppAuthDirectory(paths.whatsappAuthPath);
-          await assertNeonWhatsAppAuthLinked(paths.whatsappAuthPath);
+          // `open` is not the last credential event: Baileys emits a further
+          // `creds.update` right after it. Appending the verification to the
+          // same queue the writes use keeps that late save from rewriting
+          // creds.json underneath the check, without guessing at a delay.
+          const verification = credentialSaveQueue.then(async () => {
+            if (credentialSaveFailed) {
+              throw new Error("WhatsApp credentials could not be persisted");
+            }
+            await hardenNeonWhatsAppAuthDirectory(paths.whatsappAuthPath);
+            await assertNeonWhatsAppCredentialsPersisted(paths.whatsappAuthPath);
+            await writeLinkedSessionMarker(paths.whatsappAuthPath, options.now?.() ?? new Date());
+            await hardenNeonWhatsAppAuthDirectory(paths.whatsappAuthPath);
+            await assertNeonWhatsAppAuthLinked(paths.whatsappAuthPath);
+          });
+          credentialSaveQueue = verification.catch(() => undefined);
+          await verification;
           finish(() =>
             resolveLogin({
               state: "linked",
@@ -152,7 +177,8 @@ export async function runNeonWhatsAppLogin(
               qrShown,
               transportRestarts,
               sessionMarkerWritten: true,
-              secretsPrinted: false
+              secretsPrinted: false,
+              protocolVersionCurrent: isCurrent
             })
           );
           return;
@@ -199,6 +225,7 @@ export function renderNeonWhatsAppLoginReport(result: INeonWhatsAppLoginResult):
     `QR shown: ${result.qrShown ? "yes" : "not required (existing session)"}`,
     `Controlled transport restarts: ${result.transportRestarts}`,
     `Verified session marker: ${result.sessionMarkerWritten ? "written" : "missing"}`,
+    `Protocol version: ${result.protocolVersionCurrent ? "confirmed against WhatsApp Web" : "unconfirmed (bundled fallback)"}`,
     `Secrets printed: ${result.secretsPrinted ? "yes" : "no"}`,
     "Outbound agent messages: suppressed"
   ].join("\n");
@@ -216,11 +243,18 @@ export async function loadNeonWhatsAppRuntime(): Promise<INeonBaileysRuntime> {
     throw new Error("WhatsApp runtime dependency has an unsupported shape");
   }
   const useMultiFileAuthState = loaded["useMultiFileAuthState"];
-  const fetchLatestBaileysVersion = loaded["fetchLatestBaileysVersion"];
+  // `fetchLatestBaileysVersion` reads the version pinned in the Baileys
+  // repository, which trails the live WhatsApp Web protocol and gets refused by
+  // current servers. `fetchLatestWaWebVersion` reads the revision WhatsApp Web
+  // itself ships, so it is the one to use whenever the installed release has it.
+  const fetchWaWebVersion = loaded["fetchLatestWaWebVersion"];
+  const fetchPinnedVersion = loaded["fetchLatestBaileysVersion"];
+  const resolveVersion =
+    typeof fetchWaWebVersion === "function" ? fetchWaWebVersion : fetchPinnedVersion;
   const createSocket = loaded["default"] ?? loaded["makeWASocket"];
   if (
     typeof useMultiFileAuthState !== "function" ||
-    typeof fetchLatestBaileysVersion !== "function" ||
+    typeof resolveVersion !== "function" ||
     typeof createSocket !== "function"
   ) {
     throw new Error("WhatsApp runtime dependency has an unsupported API");
@@ -239,8 +273,8 @@ export async function loadNeonWhatsAppRuntime(): Promise<INeonBaileysRuntime> {
         }
       };
     },
-    fetchLatestBaileysVersion: async () => {
-      const result = (await Reflect.apply(fetchLatestBaileysVersion, loaded, [])) as unknown;
+    fetchProtocolVersion: async () => {
+      const result = (await Reflect.apply(resolveVersion, loaded, [])) as unknown;
       if (!isRecord(result) || !Array.isArray(result["version"])) {
         throw new Error("WhatsApp runtime returned an invalid protocol version");
       }
@@ -248,7 +282,9 @@ export async function loadNeonWhatsAppRuntime(): Promise<INeonBaileysRuntime> {
       if (version.length < 3) {
         throw new Error("WhatsApp runtime returned an incomplete protocol version");
       }
-      return { version };
+      // Baileys reports a failed lookup by returning its bundled version with
+      // `isLatest: false` instead of throwing, so the flag is the only signal.
+      return { version, isCurrent: result["isLatest"] === true };
     },
     createSocket: (socketOptions) => {
       const socket = Reflect.apply(createSocket, loaded, [socketOptions]) as unknown;
@@ -341,14 +377,22 @@ async function hardenAuthEntry(path: string, depth: number): Promise<void> {
   if (depth > 5) {
     throw new Error("WhatsApp auth directory nesting exceeds the supported depth");
   }
-  const entry = await lstat(path);
+  // Baileys rotates pre-key files while this walk runs, so a child listed a
+  // moment ago can already be gone. A file that no longer exists cannot carry
+  // unsafe permissions, so skipping it is safe and every entry still present is
+  // still hardened. The root is different: its absence means the auth state is
+  // gone entirely, which must stay an error.
+  const entry = depth === 0 ? await lstat(path) : await ignoreMissingEntry(() => lstat(path));
+  if (entry === undefined) {
+    return;
+  }
   if (entry.isSymbolicLink()) {
     throw new Error("WhatsApp auth state may not contain symbolic links");
   }
   if (entry.isDirectory()) {
-    await chmod(path, 0o700);
-    const children = await readdir(path);
-    for (const child of children) {
+    await ignoreMissingEntry(() => chmod(path, 0o700));
+    const children = await ignoreMissingEntry(() => readdir(path));
+    for (const child of children ?? []) {
       await hardenAuthEntry(join(path, child), depth + 1);
     }
     return;
@@ -356,7 +400,27 @@ async function hardenAuthEntry(path: string, depth: number): Promise<void> {
   if (!entry.isFile()) {
     throw new Error("WhatsApp auth state contains an unsupported filesystem entry");
   }
-  await chmod(path, 0o600);
+  await ignoreMissingEntry(() => chmod(path, 0o600));
+}
+
+async function ignoreMissingEntry<T>(operation: () => Promise<T>): Promise<T | undefined> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (isMissingEntryError(error)) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+function isMissingEntryError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { readonly code?: unknown }).code === "ENOENT"
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
