@@ -44,7 +44,9 @@ describe("Neon summary quality gate", () => {
     assert.equal(missing.passed, false);
     assert.ok(missing.issues.some((issue) => issue.includes("missing header")));
 
-    const present = evaluateNeonSummaryQuality("## Session-Summary [demo]\n- Punkt", {
+    // Real content on purpose: a bare "- Punkt" would trip the hollow-summary
+    // rule and make this test pass or fail for the wrong reason.
+    const present = evaluateNeonSummaryQuality("## Session-Summary [demo]\n- Gate erweitert", {
       requiredHeader: "## Session-Summary"
     });
     assert.equal(present.passed, true);
@@ -54,6 +56,36 @@ describe("Neon summary quality gate", () => {
     const result = evaluateNeonSummaryQuality("_Keine substantiellen Aktivitäten._", {
       requiredHeader: "## Session-Summary"
     });
+    assert.equal(result.passed, true);
+  });
+
+  it("rejects a summary built from the format's own example bullets", () => {
+    // The live failure this rule was written for: summaries dedupe by session_id,
+    // so one skeleton entry blocks the real content until someone notices.
+    const result = evaluateNeonSummaryQuality("- Punkt 1\n- Punkt 2\n- Entscheidung 1");
+    assert.equal(result.passed, false);
+    assert.ok(result.issues.some((issue) => issue.includes("hollow summary")));
+  });
+
+  it("rejects a single skeleton bullet when it is the whole summary", () => {
+    const result = evaluateNeonSummaryQuality("- Detail 2");
+    assert.equal(result.passed, false);
+    assert.ok(result.issues.some((issue) => issue.includes("hollow summary")));
+  });
+
+  it("tolerates one skeleton bullet among real content", () => {
+    // A model may legitimately name a point "Punkt 1" next to actual findings;
+    // one skeleton line is noise, not a copied format.
+    const result = evaluateNeonSummaryQuality(
+      "- Punkt 1\n- Indexer-Gate nach TypeScript gezogen\n- Relations-Cap auf 20k angehoben"
+    );
+    assert.equal(result.passed, true);
+  });
+
+  it("leaves prose without bullets to the other checks", () => {
+    const result = evaluateNeonSummaryQuality(
+      "Die Session drehte sich um den Live-Indexer und endete mit grünen Tests."
+    );
     assert.equal(result.passed, true);
   });
 });

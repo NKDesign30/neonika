@@ -18,6 +18,12 @@ import {
   renderNeonPruneReport,
   type INeonPruneResult
 } from "./neonMemoryPrune.js";
+import {
+  backfillNeonMemoryEmbeddings,
+  renderNeonEmbeddingBackfillReport,
+  type INeonEmbeddingBackfillResult
+} from "./neonMemoryEmbeddingBackfill.js";
+import type { INeonEmbeddingProvider } from "./neonEmbeddingProvider.js";
 import type { INeonMemoryDbWriteGate } from "./neonMemoryDbWriter.js";
 
 /**
@@ -46,6 +52,11 @@ export interface INeonMemoryMaintenanceOptions {
   readonly gate: INeonMemoryDbWriteGate;
   /** Vector dimensions for relation discovery (default 768 / nomic-embed-text). */
   readonly embedderDimensions?: number;
+  /**
+   * When set, entries that never got a vector (writer fell back to FTS-only) are
+   * embedded before relation discovery, so they are linked in the same pass.
+   */
+  readonly embedder?: INeonEmbeddingProvider;
   /** Default false: prune reports its candidates but archives nothing. */
   readonly applyPrune?: boolean;
   readonly pruneMaxScore?: number;
@@ -57,6 +68,8 @@ export interface INeonMemoryMaintenanceOptions {
 export interface INeonMemoryMaintenanceResult {
   readonly backup: INeonMemoryBackupResult;
   readonly importance: INeonImportanceRecalcResult;
+  /** Absent when no embedder was supplied — the step is then skipped entirely. */
+  readonly embeddingBackfill?: INeonEmbeddingBackfillResult;
   readonly relations: INeonRelationDiscoveryResult;
   readonly prune: INeonPruneResult;
   readonly pruneApplied: boolean;
@@ -92,6 +105,20 @@ export async function runNeonMemoryMaintenance(
     ...(options.now ? { now: options.now } : {})
   });
 
+  // Before relations on purpose: an entry repaired here has a vector by the time
+  // discovery runs, so it gets its edges in this same pass instead of next time.
+  const embeddingBackfill = options.embedder
+    ? await backfillNeonMemoryEmbeddings({
+        dbPath: options.dbPath,
+        gate: mutationGate,
+        embedder: options.embedder,
+        ...(options.allowRealDb !== undefined ? { allowRealDb: options.allowRealDb } : {})
+      })
+    : undefined;
+  if (!options.embedder) {
+    diagnostics.push("embedding backfill skipped (no embedder supplied)");
+  }
+
   const relations = discoverNeonMemoryRelations({
     dbPath: options.dbPath,
     gate: mutationGate,
@@ -115,7 +142,15 @@ export async function runNeonMemoryMaintenance(
     diagnostics.push("prune ran plan-only (pass --prune-apply for a real archive pass)");
   }
 
-  return { backup, importance, relations, prune, pruneApplied, diagnostics };
+  return {
+    backup,
+    importance,
+    ...(embeddingBackfill ? { embeddingBackfill } : {}),
+    relations,
+    prune,
+    pruneApplied,
+    diagnostics
+  };
 }
 
 export function renderNeonMemoryMaintenanceReport(result: INeonMemoryMaintenanceResult): string {
@@ -123,6 +158,7 @@ export function renderNeonMemoryMaintenanceReport(result: INeonMemoryMaintenance
     "Neonika Memory Maintenance",
     renderNeonMemoryBackupReport(result.backup),
     renderNeonImportanceRecalcReport(result.importance),
+    ...(result.embeddingBackfill ? [renderNeonEmbeddingBackfillReport(result.embeddingBackfill)] : []),
     renderNeonRelationDiscoveryReport(result.relations),
     renderNeonPruneReport(result.prune),
     ...result.diagnostics.map((line) => `- ${line}`)

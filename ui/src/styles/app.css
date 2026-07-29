@@ -226,8 +226,11 @@ body {
 
 /* ---------- Content ---------- */
 .content { grid-area: content; min-height: 0; overflow-y: auto; }
-.page { padding: 22px 24px 40px; max-width: 1320px; }
-.page__head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+/* The page is a vertical stack: every direct child (head, statgrid, cards,
+   cols) breathes through ONE gap instead of per-view margins — stacked cards
+   used to touch because nothing owned the space between them. */
+.page { padding: 24px 28px 48px; max-width: 1320px; display: flex; flex-direction: column; gap: 16px; }
+.page__head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 4px; }
 .page__title { font-family: var(--font-display); font-size: 30px; line-height: 1.05; letter-spacing: -0.02em; color: var(--text-primary); margin: 0; }
 .page__sub { font-size: 13px; color: var(--text-secondary); margin: 5px 0 0; }
 .eyebrow-m { font-family: var(--font-mono); font-size: 10.5px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-tertiary); }
@@ -258,7 +261,9 @@ body {
   padding: 13px 15px; border-bottom: 0.5px solid var(--stroke-hairline);
 }
 .card__title { font-size: 13.5px; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
-.card__body { padding: 6px 6px; }
+/* Row lists carry their own 9/11px row padding, so the body contributes a
+   modest frame; free-form content (tags, paths, prose) needs the full frame. */
+.card__body { padding: 10px 12px 12px; }
 
 /* ---------- Stat cards (the brand signature: mono eyebrow → serif display) ---------- */
 .statgrid { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 12px; margin-bottom: 18px; }
@@ -402,6 +407,42 @@ body {
 .divlabel { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
 .divlabel__line { flex: 1; height: 0.5px; background: var(--stroke-hairline); }
 .empty { padding: 28px; text-align: center; color: var(--text-tertiary); font-size: 13px; }
+/* Mobbin P6 (Amplitude/Attio/Laravel Cloud): an empty state explains itself
+   and offers exactly one action — never a bare "no data". Rows opt in via
+   markup; the bare .empty above stays valid for trivial cases. */
+.empty--rich { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 36px 28px; }
+/* Compact variant for empty slots inside dense grids (workboard columns):
+   the card head already names the group, so the body only needs one quiet line. */
+.empty--inline { padding: 6px 0 2px; text-align: left; font-size: 12px; }
+
+/* Repeat-count chip on collapsed identical events ("Assistant stream × 40"). */
+.mult {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+  background: var(--color-alpha-white-06);
+  vertical-align: 1px;
+}
+.empty__icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: var(--radius-md); background: var(--color-alpha-white-04); color: var(--text-tertiary); }
+.empty__title { font-size: 13.5px; font-weight: 500; color: var(--text-secondary); }
+.empty__hint { font-size: 12px; color: var(--text-tertiary); max-width: 360px; line-height: 1.5; }
+
+/* Skeleton loading — calm placeholder surfaces with the real content's radii.
+   One gentle opacity breath, no shimmer loop; disabled entirely under
+   prefers-reduced-motion. */
+.skeleton { border-radius: var(--radius-sm); background: var(--color-alpha-white-06); animation: skeleton-breathe 1.6s var(--easing-in-out) infinite; }
+.skeleton--row { height: 38px; margin: 6px 0; }
+.skeleton--stat { height: 92px; border-radius: var(--radius-lg); }
+.skeleton--text { height: 12px; max-width: 220px; }
+@keyframes skeleton-breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}
 .spark { display: inline-flex; align-items: flex-end; gap: 2px; height: 18px; }
 .spark span { width: 3px; border-radius: 1px; background: var(--brand-muted); }
 

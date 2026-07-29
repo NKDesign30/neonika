@@ -27,21 +27,26 @@ const disabledGate: INeonMemoryDbWriteGate = {
 describe("neon memory prune (gated, archive-not-delete)", () => {
   let root = "";
   let dbPath = "";
+  // An die Wall-Clock verankert, damit der Recall-Zeitstempel nicht irgendwann
+  // aus dem Telemetrie-Fenster fällt und den Test zur Zeitbombe macht.
+  const base = Date.now();
 
   function seed(): void {
     const database = new DatabaseSync(dbPath);
     try {
       bootstrapNeonMemorySchema(database);
       const insert = database.prepare(
-        `INSERT INTO memory_entries (source_file, content, agent, category, content_hash, importance_score, access_count)
-          VALUES (?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO memory_entries (source_file, content, agent, category, content_hash, importance_score, access_count, last_accessed_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       );
+      const recalledAt = new Date(base).toISOString();
       // noise: low score, never accessed -> prune candidate
-      insert.run("noise.md", "low value never recalled", "neo", "discoveries", "h-noise", 20, 0);
+      insert.run("noise.md", "low value never recalled", "neo", "discoveries", "h-noise", 20, 0, null);
       // valuable: high score -> keep
-      insert.run("gold.md", "high value note", "neo", "discoveries", "h-gold", 80, 0);
-      // low score but recalled -> keep (access_count > 0)
-      insert.run("used.md", "low score but recalled often", "neo", "discoveries", "h-used", 20, 5);
+      insert.run("gold.md", "high value note", "neo", "discoveries", "h-gold", 80, 0, null);
+      // low score but recalled -> keep (access_count > 0). Trägt den Zeitstempel,
+      // der belegt, dass die Suche lief — ohne den ist "nie abgerufen" kein Signal.
+      insert.run("used.md", "low score but recalled often", "neo", "discoveries", "h-used", 20, 5, recalledAt);
     } finally {
       database.close();
     }
@@ -137,6 +142,29 @@ describe("neon memory prune (gated, archive-not-delete)", () => {
     const alias = real.replace("/semantic", "/./semantic");
     assert.notEqual(alias, real); // differs as a string
     assert.equal(targetsRealNeonDb(alias), true); // but the guard sees through it
+  });
+
+  it("archives nothing while the recall telemetry is stale", () => {
+    // Der gefährlichere Zwilling des eingefrorenen Decays: `access_count = 0` ist
+    // das Prune-Kriterium, und eine tote Suche erzeugt genau diesen Wert. Der
+    // Decay schreibt nur eine Zahl, der Prune bewegt Zeilen.
+    const database = new DatabaseSync(dbPath);
+    database.prepare("UPDATE memory_entries SET last_accessed_at = ?").run(
+      new Date(base - 72 * 3_600_000).toISOString()
+    );
+    database.close();
+
+    const result = pruneNeonMemory({ dbPath, gate: armedGate, maxScore: 35, now: () => new Date(base) });
+    assert.equal(result.state, "frozen");
+    assert.equal(result.archived, 0);
+    assert.ok(result.candidates >= 1, "the plan stays visible - only the archiving stops");
+
+    const after = new DatabaseSync(dbPath, { readOnly: true });
+    const survivor = (after
+      .prepare("SELECT COUNT(*) AS n FROM memory_entries WHERE source_file = 'noise.md'")
+      .get() as { n: number }).n;
+    after.close();
+    assert.equal(survivor, 1, "nothing may be archived while the search is suspect");
   });
 
   it("keeps FTS consistent after the archive move (pruned row not searchable)", () => {

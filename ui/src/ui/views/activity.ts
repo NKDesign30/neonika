@@ -1,6 +1,6 @@
 import { html, type TemplateResult } from "lit";
 import { t } from "../../i18n/index.js";
-import { fmtInt, relativeTime } from "../format.js";
+import { collapseConsecutive, fmtInt, relativeTime } from "../format.js";
 import { neonClient } from "../gateway.js";
 import { icon, type IconName } from "../icons.js";
 import { NeonView } from "../components/state-pane.js";
@@ -50,7 +50,11 @@ export class NeonActivity extends NeonView<ActivitySnapshot> {
   }
 
   protected renderData(data: ActivitySnapshot): TemplateResult {
-    const entries = data.entries.slice(0, 80);
+    // Streams emit floods of identical frames — collapse adjacent repeats
+    // first, then window, so 40 "Assistant stream" lines cost one slot.
+    const groups = collapseConsecutive(data.entries, (e) =>
+      [e.runId, e.kind, e.status ?? "", e.title ?? "", e.summary ?? "", e.channel ?? "", e.agentId ?? ""].join("\u0000"),
+    ).slice(0, 80);
     return html`
       <div class="page">
         <div class="page__head">
@@ -71,21 +75,22 @@ export class NeonActivity extends NeonView<ActivitySnapshot> {
             </span>
           </div>
           <div class="card__body">
-            ${entries.length === 0
+            ${groups.length === 0
               ? html`<div class="empty">${t("state.empty")}</div>`
               : html`<div class="feed">
-                  ${entries.map(
-                    (e) => html`
-                      <div class="feed__item">
-                        <div class=${"feed__ico feed__ico--" + tone(e.status)}>${icon(kindIcon(e.kind), 13)}</div>
-                        <div class="feed__body">
-                          <div class="feed__text"><em>${e.title ?? e.kind}</em>${e.summary ? html` · ${e.summary}` : ""}</div>
-                          <div class="row__sub">${e.channel ?? "—"} · ${e.agentId ?? "—"} · ${e.runId}</div>
+                  ${groups.map(({ item: e, count }) => html`
+                    <div class="feed__item">
+                      <div class=${"feed__ico feed__ico--" + tone(e.status)}>${icon(kindIcon(e.kind), 13)}</div>
+                      <div class="feed__body">
+                        <div class="feed__text">
+                          <em>${e.title ?? e.kind}</em>${e.summary ? html` · ${e.summary}` : ""}
+                          ${count > 1 ? html`<span class="mult">× ${fmtInt(count)}</span>` : ""}
                         </div>
-                        <span class="feed__time">${relativeTime(e.startedAt)}</span>
+                        <div class="row__sub">${e.channel ?? "—"} · ${e.agentId ?? "—"} · ${e.runId}</div>
                       </div>
-                    `,
-                  )}
+                      <span class="feed__time">${relativeTime(e.startedAt)}</span>
+                    </div>
+                  `)}
                 </div>`}
           </div>
         </div>

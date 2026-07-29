@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { formatDetailMeta, pickReplayRun, type IReplayRun, type IReplaySnapshot } from "./workboard.js";
+import { formatDetailMeta, pickReplayRun, type IReplayRun, type IReplaySnapshot } from "./run-detail.js";
 
 function run(overrides: Partial<IReplayRun> = {}): IReplayRun {
   return {

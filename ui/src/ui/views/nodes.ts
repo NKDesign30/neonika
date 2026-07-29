@@ -77,7 +77,7 @@ export class NeonNodes extends NeonView<NodesSnapshot> {
           </div>
         </div>
 
-        <div class="card" style="margin-top:14px">
+        <div class="card">
           <div class="card__head"><span class="card__title">Capabilities</span></div>
           <div class="card__body">
             ${data.capabilities.length === 0
@@ -99,7 +99,7 @@ export class NeonNodes extends NeonView<NodesSnapshot> {
         </div>
 
         ${data.safeRoots.length > 0
-          ? html`<div class="card" style="margin-top:14px">
+          ? html`<div class="card">
               <div class="card__head"><span class="card__title">Safe roots</span></div>
               <div class="card__body">
                 <div class="rowlist">

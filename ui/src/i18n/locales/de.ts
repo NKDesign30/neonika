@@ -2,8 +2,8 @@ import type { TranslationMap } from "../lib/types.js";
 
 // Deutsch — mit Umlauten, keine ae/oe/ue-Ersatzschreibweisen.
 export const de: TranslationMap = {
-  brand: { eyebrow: "Mission Control", title: "Neonika" },
-  groups: { Chat: "Chat", Control: "Steuerung", Agent: "Agent", Sites: "Seiten", Settings: "Einstellungen" },
+  brand: { eyebrow: "Control", title: "Neonika" },
+  groups: { Now: "Jetzt", Work: "Arbeit", System: "System", Configure: "Konfiguration" },
   tabs: {
     chat: "Chat",
     sites: "Seiten",
@@ -51,6 +51,9 @@ export const de: TranslationMap = {
     detailEvents: "Ereignisse ({count})",
   },
   overview: {
+    greetingMorning: "Guten Morgen",
+    greetingDay: "Guten Tag",
+    greetingEvening: "Guten Abend",
     sub: "{count} Runs erfasst · Live-Laufzeit",
     recentSessions: "Letzte Sessions",
     liveActivity: "Live-Aktivität",

@@ -89,6 +89,7 @@ export const NEON_ENDPOINTS = {
   activity: "/api/neon-activity",
   sessions: "/api/neon-sessions",
   indexer: "/api/neon-indexer",
+  indexerActivity: "/api/neon-indexer-activity",
   liveIndexDaemon: "/api/neon-live-index-daemon",
   liveIndexSync: "/api/neon-live-index-sync",
   transcript: "/api/neon-transcript",
@@ -139,6 +140,20 @@ export class NeonControlClient {
   }
   indexer<T>(opts?: FetchOptions) {
     return this.get<T>(NEON_ENDPOINTS.indexer, opts);
+  }
+  indexerActivity<T>(opts?: FetchOptions & { category?: "summary" | "decision"; offset?: number }) {
+    const params = new URLSearchParams();
+    if (opts?.category) {
+      params.set("category", opts.category);
+    }
+    if (opts?.offset && opts.offset > 0) {
+      params.set("offset", String(opts.offset));
+    }
+    const query = params.toString();
+    return this.get<T>(`${NEON_ENDPOINTS.indexerActivity}${query ? `?${query}` : ""}`, opts);
+  }
+  indexerActivityEntry<T>(entryId: number, opts?: FetchOptions) {
+    return this.get<T>(`${NEON_ENDPOINTS.indexerActivity}?entry=${entryId}`, opts);
   }
   liveIndexDaemon<T>(opts?: FetchOptions) {
     return this.get<T>(NEON_ENDPOINTS.liveIndexDaemon, opts);

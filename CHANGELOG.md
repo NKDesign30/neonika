@@ -4,6 +4,14 @@
 
 - Next changes are collected here.
 
+## [0.3.0] - 2026-07-29
+
+- Added guarded memory maintenance, database recovery, embedding backfill, recall telemetry, and stronger relation and importance handling.
+- Added index activity and summary-quality surfaces across the CLI, HTTP API, tests, and Mission Control.
+- Reorganized Mission Control into four operator zones with reusable run details, compact activity streams, and bundled local typography.
+- Hardened the publication audit for WhatsApp device identifiers and ignored runtime state without weakening tracked-file checks.
+- Preserved the existing cutover stage and outbound-arming safety contract.
+
 ## [0.2.2] - 2026-07-19
 
 - Enabled GitHub release immutability so published tags and assets are protected from later replacement.

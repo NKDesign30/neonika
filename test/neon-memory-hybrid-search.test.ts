@@ -59,6 +59,30 @@ const seedRows: readonly ISeedRow[] = [
     category: "discoveries",
     importance: 50,
     embedDimensions: 768
+  },
+  // Der reale Fall vom 25.07.2026, nachgebaut: ein Digest zitiert das Thema in
+  // seinem Preview, ohne etwas darüber zu wissen. Er ist kurz, also ist seine
+  // bm25-Dichte hoch — und schlug damit die Summary, die das Thema wirklich
+  // behandelt.
+  {
+    source: "live-index/claude/session-abc.md",
+    content:
+      "Claude transcript live-index digest Project: global Session: abc Mode: final " +
+      "Messages: 2 (1 user / 1 assistant) Tool failures: 0 Latest preview: Fahrtenbuch",
+    agent: "neo",
+    category: "live-index",
+    importance: 34,
+    embedDimensions: 384
+  },
+  {
+    source: "session-summaries/2026-07-24-global.md",
+    content:
+      "# Session-Summary [global] (2026-07-24) Die Operatorin hat mit der Finanzverwaltung " +
+      "die Anforderungen für das Fahrtenbuch geklärt, inklusive Listenpreis und Kilometerstand",
+    agent: "live-indexer",
+    category: "session-summary",
+    importance: 70,
+    embedDimensions: 384
   }
 ];
 
@@ -208,5 +232,46 @@ describe("neon hybrid memory search", () => {
     // + not loaded in the projection). The consumer never reads them.
     assert.equal("provenance" in hybridResult.entry, false);
     assert.equal("createdAt" in hybridResult.entry, false);
+  });
+
+  it("keeps session bookkeeping out of a content search", async () => {
+    // Vor dem Fix gewann hier der Digest: sein Preview zitiert das Wort, er ist
+    // kurz, und die Fusion las importance nicht. Gesucht wird Inhalt, nicht die
+    // Buchhaltung darüber, welche Session das Wort einmal enthielt.
+    for (const rows of [
+      searchNeonMemoryDb("Fahrtenbuch", { dbPath }),
+      await hybridSearchNeonMemoryDb("Fahrtenbuch", embedder, { dbPath })
+    ]) {
+      assert.ok(rows.length >= 1, "the real summary must still be found");
+      assert.equal(
+        rows.some((row) => row.category === "live-index"),
+        false,
+        "ambient digests do not belong in a content search"
+      );
+      assert.equal(rows[0]?.category, "session-summary");
+    }
+  });
+
+  it("still returns digests when the category is asked for explicitly", async () => {
+    // Ausgeblendet ist nicht gelöscht: wer die Kategorie nennt, bekommt sie.
+    const rows = searchNeonMemoryDb("Fahrtenbuch", { dbPath, category: "live-index" });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.category, "live-index");
+
+    const hybrid = await hybridSearchNeonMemoryDb("Fahrtenbuch", embedder, {
+      dbPath,
+      category: "live-index"
+    });
+    assert.ok(hybrid.some((row) => row.category === "live-index"));
+  });
+
+  it("weights importance into the fused score without zeroing anything out", async () => {
+    // Der zweite Teil des Fixes, unabhängig vom Kategorie-Filter: importance geht
+    // multiplikativ ein, darf aber keinen echten Treffer auslöschen.
+    const rows = await hybridSearchNeonMemoryDb("Neonika cutover", embedder, { dbPath });
+    const a = rows.find((row) => row.source === "a.md");
+    const b = rows.find((row) => row.source === "b.md");
+    assert.ok(a && b, "both cutover rows must be present");
+    assert.ok(a.score > 0 && b.score > 0, "importance weighting must not zero a score out");
   });
 });

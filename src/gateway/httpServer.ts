@@ -98,6 +98,10 @@ import {
   type INeonLiveIndexDaemonService
 } from "../indexer/liveIndexDaemon.js";
 import { createNeonIndexerSnapshot } from "../indexer/indexerSnapshot.js";
+import {
+  createNeonMemoryIndexActivitySnapshot,
+  readNeonMemoryIndexEntryDetail
+} from "../indexer/memoryIndexActivity.js";
 import { createNeonTranscriptSnapshot } from "../indexer/transcriptSnapshot.js";
 import { createMergedNeonMemoryProvider } from "../memory/mergedMemoryProvider.js";
 import { resolveNeonMemoryDbWriteGate } from "../memory/neonMemoryDbWriter.js";
@@ -540,6 +544,11 @@ async function handleGatewayRequest(
 
     if (requestUrl.pathname === "/api/neon-indexer") {
       await handleNeonIndexer(context);
+      return;
+    }
+
+    if (requestUrl.pathname === "/api/neon-indexer-activity") {
+      handleNeonIndexerActivity(context);
       return;
     }
 
@@ -1561,6 +1570,44 @@ async function handleNeonIndexer(context: IRouteContext): Promise<void> {
     await createNeonIndexerSnapshot(context.projectRoot, {
       maxRuns: limit
     })
+  );
+}
+
+// What the Python live-indexer actually landed in the memory DB — the answer
+// to "wann und was wurde zuletzt indexiert?". Same DB resolution as recall.
+function handleNeonIndexerActivity(context: IRouteContext): void {
+  const dbPath = resolveNeonMemoryRecallDbPath(process.env);
+
+  // ?entry=<id> — full content of one row, for the click-to-expand detail.
+  const entryParam = context.requestUrl.searchParams.get("entry");
+  if (entryParam !== null) {
+    const entryId = Number.parseInt(entryParam, 10);
+    if (!Number.isInteger(entryId) || entryId <= 0) {
+      writeJson(context.response, 400, { state: "invalid-entry" });
+      return;
+    }
+    const detail = readNeonMemoryIndexEntryDetail(dbPath, entryId);
+    writeJson(context.response, detail.state === "not-found" ? 404 : 200, detail);
+    return;
+  }
+
+  const limit = readLimit(context.requestUrl) ?? 10;
+  // Filter chips in the UI send ?category=summary|decision; the filter narrows
+  // the list only — totals and the day histogram stay global by design.
+  const categoryParam = context.requestUrl.searchParams.get("category");
+  const category =
+    categoryParam === "summary" || categoryParam === "session-summary"
+      ? ("session-summary" as const)
+      : categoryParam === "decision"
+        ? ("decision" as const)
+        : undefined;
+  const offsetParam = Number.parseInt(context.requestUrl.searchParams.get("offset") ?? "", 10);
+  const offset = Number.isInteger(offsetParam) && offsetParam > 0 ? offsetParam : 0;
+
+  writeJson(
+    context.response,
+    200,
+    createNeonMemoryIndexActivitySnapshot(dbPath, { limit, offset, ...(category ? { category } : {}) })
   );
 }
 

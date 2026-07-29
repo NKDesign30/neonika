@@ -2,8 +2,8 @@ import type { TranslationMap } from "../lib/types.js";
 
 // English — default locale, matches the Claude Design export wording.
 export const en: TranslationMap = {
-  brand: { eyebrow: "Mission Control", title: "Neonika" },
-  groups: { Chat: "Chat", Control: "Control", Agent: "Agent", Sites: "Sites", Settings: "Settings" },
+  brand: { eyebrow: "Control", title: "Neonika" },
+  groups: { Now: "Now", Work: "Work", System: "System", Configure: "Configure" },
   tabs: {
     chat: "Chat",
     sites: "Sites",
@@ -51,6 +51,9 @@ export const en: TranslationMap = {
     detailEvents: "Events ({count})",
   },
   overview: {
+    greetingMorning: "Good morning",
+    greetingDay: "Good afternoon",
+    greetingEvening: "Good evening",
     sub: "{count} runs tracked · live runtime",
     recentSessions: "Recent sessions",
     liveActivity: "Live activity",

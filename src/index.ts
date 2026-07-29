@@ -1620,6 +1620,19 @@ export {
   type INeonSummaryQualityResult
 } from "./indexer/summaryQualityGate.js";
 export {
+  createNeonMemoryIndexActivitySnapshot,
+  readNeonMemoryIndexEntryDetail,
+  type INeonMemoryIndexActivitySnapshot,
+  type INeonMemoryIndexEntry,
+  type INeonMemoryIndexEntryDetail,
+  type TNeonMemoryIndexCategory,
+  type TNeonMemoryIndexEntryDetailResult
+} from "./indexer/memoryIndexActivity.js";
+export {
+  runNeonSummaryQualityCheck,
+  type INeonSummaryQualityCliOutcome
+} from "./indexer/summaryQualityCli.js";
+export {
   neonDecisionActors,
   neonDecisionScopes,
   type INeonDecisionCandidate,
@@ -2430,6 +2443,17 @@ export {
   type INeonV3SearchResult
 } from "./memory/neonMemoryDbProvider.js";
 export {
+  NEON_MEMORY_BUSY_TIMEOUT_MS,
+  openNeonMemoryDatabase,
+  type INeonMemoryDbOpenOptions
+} from "./memory/neonMemoryDbOpen.js";
+export {
+  backfillNeonMemoryEmbeddings,
+  renderNeonEmbeddingBackfillReport,
+  type INeonEmbeddingBackfillOptions,
+  type INeonEmbeddingBackfillResult
+} from "./memory/neonMemoryEmbeddingBackfill.js";
+export {
   bootstrapNeonMemorySchema,
   computeNeonContentHash,
   renderNeonMemoryDbWriteReport,
@@ -2469,6 +2493,15 @@ export {
   type INeonPruneOptions,
   type INeonPruneResult
 } from "./memory/neonMemoryPrune.js";
+export {
+  findNeonMemoryMaintenanceBlock,
+  resolveNeonMemoryMaintenanceAccess,
+  type INeonMemoryAdditiveLabels,
+  type INeonMemoryFreezingLabels,
+  type INeonMemoryMaintenanceAccess,
+  type INeonMemoryMaintenanceBlock,
+  type TNeonMemoryMaintenanceBlockState
+} from "./memory/memoryMaintenanceGate.js";
 export {
   DEFAULT_NEON_OLLAMA_BASE_URL,
   DEFAULT_NEON_OLLAMA_EMBEDDING_MODEL,

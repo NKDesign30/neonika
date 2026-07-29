@@ -35,8 +35,9 @@ describe("filterPaletteItems", () => {
   });
 
   it("matches all views sharing a group label", () => {
-    const agentTab = filterPaletteItems(items, "agent").map((i) => i.id);
-    expect(agentTab).toEqual(["agents", "skills", "nodes", "dreams", "indexer", "transcript"]);
+    // "work" matches the Workboard name first, then every view in the Work group.
+    const workGroup = filterPaletteItems(items, "work").map((i) => i.id);
+    expect(workGroup).toEqual(["workboard", "sessions", "transcript", "dreams"]);
   });
 
   it("ranks a name-prefix match ahead of a group-only match", () => {

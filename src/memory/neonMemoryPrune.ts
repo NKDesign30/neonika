@@ -1,10 +1,10 @@
-import { DatabaseSync } from "node:sqlite";
-
-import { targetsRealNeonDb } from "./neonMemoryDbProvider.js";
+import type { DatabaseSync } from "node:sqlite";
+import { openNeonMemoryDatabase } from "./neonMemoryDbOpen.js";
+import { type INeonMemoryDbWriteGate } from "./neonMemoryDbWriter.js";
 import {
-  resolveNeonMemoryDbWriteGate,
-  type INeonMemoryDbWriteGate
-} from "./neonMemoryDbWriter.js";
+  findNeonMemoryMaintenanceBlock,
+  resolveNeonMemoryMaintenanceAccess
+} from "./memoryMaintenanceGate.js";
 
 /**
  * Memory noise pruning for Neonika (memory autarky).
@@ -28,11 +28,17 @@ export interface INeonPruneOptions {
   readonly maxScore?: number;
   readonly allowRealDb?: boolean;
   readonly reason?: string;
+  /**
+   * Ohne Recall-Telemetrie in diesem Fenster wird nicht archiviert: `access_count = 0`
+   * ist dann Symptom einer toten Suche, nicht Beleg für Bedeutungslosigkeit.
+   * 0 schaltet den Schutz ab (für Tests und bewusste Aufholläufe).
+   */
+  readonly maxRecallGapHours?: number;
   readonly now?: () => Date;
 }
 
 export interface INeonPruneResult {
-  readonly state: "pruned" | "planned" | "blocked";
+  readonly state: "pruned" | "planned" | "blocked" | "frozen";
   readonly scanned: number;
   readonly candidates: number;
   readonly archived: number;
@@ -83,14 +89,13 @@ function readNumber(value: unknown): number {
  * plan (scanned/candidates) without touching either table.
  */
 export function pruneNeonMemory(options: INeonPruneOptions): INeonPruneResult {
-  const gate = options.gate ?? resolveNeonMemoryDbWriteGate(process.env);
-  const targetsRealDb = targetsRealNeonDb(options.dbPath);
+  const access = resolveNeonMemoryMaintenanceAccess(options);
+  const targetsRealDb = access.targetsRealDb;
   const maxScore = typeof options.maxScore === "number" ? options.maxScore : defaultMaxScore;
   const reason = options.reason ?? `prune:importance<=${maxScore}&access=0`;
   const archivedAt = (options.now?.() ?? new Date()).toISOString();
 
-  const canWrite = gate.enabled && (!targetsRealDb || options.allowRealDb === true);
-  const database = new DatabaseSync(options.dbPath, { readOnly: !canWrite });
+  const database = openNeonMemoryDatabase(options.dbPath, { readOnly: !access.canWrite });
   try {
     const scanned = readNumber(
       (database.prepare("SELECT COUNT(*) AS n FROM memory_entries").get() as { n?: number }).n
@@ -102,15 +107,26 @@ export function pruneNeonMemory(options: INeonPruneOptions): INeonPruneResult {
       .all(maxScore) as Array<Record<string, unknown>>;
     const candidates = candidateRows.length;
 
-    if (targetsRealDb && options.allowRealDb !== true) {
-      return result("planned", scanned, candidates, 0, maxScore, true, [
-        `prune plan only: target is the real semantic-memory DB (set allowRealDb to archive)`
-      ]);
-    }
-    if (!gate.enabled) {
-      return result("blocked", scanned, candidates, 0, maxScore, targetsRealDb, [
-        `prune plan only: ${gate.envKey} is not armed`
-      ]);
+    // Der Plan bleibt sichtbar, aber archiviert wird nur, wenn die Suche
+    // nachweislich lief — sonst ist `access_count = 0` das Symptom, nicht das
+    // Kriterium. Die Reihenfolge (Freeze zuerst) steht im Gate-Modul.
+    const block = findNeonMemoryMaintenanceBlock(access, database, {
+      labels: { freeze: "prune", plan: "prune", writeVerb: "archive" },
+      ...(options.maxRecallGapHours !== undefined
+        ? { maxRecallGapHours: options.maxRecallGapHours }
+        : {}),
+      now: (options.now?.() ?? new Date()).getTime()
+    });
+    if (block) {
+      return result(
+        block.state,
+        scanned,
+        candidates,
+        0,
+        maxScore,
+        targetsRealDb || block.state === "planned",
+        [block.diagnostic]
+      );
     }
 
     bootstrapNeonArchiveSchema(database);

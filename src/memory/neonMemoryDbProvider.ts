@@ -1,4 +1,4 @@
-import { DatabaseSync } from "node:sqlite";
+import { openNeonMemoryDatabase } from "./neonMemoryDbOpen.js";
 import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -74,6 +74,48 @@ const maxContentLength = 260;
 const defaultTextWeight = 0.4;
 const defaultVectorWeight = 0.6;
 const defaultMinVectorScore = 0.08;
+
+/**
+ * Ambient categories are session bookkeeping, not knowledge: a live-index digest
+ * records message counts, tool failures and the first ~100 characters of the last
+ * message. Its preview quotes the session verbatim, so it matches a topic without
+ * knowing anything about it — and being short, it scores high on bm25 density.
+ *
+ * Measured on 2026-07-25: a search for a real topic returned two such digests
+ * above the actual session summary that discussed it. They are 1144 of 2351
+ * entries, so they crowd out every content search. They stay in the DB and remain
+ * reachable by asking for the category explicitly; they are just not what a
+ * content query means.
+ */
+const ambientCategories: readonly string[] = ["live-index"];
+
+/**
+ * Importance as a rank multiplier, not an additive term.
+ *
+ * The live-index quality gate already derives importance from content and clamps
+ * digests to 20-60, explicitly "always below real curated knowledge" — but that
+ * work was inert, because fusion scored purely on text and vector similarity and
+ * never read the column. Curated entries sit at 70-90, so the spread below keeps
+ * a strong low-importance hit competitive while letting a weak high-importance
+ * one win a close call. Deliberately linear and floored: squaring it would bury
+ * good hits that simply never got a high score.
+ *
+ * Kalibrierung aus dem Roundtable vom 25.07.2026: 0.45/0.55 war zu aggressiv —
+ * ein imp=30-Eintrag hätte nur 66% des Gewichts eines imp=88-Eintrags getragen
+ * und wäre auch bei deutlich besserer Textnähe verloren. Mit 0.65/0.35 liegt das
+ * Verhältnis bei 79%: importance entscheidet knappe Fälle, kippt aber keine
+ * klare semantische Überlegenheit.
+ */
+const importanceFloor = 0.65;
+const importanceSpan = 0.35;
+
+function importanceFactor(importance: number): number {
+  if (!Number.isFinite(importance) || importance <= 0) {
+    return importanceFloor;
+  }
+  const normalized = Math.min(100, importance) / 100;
+  return importanceFloor + importanceSpan * normalized;
+}
 
 export interface INeonMemoryDbRow {
   readonly id: number;
@@ -163,7 +205,7 @@ export function recordNeonMemoryDbAccess(options: {
 
   const nowIso = (options.now?.() ?? new Date()).toISOString();
   try {
-    const database = new DatabaseSync(options.dbPath);
+    const database = openNeonMemoryDatabase(options.dbPath);
     try {
       const placeholders = options.entryIds.map(() => "?").join(", ");
       const update = database
@@ -256,6 +298,12 @@ export function searchNeonMemoryDb(
   if (options.category) {
     conditions.push("me.category = ?");
     parameters.push(options.category);
+  } else {
+    // Nur im Default-Fall: wer die Kategorie ausdrücklich nennt, bekommt sie.
+    conditions.push(
+      `me.category NOT IN (${ambientCategories.map(() => "?").join(",")})`
+    );
+    parameters.push(...ambientCategories);
   }
   parameters.push(limit);
 
@@ -268,7 +316,7 @@ export function searchNeonMemoryDb(
     ORDER BY rank
     LIMIT ?`;
 
-  const database = new DatabaseSync(dbPath, { readOnly: true });
+  const database = openNeonMemoryDatabase(dbPath, { readOnly: true });
   try {
     const rows = database.prepare(sql).all(...parameters) as Array<
       Record<string, unknown>
@@ -316,9 +364,10 @@ export async function hybridSearchNeonMemoryDb(
   const queryVector = await embedder.embed(trimmed);
   const embeddingBytes = embedder.dimensions * 4;
 
-  const database = new DatabaseSync(dbPath, { readOnly: true });
+  const database = openNeonMemoryDatabase(dbPath, { readOnly: true });
   try {
     const ftsScores = new Map<number, number>();
+    const ftsImportance = new Map<number, number>();
     const match = buildNeonFtsMatchExpression(trimmed);
     if (match) {
       const conditions = ["memory_fts MATCH ?"];
@@ -330,11 +379,16 @@ export async function hybridSearchNeonMemoryDb(
       if (options.category) {
         conditions.push("me.category = ?");
         parameters.push(options.category);
+      } else {
+        conditions.push(
+          `me.category NOT IN (${ambientCategories.map(() => "?").join(",")})`
+        );
+        parameters.push(...ambientCategories);
       }
       parameters.push(Math.max(limit * 4, 40));
       const ftsRows = database
         .prepare(
-          `SELECT me.id AS id, bm25(memory_fts) AS rank
+          `SELECT me.id AS id, me.importance_score AS importance, bm25(memory_fts) AS rank
             FROM memory_entries me
             JOIN memory_fts ON memory_fts.rowid = me.id
             WHERE ${conditions.join(" AND ")}
@@ -351,6 +405,9 @@ export async function hybridSearchNeonMemoryDb(
           ftsScores.set(readRowNumber(row, "id"), Math.abs(readRowNumber(row, "rank")) / maxAbsRank);
         }
       }
+      for (const row of ftsRows) {
+        ftsImportance.set(readRowNumber(row, "id"), readRowNumber(row, "importance"));
+      }
     }
 
     const vectorScores = new Map<number, number>();
@@ -363,9 +420,20 @@ export async function hybridSearchNeonMemoryDb(
     if (options.category) {
       vectorConditions.push("category = ?");
       vectorParameters.push(options.category);
+    } else {
+      vectorConditions.push(
+        `category NOT IN (${ambientCategories.map(() => "?").join(",")})`
+      );
+      vectorParameters.push(...ambientCategories);
     }
+    // importance kommt aus beiden Halbmengen, weil ein reiner Vektortreffer
+    // sonst keinen Wert hätte, mit dem die Fusion gewichten könnte.
+    const importanceById = new Map<number, number>(ftsImportance);
     const vectorRows = database
-      .prepare(`SELECT id, embedding FROM memory_entries WHERE ${vectorConditions.join(" AND ")}`)
+      .prepare(
+        `SELECT id, embedding, importance_score AS importance
+           FROM memory_entries WHERE ${vectorConditions.join(" AND ")}`
+      )
       .all(...vectorParameters) as Array<Record<string, unknown>>;
     for (const row of vectorRows) {
       const blob = row["embedding"];
@@ -374,7 +442,9 @@ export async function hybridSearchNeonMemoryDb(
       }
       const cosine = neonCosineSimilarity(queryVector, bufferToNeonVector(blob));
       if (cosine >= minVectorScore) {
-        vectorScores.set(readRowNumber(row, "id"), cosine);
+        const id = readRowNumber(row, "id");
+        vectorScores.set(id, cosine);
+        importanceById.set(id, readRowNumber(row, "importance"));
       }
     }
 
@@ -387,12 +457,17 @@ export async function hybridSearchNeonMemoryDb(
     for (const id of allIds) {
       const fts = ftsScores.get(id) ?? 0;
       const vec = vectorScores.get(id) ?? 0;
+      const weight = importanceFactor(importanceById.get(id) ?? 0);
       if (fts > 0 && vec > 0) {
-        ranked.push({ id, score: textWeight * fts + vectorWeight * vec, matchType: "hybrid" });
+        ranked.push({
+          id,
+          score: (textWeight * fts + vectorWeight * vec) * weight,
+          matchType: "hybrid"
+        });
       } else if (vec > 0) {
-        ranked.push({ id, score: vectorWeight * vec, matchType: "vector" });
+        ranked.push({ id, score: vectorWeight * vec * weight, matchType: "vector" });
       } else {
-        ranked.push({ id, score: textWeight * fts, matchType: "fts" });
+        ranked.push({ id, score: textWeight * fts * weight, matchType: "fts" });
       }
     }
     ranked.sort((left, right) => right.score - left.score);

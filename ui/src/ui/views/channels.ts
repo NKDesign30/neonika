@@ -79,7 +79,7 @@ export class NeonChannels extends NeonView<RoutesSnapshot> {
             </div>`}
 
         ${data.recovery && data.recovery.length > 0
-          ? html`<div class="card" style="margin-top:14px">
+          ? html`<div class="card">
               <div class="card__head"><span class="card__title">Setup needed</span></div>
               <div class="card__body">
                 ${data.recovery.map((r) => html`<div class="feed__item"><div class="feed__ico feed__ico--warn">${icon("alertTriangle", 13)}</div><div class="feed__text">${r}</div></div>`)}

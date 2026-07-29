@@ -1,10 +1,9 @@
-import { DatabaseSync } from "node:sqlite";
-
-import { targetsRealNeonDb } from "./neonMemoryDbProvider.js";
+import { openNeonMemoryDatabase } from "./neonMemoryDbOpen.js";
+import { type INeonMemoryDbWriteGate } from "./neonMemoryDbWriter.js";
 import {
-  resolveNeonMemoryDbWriteGate,
-  type INeonMemoryDbWriteGate
-} from "./neonMemoryDbWriter.js";
+  findNeonMemoryMaintenanceBlock,
+  resolveNeonMemoryMaintenanceAccess
+} from "./memoryMaintenanceGate.js";
 
 /**
  * Ebbinghaus retention recalc for Neonika (memory autarky).
@@ -47,12 +46,17 @@ export interface INeonImportanceRecalcOptions {
   readonly dbPath: string;
   readonly gate?: INeonMemoryDbWriteGate;
   readonly halfLifeDays?: number;
+  /**
+   * Ohne Recall-Telemetrie in diesem Fenster wird der Decay eingefroren.
+   * 0 schaltet den Schutz ab (für Tests und einmalige Aufholläufe).
+   */
+  readonly maxRecallGapHours?: number;
   readonly allowRealDb?: boolean;
   readonly now?: () => Date;
 }
 
 export interface INeonImportanceRecalcResult {
-  readonly state: "recalculated" | "planned" | "blocked";
+  readonly state: "recalculated" | "planned" | "blocked" | "frozen";
   readonly scanned: number;
   readonly updated: number;
   readonly meanRetention: number;
@@ -91,12 +95,12 @@ function readNumber(row: Record<string, unknown>, key: string): number {
 export function recalcNeonMemoryImportance(
   options: INeonImportanceRecalcOptions
 ): INeonImportanceRecalcResult {
-  const gate = options.gate ?? resolveNeonMemoryDbWriteGate(process.env);
-  const targetsRealDb = targetsRealNeonDb(options.dbPath);
+  const access = resolveNeonMemoryMaintenanceAccess(options);
+  const targetsRealDb = access.targetsRealDb;
   const now = (options.now?.() ?? new Date()).getTime();
 
-  const database = new DatabaseSync(options.dbPath, {
-    readOnly: !(gate.enabled && (!targetsRealDb || options.allowRealDb === true))
+  const database = openNeonMemoryDatabase(options.dbPath, {
+    readOnly: !access.canWrite
   });
   try {
     const rows = database
@@ -124,15 +128,23 @@ export function recalcNeonMemoryImportance(
       scanned === 0 ? 0 : retentions.reduce((sum, entry) => sum + entry.retention, 0) / scanned;
     const faded = retentions.filter((entry) => entry.retention < 0.25).length;
 
-    if (targetsRealDb && options.allowRealDb !== true) {
-      return blocked("planned", scanned, meanRetention, faded, true, [
-        "importance recalc plan only: target is the real semantic-memory DB (set allowRealDb to write)"
-      ]);
-    }
-    if (!gate.enabled) {
-      return blocked("blocked", scanned, meanRetention, faded, targetsRealDb, [
-        `importance recalc plan only: ${gate.envKey} is not armed`
-      ]);
+    // Freeze vor jeder Mutation, dann die Schreib-Gates — Reihenfolge im Modul.
+    const block = findNeonMemoryMaintenanceBlock(access, database, {
+      labels: { freeze: "decay", plan: "importance recalc" },
+      ...(options.maxRecallGapHours !== undefined
+        ? { maxRecallGapHours: options.maxRecallGapHours }
+        : {}),
+      now
+    });
+    if (block) {
+      return blocked(
+        block.state,
+        scanned,
+        meanRetention,
+        faded,
+        targetsRealDb || block.state === "planned",
+        [block.diagnostic]
+      );
     }
 
     const update = database.prepare("UPDATE memory_entries SET utility_score = ? WHERE id = ?");
@@ -157,7 +169,7 @@ export function recalcNeonMemoryImportance(
 }
 
 function blocked(
-  state: "planned" | "blocked",
+  state: "planned" | "blocked" | "frozen",
   scanned: number,
   meanRetention: number,
   faded: number,

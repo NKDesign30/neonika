@@ -65,6 +65,19 @@ export class NeonOverview extends NeonView<GatewaySnapshot> {
     this.dispatchEvent(new CustomEvent("tab-select", { detail: tab, bubbles: true, composed: true }));
   }
 
+  // Mixpanel-style time-of-day greeting — the overview addresses the operator,
+  // not the feature ("Überblick" is what the sidebar already says).
+  private greeting(): string {
+    const hour = new Date().getHours();
+    if (hour < 11) {
+      return t("overview.greetingMorning");
+    }
+    if (hour < 18) {
+      return t("overview.greetingDay");
+    }
+    return t("overview.greetingEvening");
+  }
+
   protected renderData(data: GatewaySnapshot): TemplateResult {
     const totals = data.totals;
     const running = totals.running ?? 0;
@@ -83,7 +96,7 @@ export class NeonOverview extends NeonView<GatewaySnapshot> {
       <div class="page">
         <div class="page__head">
           <div>
-            <h1 class="page__title">${t("tabs.overview")}</h1>
+            <h1 class="page__title">${this.greeting()}, Operator</h1>
             <p class="page__sub">${t("overview.sub", { count: fmtInt(totals.runs) })}</p>
           </div>
           <div style="display:flex;gap:8px">

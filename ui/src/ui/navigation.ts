@@ -32,43 +32,45 @@ export interface NavGroup {
   readonly items: readonly NavItem[];
 }
 
+// Four zones along the operator's questions (Mobbin-evidenced IA, 2026-07-26):
+// "Was passiert gerade?" / "Was läuft, was steht an?" / "Läuft alles?" /
+// configuration. Same 17 tabs, regrouped — no route changes.
 export const NAV_GROUPS: readonly NavGroup[] = [
   {
-    label: "Chat",
-    items: [{ id: "chat", name: "Chat", icon: "messageSquare" }],
-  },
-  {
-    label: "Control",
+    label: "Now",
     items: [
       { id: "overview", name: "Overview", icon: "barChart" },
       { id: "activity", name: "Activity", icon: "activity" },
-      { id: "workboard", name: "Workboard", icon: "folder" },
-      { id: "sessions", name: "Sessions", icon: "fileText" },
-      { id: "usage", name: "Usage", icon: "coins" },
-      { id: "cron", name: "Cron", icon: "loader" },
+      { id: "chat", name: "Chat", icon: "messageSquare" },
     ],
   },
   {
-    label: "Agent",
+    label: "Work",
+    items: [
+      { id: "workboard", name: "Workboard", icon: "folder" },
+      { id: "sessions", name: "Sessions", icon: "fileText" },
+      { id: "transcript", name: "Transcripts", icon: "fileText" },
+      { id: "dreams", name: "Dreaming", icon: "moon" },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { id: "indexer", name: "Indexer", icon: "brain" },
+      { id: "cron", name: "Cron", icon: "loader" },
+      { id: "usage", name: "Usage", icon: "coins" },
+      { id: "nodes", name: "Nodes", icon: "monitor" },
+      { id: "logs", name: "Logs", icon: "scrollText" },
+    ],
+  },
+  {
+    label: "Configure",
     items: [
       { id: "agents", name: "Agents", icon: "folder" },
       { id: "skills", name: "Skills", icon: "zap" },
-      { id: "nodes", name: "Nodes", icon: "monitor" },
-      { id: "dreams", name: "Dreaming", icon: "moon" },
-      { id: "indexer", name: "Indexer", icon: "brain" },
-      { id: "transcript", name: "Transcripts", icon: "fileText" },
-    ],
-  },
-  {
-    label: "Sites",
-    items: [{ id: "sites", name: "Sites", icon: "globe" }],
-  },
-  {
-    label: "Settings",
-    items: [
-      { id: "config", name: "Settings", icon: "settings" },
       { id: "channels", name: "Channels", icon: "link" },
-      { id: "logs", name: "Logs", icon: "scrollText" },
+      { id: "sites", name: "Sites", icon: "globe" },
+      { id: "config", name: "Settings", icon: "settings" },
     ],
   },
 ] as const;
