@@ -53,6 +53,11 @@ export interface INeonWhatsAppSocket {
   readonly ev: {
     on(event: string, listener: (value: unknown) => void): void;
   };
+  readonly sendText?: (
+    peerJid: string,
+    body: string,
+    messageId: string
+  ) => Promise<{ readonly messageId: string }>;
   end(error?: Error): void;
 }
 
@@ -297,12 +302,31 @@ export async function loadNeonWhatsAppRuntime(): Promise<INeonBaileysRuntime> {
         throw new Error("WhatsApp runtime returned an invalid event emitter");
       }
       const end = socket["end"];
+      const sendMessage = socket["sendMessage"];
       return {
         ev: {
           on: (event, listener) => {
             Reflect.apply(on, emitter, [event, listener]);
           }
         },
+        ...(typeof sendMessage === "function"
+          ? {
+              sendText: async (peerJid: string, body: string, messageId: string) => {
+                const sent = (await Reflect.apply(sendMessage, socket, [
+                  peerJid,
+                  { text: body },
+                  { messageId }
+                ])) as unknown;
+                const key = isRecord(sent) ? sent["key"] : undefined;
+                const returnedMessageId =
+                  isRecord(key) && typeof key["id"] === "string" ? key["id"].trim() : "";
+                if (returnedMessageId === "") {
+                  throw new Error("WhatsApp transport returned no message id");
+                }
+                return { messageId: returnedMessageId };
+              }
+            }
+          : {}),
         end: (error) => {
           Reflect.apply(end, socket, error ? [error] : []);
         }

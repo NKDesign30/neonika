@@ -124,7 +124,8 @@ describe("generic channel outbound policy", () => {
         NEON_CUTOVER_STAGE: "canary",
         NEON_CUTOVER_CANARY_APPROVED: "ready",
         NEON_CUTOVER_OUTBOUND_ENABLED: "ready",
-        NEON_CUTOVER_CANARY_CHANNELS: "900000000000000005"
+        NEON_CUTOVER_CANARY_CHANNELS: "900000000000000005",
+        NEON_WHATSAPP_CANARY_OUTBOUND_ENABLED: "ready"
       }
     });
 

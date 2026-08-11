@@ -286,7 +286,10 @@ import {
   resolveNeonSetupPaths,
   runNeonSetup,
   runNeonWhatsAppLogin,
+  startNeonWhatsAppCanaryTap,
   startNeonWhatsAppShadowTap,
+  neonWhatsAppCanaryCommandPrefix,
+  resolveNeonWhatsAppCanaryGate,
   createNeonWhatsAppStatusSnapshot,
   createNeonReplaySnapshot,
   createNeonSessionsSnapshot,
@@ -1192,7 +1195,7 @@ const commands: Record<string, ICommand> = {
   },
   "whatsapp-login": {
     description:
-      "Link the configured WhatsApp companion by terminal QR. Writes private auth state; agent-message outbound remains suppressed.",
+      "Link the configured WhatsApp companion by terminal QR. Writes private auth state; the shadow tap remains no-send.",
     run: runWhatsAppLogin
   },
   "whatsapp-status": {
@@ -1204,6 +1207,11 @@ const commands: Record<string, ICommand> = {
     description:
       "Run the linked WhatsApp companion as owner-only shadow ingress with shared memory and fully suppressed replies.",
     run: runWhatsAppShadowTap
+  },
+  "whatsapp-canary-tap": {
+    description:
+      "Run separate owner-only /neon WhatsApp canary replies; requires its independent flag and the persisted outbound gates.",
+    run: runWhatsAppCanaryTap
   },
   workboard: {
     description: "Print the Neonika Workboard (tasks grouped into status columns) from the task store.",
@@ -7189,6 +7197,7 @@ async function runCutoverPromote(): Promise<string> {
  */
 function renderOutboundTargets(env: Readonly<Record<string, string | undefined>>): string {
   const preconditions = evaluateNeonCanaryLivePreconditions(env);
+  const whatsappCanary = resolveNeonWhatsAppCanaryGate(env);
   const allowlist = resolveNeonCanaryChannelAllowlist(env);
   const channels = [...allowlist.channels];
 
@@ -7197,6 +7206,9 @@ function renderOutboundTargets(env: Readonly<Record<string, string | undefined>>
     `Bot token: ${preconditions.tokenPresent ? "present" : "missing"}`,
     `Approval flag: ${preconditions.canaryApproved ? "ready" : "unset"}`,
     `Currently armed: ${preconditions.outboundEnabled ? "yes" : "no"}`,
+    whatsappCanary.ready
+      ? "WhatsApp owner canary: ready"
+      : `WhatsApp owner canary: blocked (${whatsappCanary.blockers.join(", ")})`,
     channels.length > 0
       ? `Channels that could receive replies (${channels.length}):\n${channels.map((id) => `  - ${id}`).join("\n")}`
       : "Channels that could receive replies: none configured"
@@ -7227,13 +7239,14 @@ async function runArmOutbound(): Promise<string> {
   // reporting the pre-arm state under an "ARMED" headline would contradict itself.
   const armedEnv = await loadNeonCutoverEnv(projectRoot);
   const armed = evaluateNeonCanaryLivePreconditions(armedEnv);
+  const whatsappCanary = resolveNeonWhatsAppCanaryGate(armedEnv);
 
   return [
     "Arm outbound: ARMED.",
     "",
     renderOutboundTargets(armedEnv),
     "",
-    armed.ready
+    armed.ready || whatsappCanary.ready
       ? "Replies can now leave this process."
       : "Armed, but sending still blocked — see the missing requirements above.",
     `Persisted at: ${promotion.promotedAt}`,
@@ -12470,6 +12483,69 @@ async function runWhatsAppShadowTap(): Promise<undefined> {
   return undefined;
 }
 
+async function runWhatsAppCanaryTap(): Promise<undefined> {
+  const configRoot = readFlagValue(process.argv.slice(3), "--config-root");
+  const harnessMode = process.env["NEON_WHATSAPP_TAP_HARNESS"] ?? "codex";
+  const lifecycleGate = resolveNeonInFlightRunGate();
+  const inFlightRuns = createNeonInFlightRunRegistry({ gate: lifecycleGate });
+  const harness = await createWhatsAppTapHarness(harnessMode, inFlightRuns);
+  const handle = await startNeonWhatsAppCanaryTap({
+    ...(configRoot ? { configRoot } : {}),
+    projectRoot: process.cwd(),
+    harness,
+    memoryProvider: createMergedNeonMemoryProvider(),
+    agentId: process.env["NEON_WHATSAPP_AGENT_ID"] ?? "chaty",
+    onEvent: (event) => {
+      if (event.kind === "connection") {
+        console.log(`whatsapp-canary-tap connection ${event.state}`);
+      } else if (event.kind === "accepted") {
+        console.log(`whatsapp-canary-tap accepted ${event.runId}`);
+      } else if (event.kind === "reply") {
+        console.log(`whatsapp-canary-tap reply ${event.runId} ${event.state}`);
+      } else if (event.kind === "dropped") {
+        console.log(`whatsapp-canary-tap dropped ${event.reason}`);
+      } else if (event.kind === "duplicate") {
+        console.log("whatsapp-canary-tap duplicate");
+      } else if (event.kind === "reconnect") {
+        console.log(`whatsapp-canary-tap reconnect ${event.attempt}/${event.maximum}`);
+      } else {
+        console.error(`whatsapp-canary-tap error ${event.message}`);
+      }
+    }
+  });
+
+  await handle.ready;
+  console.log(
+    [
+      "WhatsApp canary tap: ready",
+      `Harness: ${harnessMode}`,
+      `Command prefix: ${neonWhatsAppCanaryCommandPrefix}`,
+      "Owner policy: explicit link only",
+      "Groups: disabled",
+      "Delivery: independently enabled and persisted-gate checked",
+      "Stop: Ctrl+C"
+    ].join("\n")
+  );
+  const closed = await waitForWhatsAppTapStop(handle);
+  console.log(
+    [
+      `WhatsApp canary tap: stopped (${closed.reason})`,
+      `Accepted: ${handle.stats.accepted}`,
+      `Dropped: ${handle.stats.dropped}`,
+      `Duplicates: ${handle.stats.duplicates}`,
+      `Outbound loops prevented: ${handle.stats.loopsPrevented}`,
+      `Replies delivered: ${handle.stats.repliesDelivered}`,
+      `Replies suppressed: ${handle.stats.repliesSuppressed}`,
+      `Receipt replays: ${handle.stats.receiptReplays}`,
+      `Errors: ${handle.stats.errors}`
+    ].join("\n")
+  );
+  if (closed.reason !== "operator") {
+    process.exitCode = 1;
+  }
+  return undefined;
+}
+
 async function createWhatsAppTapHarness(
   mode: string,
   inFlightRuns: INeonInFlightRunRegistry
@@ -12486,9 +12562,14 @@ async function createWhatsAppTapHarness(
   throw new Error(`Invalid NEON_WHATSAPP_TAP_HARNESS: ${mode}`);
 }
 
-async function waitForWhatsAppTapStop(
-  handle: Awaited<ReturnType<typeof startNeonWhatsAppShadowTap>>
-): Promise<Awaited<typeof handle.closed>> {
+interface IWhatsAppTapStopHandle<TCloseResult> {
+  readonly closed: Promise<TCloseResult>;
+  close(): Promise<void>;
+}
+
+async function waitForWhatsAppTapStop<TCloseResult>(
+  handle: IWhatsAppTapStopHandle<TCloseResult>
+): Promise<TCloseResult> {
   return await new Promise((resolveStop) => {
     const cleanup = (): void => {
       process.off("SIGINT", stop);

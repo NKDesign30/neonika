@@ -11,6 +11,7 @@ import {
 } from "../memory/neonMemory.js";
 import type { INeonSetupConfig } from "../onboarding/neonSetup.js";
 import { truncateUtf16Safe } from "../text/utf16Safe.js";
+import { isNeonWhatsAppCanaryMessageId } from "./whatsappCanary.js";
 
 export type TNeonWhatsAppDropReason =
   | "history"
@@ -18,6 +19,7 @@ export type TNeonWhatsAppDropReason =
   | "group-disabled"
   | "status-or-broadcast"
   | "owner-not-allowed"
+  | "outbound-loop"
   | "direction-not-allowed"
   | "missing-message-id"
   | "missing-timestamp"
@@ -132,11 +134,14 @@ function decideMessage(
     return { state: "dropped", reason: "owner-not-allowed" };
   }
   const fromMe = key["fromMe"] === true;
+  const messageId = typeof key["id"] === "string" ? key["id"].trim() : "";
+  if (fromMe && isNeonWhatsAppCanaryMessageId(messageId)) {
+    return { state: "dropped", reason: "outbound-loop" };
+  }
   const mode = config.channels.whatsapp.mode;
   if ((mode === "personal" && !fromMe) || (mode === "dedicated" && fromMe)) {
     return { state: "dropped", reason: "direction-not-allowed" };
   }
-  const messageId = typeof key["id"] === "string" ? key["id"].trim() : "";
   if (messageId === "") {
     return { state: "dropped", reason: "missing-message-id" };
   }

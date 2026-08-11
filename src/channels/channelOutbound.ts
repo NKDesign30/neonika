@@ -4,8 +4,10 @@
  * Default is no-send. The only platform with a real (still gated) live delivery
  * path is Discord, governed by the canary cutover gate
  * (`gateway/outboundSender.ts: createNeonCanaryOutboundSender` +
- * `evaluateNeonCanaryLivePreconditions`). WhatsApp is live inbound-only and
- * every other non-Discord platform is hard-suppressed. This module
+ * `evaluateNeonCanaryLivePreconditions`). This generic sender keeps WhatsApp
+ * hard-suppressed; its owner-only canary is an explicit, separately gated tap
+ * and never opens this broader policy. Every other non-Discord platform is
+ * also hard-suppressed. This module
  * projects, per platform, whether outbound is `suppressed` (no path) or
  * `canary-gated` (a gated path exists), and whether the gate is currently open —
  * reusing the existing canary precondition evaluation rather than duplicating it.
@@ -45,8 +47,8 @@ export function resolveNeonChannelOutboundPolicy(
 ): INeonChannelOutboundPolicy {
   const manifest = getNeonChannelManifest(platform);
 
-  // Discord is the only platform with an outbound implementation. A real
-  // inbound transport (WhatsApp/Baileys) never implies a send path.
+  // Discord is the only platform wired through this generic sender. A real
+  // inbound transport (WhatsApp/Baileys) never opens the generic send path.
   if (!manifest || platform !== "discord") {
     return {
       platform,

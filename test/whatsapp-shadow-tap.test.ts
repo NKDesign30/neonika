@@ -22,6 +22,7 @@ describe("Neonika WhatsApp live shadow tap", () => {
     const configRoot = join(root, "config");
     const projectRoot = join(root, "runtime");
     let socketEnded = false;
+    let sendAttempts = 0;
     try {
       await runNeonSetup({
         configRoot,
@@ -59,9 +60,15 @@ describe("Neonika WhatsApp live shadow tap", () => {
             diagnostics: []
           })
       };
-      const runtime = createScriptedRuntime(eventScript, () => {
-        socketEnded = true;
-      });
+      const runtime = createScriptedRuntime(
+        eventScript,
+        () => {
+          socketEnded = true;
+        },
+        () => {
+          sendAttempts += 1;
+        }
+      );
       const handle = await startNeonWhatsAppShadowTap({
         configRoot,
         projectRoot,
@@ -88,6 +95,7 @@ describe("Neonika WhatsApp live shadow tap", () => {
       assert.equal(handle.stats.accepted, 1);
       assert.equal(handle.stats.duplicates, 1);
       assert.equal(handle.stats.errors, 0);
+      assert.equal(sendAttempts, 0);
       assert.ok(events.some((event) => event.kind === "connection" && event.state === "open"));
       assert.ok(events.some((event) => event.kind === "accepted"));
       assert.match(stored, /"channel":"whatsapp"/u);
@@ -163,7 +171,8 @@ function ownerUpsert(messageId: string): Readonly<Record<string, unknown>> {
 
 function createScriptedRuntime(
   script: readonly { readonly event: string; readonly value: unknown }[],
-  onEnd: () => void = () => undefined
+  onEnd: () => void = () => undefined,
+  onSend: () => void = () => undefined
 ): INeonBaileysRuntime {
   return {
     useMultiFileAuthState: (authPath) =>
@@ -183,6 +192,10 @@ function createScriptedRuntime(
           on: (event, listener) => {
             listeners.set(event, listener);
           }
+        },
+        sendText: (_peerJid, _body, messageId) => {
+          onSend();
+          return Promise.resolve({ messageId });
         },
         end: () => {
           onEnd();
