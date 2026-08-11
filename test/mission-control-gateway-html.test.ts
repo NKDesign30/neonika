@@ -9,6 +9,7 @@ import {
   createNeonMissionControlGatewaySnapshot,
   listenNeonGatewayHttpServer,
   renderNeonMissionControlGatewayHtml,
+  writeNeonCutoverPromotion,
   writeNeonGatewayRun,
   type INeonGatewayRunControlRuntime,
   type INeonGatewayShadowRun,
@@ -390,6 +391,53 @@ describe("Neonika Mission Control Gateway HTML", () => {
     }
   });
 
+  it("server-renders the persisted outbound arm instead of a stale process value", async () => {
+    const projectRoot = await createTempProjectRoot();
+    const previousOutbound = process.env["NEON_CUTOVER_OUTBOUND_ENABLED"];
+    const previousStage = process.env["NEON_CUTOVER_STAGE"];
+    const previousApproval = process.env["NEON_CUTOVER_CANARY_APPROVED"];
+    const previousChannels = process.env["NEON_CUTOVER_CANARY_CHANNELS"];
+    const previousToken = process.env["NEON_DISCORD_BOT_TOKEN"];
+    const token = "server-render-token-must-not-leak";
+
+    try {
+      process.env["NEON_CUTOVER_STAGE"] = "canary";
+      process.env["NEON_CUTOVER_CANARY_APPROVED"] = "ready";
+      process.env["NEON_CUTOVER_OUTBOUND_ENABLED"] = "disabled";
+      process.env["NEON_CUTOVER_CANARY_CHANNELS"] = "900000000000000005";
+      process.env["NEON_DISCORD_BOT_TOKEN"] = token;
+      await writeNeonCutoverPromotion(projectRoot, {
+        NEON_CUTOVER_STAGE: "canary",
+        NEON_CUTOVER_CANARY_APPROVED: "ready",
+        NEON_CUTOVER_OUTBOUND_ENABLED: "ready",
+        NEON_CUTOVER_CANARY_CHANNELS: "900000000000000005"
+      });
+
+      const handle = await listenNeonGatewayHttpServer(
+        { projectRoot },
+        { host: "127.0.0.1", port: 0 }
+      );
+
+      try {
+        const response = await fetch(`${handle.url}/mission-control`);
+        const html = await response.text();
+
+        assert.equal(response.status, 200);
+        assert.match(html, /id="canaryReady">LIVE-READY/);
+        assert.doesNotMatch(html, new RegExp(token, "u"));
+      } finally {
+        await handle.close();
+      }
+    } finally {
+      restoreEnv("NEON_CUTOVER_OUTBOUND_ENABLED", previousOutbound);
+      restoreEnv("NEON_CUTOVER_STAGE", previousStage);
+      restoreEnv("NEON_CUTOVER_CANARY_APPROVED", previousApproval);
+      restoreEnv("NEON_CUTOVER_CANARY_CHANNELS", previousChannels);
+      restoreEnv("NEON_DISCORD_BOT_TOKEN", previousToken);
+      await rm(projectRoot, { force: true, recursive: true });
+    }
+  });
+
   it("serves one injected packaged SPA across every Mission Control route", async () => {
     const projectRoot = await createTempProjectRoot();
     const controlUiDir = join(projectRoot, "packaged-control-ui");
@@ -704,4 +752,12 @@ function createHtmlRun(
 
 async function createTempProjectRoot(): Promise<string> {
   return await mkdtemp(join(tmpdir(), "neonika-mission-control-html-"));
+}
+
+function restoreEnv(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[key];
+  } else {
+    process.env[key] = value;
+  }
 }

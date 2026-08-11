@@ -8,7 +8,7 @@ import { createNeonAgentsSnapshot, loadNeonAgentProfiles } from "../agents/regis
 import { createNeonCutoverGateSnapshot } from "../core/cutoverGate.js";
 import { createNeonMirrorEvidenceSnapshot } from "../core/mirrorEvidence.js";
 import { createNeonDoctorSnapshot } from "../doctor/neonDoctor.js";
-import { createNeonMissionControlGatewaySnapshot } from "../missionControl/gatewaySnapshot.js";
+import { createLiveNeonMissionControlGatewaySnapshot } from "../missionControl/gatewaySnapshot.js";
 import { readNeonMissionControlDiscordCockpitSnapshot } from "../missionControl/discordCockpitSnapshot.js";
 import { createNeonOnboardingSnapshot } from "../onboarding/neonOnboarding.js";
 import {
@@ -608,7 +608,8 @@ async function resolveGatewayRpcPayload(
         readNeonMissionControlDiscordCockpitSnapshot(options.projectRoot)
       ]);
 
-      return createNeonMissionControlGatewaySnapshot(
+      return await createLiveNeonMissionControlGatewaySnapshot(
+        options.projectRoot,
         await readNeonGatewayStatus(options.projectRoot),
         runs,
         { discordCockpit }

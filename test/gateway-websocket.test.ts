@@ -9,6 +9,7 @@ import WebSocket, { type RawData as WsRawData } from "ws";
 import {
   listenNeonGatewayHttpServer,
   parseNeonGatewayFrameJson,
+  writeNeonCutoverPromotion,
   type TNeonGatewayFrame
 } from "../src/index.js";
 import {
@@ -100,6 +101,77 @@ describe("Neonika Gateway WebSocket transport", () => {
         await handle.close();
       }
     } finally {
+      await rm(projectRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("returns the authoritative persisted outbound arm from missionControl.gateway", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "neonika-gateway-ws-"));
+    const previousOutbound = process.env["NEON_CUTOVER_OUTBOUND_ENABLED"];
+    const previousStage = process.env["NEON_CUTOVER_STAGE"];
+    const previousApproval = process.env["NEON_CUTOVER_CANARY_APPROVED"];
+    const previousChannels = process.env["NEON_CUTOVER_CANARY_CHANNELS"];
+    const previousToken = process.env["NEON_DISCORD_BOT_TOKEN"];
+    const token = "websocket-token-must-not-leak";
+
+    try {
+      process.env["NEON_CUTOVER_STAGE"] = "canary";
+      process.env["NEON_CUTOVER_CANARY_APPROVED"] = "ready";
+      process.env["NEON_CUTOVER_OUTBOUND_ENABLED"] = "disabled";
+      process.env["NEON_CUTOVER_CANARY_CHANNELS"] = "900000000000000005";
+      process.env["NEON_DISCORD_BOT_TOKEN"] = token;
+      await writeNeonCutoverPromotion(projectRoot, {
+        NEON_CUTOVER_STAGE: "canary",
+        NEON_CUTOVER_CANARY_APPROVED: "ready",
+        NEON_CUTOVER_OUTBOUND_ENABLED: "ready",
+        NEON_CUTOVER_CANARY_CHANNELS: "900000000000000005"
+      });
+
+      const handle = await listenNeonGatewayHttpServer(
+        { projectRoot },
+        { host: "127.0.0.1", port: 0 }
+      );
+      const socket = new WebSocket(`${handle.url.replace(/^http:/, "ws:")}/api/neon-gateway/ws`);
+      const reader = createGatewayWebSocketFrameReader(socket);
+
+      try {
+        await waitForWebSocketOpen(socket);
+        const nonce = readConnectChallengeNonce(await reader.read());
+
+        socket.send(JSON.stringify({
+          type: "req",
+          id: "connect-mission-control",
+          method: "connect",
+          params: { nonce }
+        }));
+        await reader.read();
+        await reader.read();
+
+        socket.send(JSON.stringify({
+          type: "req",
+          id: "mission-control-gateway",
+          method: "missionControl.gateway"
+        }));
+
+        const response = await reader.read();
+        assert.equal(response.type, "res");
+        assert.equal(response.id, "mission-control-gateway");
+        assert.equal(response.ok, true);
+        assert.ok(isMissionControlGatewayPayload(response.payload));
+        assert.equal(response.payload.canaryPosture.outboundEnabled, true);
+        assert.equal(response.payload.canaryPosture.ready, true);
+        assert.doesNotMatch(JSON.stringify(response.payload), new RegExp(token, "u"));
+      } finally {
+        reader.close();
+        socket.close(1000, "test complete");
+        await handle.close();
+      }
+    } finally {
+      restoreEnv("NEON_CUTOVER_OUTBOUND_ENABLED", previousOutbound);
+      restoreEnv("NEON_CUTOVER_STAGE", previousStage);
+      restoreEnv("NEON_CUTOVER_CANARY_APPROVED", previousApproval);
+      restoreEnv("NEON_CUTOVER_CANARY_CHANNELS", previousChannels);
+      restoreEnv("NEON_DISCORD_BOT_TOKEN", previousToken);
       await rm(projectRoot, { force: true, recursive: true });
     }
   });
@@ -758,6 +830,34 @@ function isOperatorAckRecordPayload(
     safety !== null &&
     typeof (safety as { readonly outboundSent?: unknown }).outboundSent === "boolean"
   );
+}
+
+function isMissionControlGatewayPayload(
+  input: unknown
+): input is {
+  readonly canaryPosture: {
+    readonly outboundEnabled: boolean;
+    readonly ready: boolean;
+  };
+} {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return false;
+  }
+  const canaryPosture = (input as { readonly canaryPosture?: unknown }).canaryPosture;
+  return (
+    typeof canaryPosture === "object" &&
+    canaryPosture !== null &&
+    typeof (canaryPosture as { readonly outboundEnabled?: unknown }).outboundEnabled === "boolean" &&
+    typeof (canaryPosture as { readonly ready?: unknown }).ready === "boolean"
+  );
+}
+
+function restoreEnv(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[key];
+  } else {
+    process.env[key] = value;
+  }
 }
 
 function isStatusPayload(input: unknown): input is { readonly runCount: number } {

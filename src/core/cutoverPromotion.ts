@@ -17,17 +17,19 @@ import { resolveGatewayStatePaths } from "../gateway/runStore.js";
  *
  * Only non-secret cutover/route flags are stored. The Discord bot token is
  * never written here — it stays resolved at runtime from the upstream config.
- * A live `process.env` value always overrides the persisted one, so the file is
- * a fallback, not a lock.
+ * Live values override persisted configuration except for the global outbound
+ * arm. That flag is persisted by `arm-outbound`/`disarm-outbound` and is the
+ * authoritative safety state; a stale process environment must not reopen it.
  */
 const CUTOVER_STATE_DIR = "cutover";
 const PROMOTION_FILE = "promotion.json";
+const OUTBOUND_ENABLED_KEY = "NEON_CUTOVER_OUTBOUND_ENABLED";
 
 /** Env keys the promotion file is allowed to carry. Never includes secrets. */
 const ALLOWED_PROMOTION_KEYS: readonly string[] = [
   "NEON_CUTOVER_STAGE",
   "NEON_CUTOVER_CANARY_APPROVED",
-  "NEON_CUTOVER_OUTBOUND_ENABLED",
+  OUTBOUND_ENABLED_KEY,
   "NEON_CUTOVER_PRIMARY_APPROVED",
   "NEON_CUTOVER_RETIRE_EVIDENCE",
   "NEON_CUTOVER_ROLLBACK_COMMAND",
@@ -108,19 +110,24 @@ export async function readNeonCutoverPromotion(
 }
 
 /**
- * Loads the persisted promotion env merged under the given live env. The live
- * env (default `process.env`) always wins, so a process that carries explicit
- * flags is never overridden by the file.
+ * Loads the persisted promotion env merged under the given live env. Live
+ * values win for ordinary cutover configuration. The persisted global outbound
+ * arm is the exception: it wins when present and fails closed when absent, so
+ * `disarm-outbound` takes effect without restarting a stale process.
  */
 export async function loadNeonCutoverEnv(
   projectRoot: string,
   liveEnv: Readonly<Record<string, string | undefined>> = process.env
 ): Promise<Readonly<Record<string, string | undefined>>> {
   const promotion = await readNeonCutoverPromotion(projectRoot);
-  if (!promotion) {
-    return liveEnv;
-  }
-  return { ...promotion.env, ...liveEnv };
+  const { [OUTBOUND_ENABLED_KEY]: _staleLiveArm, ...liveWithoutArm } = liveEnv;
+  const persistedArm = promotion?.env[OUTBOUND_ENABLED_KEY];
+
+  return {
+    ...promotion?.env,
+    ...liveWithoutArm,
+    ...(persistedArm ? { [OUTBOUND_ENABLED_KEY]: persistedArm } : {})
+  };
 }
 
 export function renderNeonCutoverPromotionReport(promotion: INeonCutoverPromotion): string {

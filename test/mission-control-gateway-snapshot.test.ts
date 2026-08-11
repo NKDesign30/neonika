@@ -9,6 +9,7 @@ import {
   fetchNeonMissionControlGatewaySnapshot,
   listenNeonGatewayHttpServer,
   parseNeonMissionControlGatewaySnapshot,
+  writeNeonCutoverPromotion,
   writeNeonGatewayRun,
   type INeonGatewayShadowRun,
   type INeonGatewayStatus
@@ -203,6 +204,70 @@ describe("Neonika Mission Control Gateway snapshot", () => {
         await handle.close();
       }
     } finally {
+      await rm(projectRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("reloads the authoritative persisted outbound arm without restarting the HTTP server", async () => {
+    const projectRoot = await createTempProjectRoot();
+    const cutoverKeys = [
+      "NEON_CUTOVER_STAGE",
+      "NEON_CUTOVER_CANARY_APPROVED",
+      "NEON_CUTOVER_OUTBOUND_ENABLED",
+      "NEON_CUTOVER_CANARY_CHANNELS",
+      "NEON_DISCORD_BOT_TOKEN"
+    ] as const;
+    const previous = Object.fromEntries(
+      cutoverKeys.map((key) => [key, process.env[key]])
+    ) as Record<(typeof cutoverKeys)[number], string | undefined>;
+    const token = "mission-control-token-must-not-leak";
+
+    try {
+      process.env["NEON_CUTOVER_STAGE"] = "canary";
+      process.env["NEON_CUTOVER_CANARY_APPROVED"] = "ready";
+      process.env["NEON_CUTOVER_OUTBOUND_ENABLED"] = "disabled";
+      process.env["NEON_CUTOVER_CANARY_CHANNELS"] = "900000000000000005";
+      process.env["NEON_DISCORD_BOT_TOKEN"] = token;
+      await writeNeonCutoverPromotion(projectRoot, {
+        NEON_CUTOVER_STAGE: "canary",
+        NEON_CUTOVER_CANARY_APPROVED: "ready",
+        NEON_CUTOVER_OUTBOUND_ENABLED: "ready",
+        NEON_CUTOVER_CANARY_CHANNELS: "900000000000000005"
+      });
+
+      const handle = await listenNeonGatewayHttpServer(
+        { projectRoot },
+        { host: "127.0.0.1", port: 0 }
+      );
+
+      try {
+        const armed = await fetchNeonMissionControlGatewaySnapshot(handle.url);
+        assert.equal(armed.canaryPosture.outboundEnabled, true);
+        assert.equal(armed.canaryPosture.ready, true);
+        assert.doesNotMatch(JSON.stringify(armed), new RegExp(token, "u"));
+
+        process.env["NEON_CUTOVER_OUTBOUND_ENABLED"] = "ready";
+        await writeNeonCutoverPromotion(projectRoot, {
+          NEON_CUTOVER_STAGE: "canary",
+          NEON_CUTOVER_CANARY_APPROVED: "ready",
+          NEON_CUTOVER_CANARY_CHANNELS: "900000000000000005"
+        });
+
+        const disarmed = await fetchNeonMissionControlGatewaySnapshot(handle.url);
+        assert.equal(disarmed.canaryPosture.outboundEnabled, false);
+        assert.equal(disarmed.canaryPosture.ready, false);
+      } finally {
+        await handle.close();
+      }
+    } finally {
+      for (const key of cutoverKeys) {
+        const value = previous[key];
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
       await rm(projectRoot, { force: true, recursive: true });
     }
   });

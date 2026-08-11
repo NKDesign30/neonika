@@ -127,7 +127,9 @@ import {
   attachNeonGatewayWebSocketServer,
   type INeonGatewayWebSocketServerHandle
 } from "./webSocketServer.js";
-import { createNeonMissionControlGatewaySnapshot } from "../missionControl/gatewaySnapshot.js";
+import {
+  createLiveNeonMissionControlGatewaySnapshot
+} from "../missionControl/gatewaySnapshot.js";
 import { readNeonMissionControlDiscordCockpitSnapshot } from "../missionControl/discordCockpitSnapshot.js";
 import { createNeonCronDaemonStatusSnapshot } from "../missionControl/cronDaemonStatusPanel.js";
 import { createNeonHeartbeatDaemonStatusSnapshot } from "../missionControl/heartbeatDaemonStatusPanel.js";
@@ -1848,7 +1850,12 @@ async function handleMissionControlGateway(context: IRouteContext): Promise<void
   writeJson(
     context.response,
     200,
-    createNeonMissionControlGatewaySnapshot(status, runs, { discordCockpit })
+    await createLiveNeonMissionControlGatewaySnapshot(
+      context.projectRoot,
+      status,
+      runs,
+      { discordCockpit }
+    )
   );
 }
 
@@ -1964,7 +1971,12 @@ async function handleMissionControlGatewayHtml(
     }),
     createNeonRoundtableRoomsSnapshot(context.projectRoot)
   ]);
-  const snapshot = createNeonMissionControlGatewaySnapshot(status, runs, { discordCockpit });
+  const snapshot = await createLiveNeonMissionControlGatewaySnapshot(
+    context.projectRoot,
+    status,
+    runs,
+    { discordCockpit }
+  );
   const initialView = resolveNeonMissionControlViewFromPathname(context.requestUrl.pathname) ?? "chat";
   // Wire the real run-control registry into the server-rendered live-session
   // panel so active runningRunIds + Stop/Abort controls reflect the live
