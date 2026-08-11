@@ -185,6 +185,30 @@ describe("Neonika CLI runtime entry points", () => {
     }
   });
 
+  it("records Retire evidence under the configured setup root when no flag is provided", async () => {
+    const root = await mkdtemp(join(tmpdir(), "neonika-cli-retire-default-root-"));
+    const configRoot = join(root, "config");
+    const unrelatedCwd = join(root, "unrelated");
+
+    try {
+      await mkdir(configRoot, { mode: 0o700, recursive: true });
+      await mkdir(unrelatedCwd, { mode: 0o700, recursive: true });
+      await writeNeonGatewayRun(configRoot, createCliRetireRun());
+
+      const stdout = await runCli(
+        ["cutover-retire-smoke"],
+        unrelatedCwd,
+        { NEONIKA_CONFIG_ROOT: configRoot }
+      );
+
+      assert.match(stdout, /Neonika Retire Export\/Import: ok/u);
+      assert.equal((await createNeonRetireEvidenceSnapshot(configRoot)).state, "ready");
+      assert.equal((await createNeonRetireEvidenceSnapshot(unrelatedCwd)).state, "needs-evidence");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("keeps the supervised runtime on its configured port instead of falling back", { timeout: 30_000 }, async () => {
     const root = await mkdtemp(join(tmpdir(), "neonika-cli-runtime-service-port-"));
     const envFilePath = join(root, "runtime.env");

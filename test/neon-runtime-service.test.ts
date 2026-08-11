@@ -561,6 +561,7 @@ describe("Neonika runtime service", () => {
     };
     const commands: INeonRuntimeServiceCommand[] = [];
     let healthSamples = 0;
+    let observationNowMs = 1_000;
 
     try {
       await mkdir(configRoot, { mode: 0o700, recursive: true });
@@ -588,8 +589,11 @@ describe("Neonika runtime service", () => {
           return { state: "ready" as const, statusCode: 200 };
         },
         predecessorObservation: {
-          delay: async () => undefined,
+          delay: async () => {
+            observationNowMs += 25;
+          },
           intervalMs: 0,
+          nowMs: () => observationNowMs,
           sampleCount: 3
         },
         predecessor: {
@@ -623,7 +627,7 @@ describe("Neonika runtime service", () => {
       assert.equal(executed.safety.predecessorMutationExecuted, true);
       assert.equal(executed.safety.predecessorRecoveryConfigured, true);
       assert.deepEqual(executed.observation, {
-        durationMs: 0,
+        durationMs: 50,
         samplesPassed: 3,
         samplesRequired: 3,
         state: "ready"
@@ -634,7 +638,7 @@ describe("Neonika runtime service", () => {
       const evidence = await readFile(plan.paths.operationsPath, "utf8");
       assert.match(evidence, /"samplesRequired":3/u);
       assert.match(evidence, /"samplesPassed":3/u);
-      assert.match(renderNeonRuntimeServiceOperationReport(executed), /Observation: ready \(3\/3 samples, 0 ms\)/u);
+      assert.match(renderNeonRuntimeServiceOperationReport(executed), /Observation: ready \(3\/3 samples, 50 ms\)/u);
       assert.doesNotMatch(evidence, new RegExp(escapeRegExp(root), "u"));
       assert.doesNotMatch(evidence, new RegExp(sensitiveMarker, "u"));
       assert.doesNotMatch(evidence, /legacy-control/u);
@@ -656,6 +660,7 @@ describe("Neonika runtime service", () => {
     };
     const commands: INeonRuntimeServiceCommand[] = [];
     let healthSamples = 0;
+    let observationNowMs = 2_000;
 
     try {
       await mkdir(configRoot, { mode: 0o700, recursive: true });
@@ -690,15 +695,18 @@ describe("Neonika runtime service", () => {
           standDownCommand
         },
         predecessorObservation: {
-          delay: async () => undefined,
+          delay: async () => {
+            observationNowMs += 40;
+          },
           intervalMs: 0,
+          nowMs: () => observationNowMs,
           sampleCount: 3
         }
       });
 
       assert.equal(result.state, "rolled-back");
       assert.deepEqual(result.observation, {
-        durationMs: 0,
+        durationMs: 40,
         samplesPassed: 1,
         samplesRequired: 3,
         state: "degraded"
@@ -736,6 +744,11 @@ describe("Neonika runtime service", () => {
       await mkdir(plan.paths.stateRoot, { mode: 0o700, recursive: true });
       await writeFile(plan.paths.operationsPath, "", { mode: 0o600 });
       await chmod(plan.paths.operationsPath, 0o644);
+      assert.equal(
+        (await stat(plan.paths.operationsPath)).mode & 0o777,
+        0o644,
+        "test precondition: the operation evidence file must be group-readable"
+      );
 
       const result = await executeNeonRuntimeServiceOperation(plan, "stand-down", {
         gate: resolveNeonRuntimeServiceMutationGate({

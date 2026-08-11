@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-08-12
+
+- Aligned the default Retire evidence root with the runtime-service setup root
+  and measured the observed stand-down window with a monotonic clock.
+
 ## [0.6.0] - 2026-08-11
 
 - Replaced the manual Retire evidence flag with a private, atomic

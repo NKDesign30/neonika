@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { access, appendFile, chmod, lstat, mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { performance } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { redactSnapshotText } from "../harness/redaction.js";
@@ -131,6 +132,7 @@ export interface IExecuteNeonRuntimeServiceOperationOptions {
   readonly predecessorObservation?: {
     readonly delay?: (milliseconds: number) => Promise<void>;
     readonly intervalMs?: number;
+    readonly nowMs?: () => number;
     readonly sampleCount?: number;
   };
   readonly predecessor?: {
@@ -1584,6 +1586,7 @@ async function observeNeonRuntimeServiceHealth(
   options: {
     readonly delay: (milliseconds: number) => Promise<void>;
     readonly intervalMs: number;
+    readonly nowMs: () => number;
     readonly sampleCount: number;
   }
 ): Promise<{
@@ -1592,6 +1595,11 @@ async function observeNeonRuntimeServiceHealth(
 }> {
   const { intervalMs, sampleCount } = options;
   const wait = options.delay;
+  const startedAtMs = options.nowMs();
+  const elapsedMs = (): number => {
+    const elapsed = options.nowMs() - startedAtMs;
+    return Number.isFinite(elapsed) && elapsed > 0 ? Math.round(elapsed) : 0;
+  };
   let samplesPassed = 0;
   let lastHealth: INeonRuntimeServiceHealth = { state: "unavailable" };
   for (let sample = 0; sample < sampleCount; sample += 1) {
@@ -1602,7 +1610,7 @@ async function observeNeonRuntimeServiceHealth(
         return {
           health: { state: "unavailable" },
           observation: {
-            durationMs: sample * intervalMs,
+            durationMs: elapsedMs(),
             samplesPassed,
             samplesRequired: sampleCount,
             state: "degraded"
@@ -1615,7 +1623,7 @@ async function observeNeonRuntimeServiceHealth(
       return {
         health: lastHealth,
         observation: {
-          durationMs: sample * intervalMs,
+          durationMs: elapsedMs(),
           samplesPassed,
           samplesRequired: sampleCount,
           state: "degraded"
@@ -1628,7 +1636,7 @@ async function observeNeonRuntimeServiceHealth(
   return {
     health: lastHealth,
     observation: {
-      durationMs: (sampleCount - 1) * intervalMs,
+      durationMs: elapsedMs(),
       samplesPassed,
       samplesRequired: sampleCount,
       state: "ready"
@@ -1641,6 +1649,7 @@ function resolvePredecessorObservationOptions(
 ): {
   readonly delay: (milliseconds: number) => Promise<void>;
   readonly intervalMs: number;
+  readonly nowMs: () => number;
   readonly sampleCount: number;
 } {
   const sampleCount = options.predecessorObservation?.sampleCount ?? 3;
@@ -1654,6 +1663,7 @@ function resolvePredecessorObservationOptions(
   return {
     delay: options.predecessorObservation?.delay ?? delay,
     intervalMs,
+    nowMs: options.predecessorObservation?.nowMs ?? (() => performance.now()),
     sampleCount
   };
 }
