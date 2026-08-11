@@ -97,6 +97,9 @@ describe("Neonika WhatsApp canary tap", () => {
         NEON_CUTOVER_OUTBOUND_ENABLED: "ready"
       });
       const outboundId = createNeonWhatsAppCanaryMessageId("prior-delivery");
+      const ownerJid = "15551234567@s.whatsapp.net";
+      const groupJid = `${"9".repeat(18)}@g.us`;
+      const nonOwnerJid = `${"15550000000"}@s.whatsapp.net`;
       const runtime = createCanaryRuntime(
         [
           {
@@ -106,17 +109,17 @@ describe("Neonika WhatsApp canary tap", () => {
           {
             event: "messages.upsert",
             value: upsert([
-              message("group-command", "15551234567-1@g.us", false, "/neon group"),
-              message("non-owner-command", "15550000000@s.whatsapp.net", false, "/neon nope"),
-              message("missing-prefix", "15551234567@s.whatsapp.net", false, "status"),
-              message(outboundId, "15551234567@s.whatsapp.net", true, "/neon loop"),
-              message("owner-command", "15551234567@s.whatsapp.net", false, "/neon status")
+              message("group-command", groupJid, false, "/neon group"),
+              message("non-owner-command", nonOwnerJid, false, "/neon nope"),
+              message("missing-prefix", ownerJid, false, "status"),
+              message(outboundId, ownerJid, true, "/neon loop"),
+              message("owner-command", ownerJid, false, "/neon status")
             ])
           },
           {
             event: "messages.upsert",
             value: upsert([
-              message("owner-command", "15551234567@s.whatsapp.net", false, "/neon status")
+              message("owner-command", ownerJid, false, "/neon status")
             ])
           }
         ],
@@ -164,7 +167,7 @@ describe("Neonika WhatsApp canary tap", () => {
       assert.equal(runs[0]?.mode, "live");
       assert.equal(runs[0]?.delivery.state, "delivered");
       assert.equal(runs[0]?.delivery.cutoverStage, "canary");
-      assert.doesNotMatch(JSON.stringify({ events, runs }), /15551234567/u);
+      assert.doesNotMatch(JSON.stringify({ events, runs }), /15551234567|15550000000/u);
     } finally {
       await rm(root, { force: true, recursive: true });
     }
