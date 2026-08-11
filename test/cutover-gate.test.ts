@@ -13,6 +13,7 @@ import {
   evaluateShadowExitGate,
   recordNeonOperatorAck,
   renderNeonCutoverGateReport,
+  rescueNeonGatewayRunStore,
   writeNeonGatewayRun,
   writeNeonMirrorEvidence,
   type INeonGatewayShadowRun
@@ -162,6 +163,34 @@ describe("Neonika Cutover gates", () => {
       assert.equal(snapshot.gates.find((gate) => gate.id === "shadow")?.state, "pass");
       assert.equal(snapshot.gates.find((gate) => gate.id === "primary")?.state, "pass");
       assert.match(report, /Runs: 51 \(active evidence=50\)/);
+    } finally {
+      await rm(projectRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("surfaces failed-run supersession without exposing archived run data", async () => {
+    const projectRoot = await createTempProjectRoot();
+
+    try {
+      await writeNeonGatewayRun(projectRoot, createFailedCutoverRun("private-failed-run-id"));
+      await writeNeonGatewayRun(projectRoot, createCutoverRun("run-after-supersession"));
+      await rescueNeonGatewayRunStore(projectRoot, {
+        enabled: true,
+        now: () => new Date("2026-06-05T11:30:00.000Z")
+      });
+
+      const snapshot = await createNeonCutoverGateSnapshot(projectRoot, {
+        env: { ...createRouteReadyEnv(), NEON_CUTOVER_STAGE: "shadow" },
+        now: () => new Date("2026-06-05T11:31:00.000Z")
+      });
+      const report = renderNeonCutoverGateReport(snapshot);
+
+      assert.equal(snapshot.source.runStoreSupersessionState, "ready");
+      assert.equal(snapshot.source.supersessionRecords, 1);
+      assert.equal(snapshot.source.supersededFailedRuns, 1);
+      assert.match(report, /Run Supersession: ready records=1 archived-failures=1/);
+      assert.doesNotMatch(JSON.stringify(snapshot), /private-failed-run-id|neonika-run-store-rescue/);
+      assert.doesNotMatch(report, /private-failed-run-id|neonika-run-store-rescue/);
     } finally {
       await rm(projectRoot, { force: true, recursive: true });
     }

@@ -24,6 +24,10 @@ import {
 } from "../doctor/neonDoctor.js";
 import { createNeonGatewayRouteInspectionSnapshot } from "../gateway/routeInspection.js";
 import { readNeonCanaryStabilityEvidence } from "../gateway/canaryStabilityEvidence.js";
+import {
+  readNeonRunStoreSupersessionEvidence,
+  type TNeonRunStoreSupersessionEvidenceState
+} from "../gateway/runStoreRescue.js";
 import { readNeonGatewayRuns, readNeonGatewayStatus } from "../gateway/runStore.js";
 import type { INeonGatewayShadowRun } from "../gateway/types.js";
 import { loadNeonCutoverEnv } from "./cutoverPromotion.js";
@@ -59,6 +63,9 @@ export interface INeonCutoverGateSource {
   readonly canaryDeliveries?: number;
   readonly acknowledgedCanaryDeliveries?: number;
   readonly unresolvedFailures?: number;
+  readonly runStoreSupersessionState?: TNeonRunStoreSupersessionEvidenceState;
+  readonly supersessionRecords?: number;
+  readonly supersededFailedRuns?: number;
   readonly latestRunId: string | null;
   readonly rollbackConfigured: boolean;
 }
@@ -103,7 +110,7 @@ export async function createNeonCutoverGateSnapshot(
   const env = options.env ?? (await loadNeonCutoverEnv(projectRoot));
   const currentStage = options.currentStage ?? readCutoverStage(env) ?? neonDefaultCutoverStage;
   const now = options.now ?? (() => new Date());
-  const [doctor, routes, status, activeRuns, mirrorEvidence, canaryEvidence] = await Promise.all([
+  const [doctor, routes, status, activeRuns, mirrorEvidence, canaryEvidence, supersessionEvidence] = await Promise.all([
     createNeonDoctorSnapshot(projectRoot, {
       currentStage,
       now
@@ -117,7 +124,8 @@ export async function createNeonCutoverGateSnapshot(
     createNeonMirrorEvidenceSnapshot(projectRoot, {
       now
     }),
-    readNeonCanaryStabilityEvidence(projectRoot, { limit: activeCutoverEvidenceRunLimit })
+    readNeonCanaryStabilityEvidence(projectRoot, { limit: activeCutoverEvidenceRunLimit }),
+    readNeonRunStoreSupersessionEvidence(projectRoot)
   ]);
   const activeEvidence = createActiveCutoverRunEvidence(activeRuns);
   const facts: ICutoverFacts = {
@@ -160,6 +168,9 @@ export async function createNeonCutoverGateSnapshot(
       canaryDeliveries: canaryEvidence.totals.delivered,
       acknowledgedCanaryDeliveries: canaryEvidence.totals.acknowledged,
       unresolvedFailures: canaryEvidence.totals.unresolvedFailures,
+      runStoreSupersessionState: supersessionEvidence.state,
+      supersessionRecords: supersessionEvidence.totals.records,
+      supersededFailedRuns: supersessionEvidence.totals.archivedFailedRuns,
       latestRunId: status.latestRun?.runId ?? null,
       rollbackConfigured: facts.rollbackConfigured
     }
@@ -178,6 +189,7 @@ export function renderNeonCutoverGateReport(snapshot: INeonCutoverGateSnapshot):
     `Mirror Evidence: ${snapshot.source.mirrorEvidenceState} accepted=${snapshot.source.mirrorAcceptedCount}`,
     `Runs: ${snapshot.source.gatewayRuns} (active evidence=${activeEvidenceRuns})`,
     `Canary Evidence: delivered=${snapshot.source.canaryDeliveries ?? 0} acknowledged=${snapshot.source.acknowledgedCanaryDeliveries ?? 0} unresolved-failures=${snapshot.source.unresolvedFailures ?? 0}`,
+    `Run Supersession: ${snapshot.source.runStoreSupersessionState ?? "empty"} records=${snapshot.source.supersessionRecords ?? 0} archived-failures=${snapshot.source.supersededFailedRuns ?? 0}`,
     ...snapshot.gates.map((gate) => {
       const recovery = gate.recovery.length > 0 ? ` recovery=${gate.recovery.join(" | ")}` : "";
       return `${gate.state.toUpperCase()} ${gate.label}: ${gate.summary}${recovery}`;

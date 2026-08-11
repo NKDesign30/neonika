@@ -348,8 +348,10 @@ import {
   openNeonNodeDeviceSession,
   parseNeonGatewayFrameJson,
   readNeonGatewayStatus,
+  readNeonRunStoreSupersessionEvidence,
   rescueNeonGatewayRunStore,
   renderNeonRunStoreRescueReport,
+  renderNeonRunStoreSupersessionReport,
   recordNeonNodeActionApproval,
   recordNeonNodeActionRequest,
   recordNeonNodeTransportResult,
@@ -1114,6 +1116,11 @@ const commands: Record<string, ICommand> = {
     description:
       "Archive failed gateway runs into state/gateway/archive and rewrite runs.jsonl without them (kept runs untouched). Dry-run unless NEON_RUN_STORE_RESCUE_ENABLED=ready.",
     run: runGatewayRunStoreRescue
+  },
+  "gateway-run-store-supersessions": {
+    description:
+      "Inspect leak-safe failed-run supersession evidence without exposing archived run data or host paths.",
+    run: runGatewayRunStoreSupersessions
   },
   "gateway-api-smoke": {
     description: "Start a local Neonika Gateway API server and fetch status.",
@@ -6999,6 +7006,11 @@ async function runGatewayStatus(): Promise<string> {
 async function runGatewayRunStoreRescue(): Promise<string> {
   const result = await rescueNeonGatewayRunStore(process.cwd());
   return renderNeonRunStoreRescueReport(result);
+}
+
+async function runGatewayRunStoreSupersessions(): Promise<string> {
+  const evidence = await readNeonRunStoreSupersessionEvidence(process.cwd());
+  return renderNeonRunStoreSupersessionReport(evidence);
 }
 
 async function runCutoverPromote(): Promise<string> {

@@ -30,6 +30,10 @@ import { createNeonMirrorEvidenceSnapshot } from "../core/mirrorEvidence.js";
 import { evaluateNeonCanaryLivePreconditions } from "../gateway/outboundSender.js";
 import { readNeonCanaryStabilityEvidence } from "../gateway/canaryStabilityEvidence.js";
 import {
+  readNeonRunStoreSupersessionEvidence,
+  type INeonRunStoreSupersessionEvidence
+} from "../gateway/runStoreRescue.js";
+import {
   assessNeonNodeRuntime,
   type INeonNodeRuntimeAssessment
 } from "../core/nodeRuntimeGuard.js";
@@ -110,6 +114,7 @@ export type TNeonDoctorCheckId =
   | "device-pairing"
   | "state-integrity"
   | "run-store-integrity"
+  | "run-store-supersession"
   | "indexer"
   | "transcript"
   | "heartbeat-daemon"
@@ -174,7 +179,7 @@ export async function createNeonDoctorSnapshot(
   const routeInspectionOptions = options.env
     ? { env: options.env, now: () => generatedAt }
     : { now: () => generatedAt };
-  const [status, runs, rawRuns, routeInspection, mirrorEvidence, canaryEvidence] = await Promise.all([
+  const [status, runs, rawRuns, routeInspection, mirrorEvidence, canaryEvidence, supersessionEvidence] = await Promise.all([
     readNeonGatewayStatus(projectRoot),
     readNeonGatewayRuns(projectRoot, {
       maxRuns: options.maxRuns ?? 50
@@ -182,7 +187,8 @@ export async function createNeonDoctorSnapshot(
     readRawRuns(paths.runsPath),
     createNeonGatewayRouteInspectionSnapshot(projectRoot, routeInspectionOptions),
     createNeonMirrorEvidenceSnapshot(projectRoot, { now: () => generatedAt }),
-    readNeonCanaryStabilityEvidence(projectRoot, { limit: options.maxRuns ?? 50 })
+    readNeonCanaryStabilityEvidence(projectRoot, { limit: options.maxRuns ?? 50 }),
+    readNeonRunStoreSupersessionEvidence(projectRoot)
   ]);
   // Ordinary live cutover values override persisted configuration. The persisted
   // outbound arm is authoritative and fails closed when absent, so every cutover-aware
@@ -255,6 +261,7 @@ export async function createNeonDoctorSnapshot(
     devicePairingCheck,
     buildStateIntegrityCheck(paths.stateRoot),
     buildRunStoreIntegrityCheck(rawRuns),
+    buildRunStoreSupersessionCheck(supersessionEvidence),
     buildIndexerCheck(runs),
     transcriptCheck,
     heartbeatDaemonCheck
@@ -427,6 +434,8 @@ function recommendedDoctorAction(check: INeonDoctorCheck): string {
       return "Move NEON_* state off cloud-synced storage (iCloud/CloudStorage) to a local-only path.";
     case "run-store-integrity":
       return "Inspect runs.jsonl for truncated/corrupt lines before trusting run counts; a partial write may have dropped runs.";
+    case "run-store-supersession":
+      return "Run node dist/src/cli.js gateway-run-store-supersessions and inspect invalid or incomplete audit evidence before cutover.";
     case "indexer":
       return "Run node dist/src/cli.js indexer-smoke to verify decision-candidate projection from Gateway runs.";
     case "transcript":
@@ -1107,6 +1116,46 @@ function buildRunStoreIntegrityCheck(rawRuns: string | undefined): INeonDoctorCh
         ? `All ${integrity.totalLines} run-store line(s) parse cleanly.`
         : "Run store is empty or absent.",
     details: [`totalLines=${integrity.totalLines}`, `parsedRuns=${integrity.parsedRuns}`]
+  };
+}
+
+function buildRunStoreSupersessionCheck(
+  evidence: INeonRunStoreSupersessionEvidence
+): INeonDoctorCheck {
+  const details = [
+    `records=${evidence.totals.records}`,
+    `archivedFailedRuns=${evidence.totals.archivedFailedRuns}`,
+    `incompleteRecords=${evidence.totals.incompleteRecords}`,
+    `invalidRecords=${evidence.totals.invalidRecords}`,
+    `latest=${evidence.latest?.supersessionId.slice(0, 16) ?? "none"}`
+  ];
+
+  if (evidence.state === "invalid") {
+    return {
+      id: "run-store-supersession",
+      label: "Run-store supersession",
+      state: "fail",
+      summary: "Failed-run supersession evidence is incomplete or invalid.",
+      details
+    };
+  }
+
+  if (evidence.state === "empty") {
+    return {
+      id: "run-store-supersession",
+      label: "Run-store supersession",
+      state: "pass",
+      summary: "No failed-run supersessions are recorded.",
+      details
+    };
+  }
+
+  return {
+    id: "run-store-supersession",
+    label: "Run-store supersession",
+    state: "pass",
+    summary: `${evidence.totals.archivedFailedRuns} failed run(s) are preserved in ${evidence.totals.records} auditable supersession record(s).`,
+    details
   };
 }
 
