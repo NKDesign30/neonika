@@ -187,6 +187,7 @@ fi
   "$neonika_bin" status >/dev/null
   "$neonika_bin" onboard --yes --config-root "$config_root" >/dev/null
   "$neonika_bin" onboarding-smoke --config-root "$config_root" >/dev/null
+  "$neonika_bin" runtime-service-smoke | grep -q '^Neonika Runtime Service Smoke: ok$'
   "$neonika_bin" whatsapp-status --config-root "$config_root" | grep -q '^WhatsApp companion: disabled$'
   "$neonika_bin" mission-control-ui-smoke | grep -q '^UI: spa '
   HOME="$smoke_dir/home" "$neonika_bin" skills >"$smoke_dir/skills-report.txt"
@@ -221,5 +222,6 @@ printf 'Version: %s\n' "$installed_version"
 printf 'Leak scan: clean (%s files, %s bytes)\n' "$package_files" "$package_bytes"
 printf 'Fresh onboarding: private config and local memory ready\n'
 printf 'Mission Control: packaged SPA ready\n'
+printf 'Runtime service: portable lifecycle ready\n'
 printf 'Bundled skills: 18 ready (Ultraresearch and Teach commands; Wayfinder packaged)\n'
 printf 'Uninstall: clean\n'

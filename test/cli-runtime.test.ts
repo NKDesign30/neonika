@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { once } from "node:events";
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -141,6 +143,51 @@ describe("Neonika CLI runtime entry points", () => {
     assert.match(stdout, /Criteria: status=done/);
     assert.match(stdout, /Visible: 5\/5/);
     assert.doesNotMatch(stdout, /ReferenceError/);
+  });
+
+  it("runs the portable runtime-service lifecycle through the real top-level dispatch", async () => {
+    const stdout = await runCli(["runtime-service-smoke"]);
+
+    assert.match(stdout, /^Neonika Runtime Service Smoke: ok$/mu);
+    assert.match(stdout, /Lifecycle: install -> update -> status -> restart -> rollback -> uninstall/u);
+    assert.match(stdout, /Secrets persisted: false/u);
+    assert.match(stdout, /Shell used: false/u);
+    assert.doesNotMatch(stdout, /(?:TOKEN|SECRET)=/u);
+  });
+
+  it("keeps the supervised runtime on its configured port instead of falling back", { timeout: 30_000 }, async () => {
+    const root = await mkdtemp(join(tmpdir(), "neonika-cli-runtime-service-port-"));
+    const envFilePath = join(root, "runtime.env");
+    const server = createServer((_request, response) => response.end("occupied"));
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+
+    try {
+      const address = server.address();
+      if (address === null || typeof address === "string") {
+        throw new Error("runtime-service port test did not expose a TCP port");
+      }
+      await writeFile(
+        envFilePath,
+        `NEONIKA_HOST=127.0.0.1\nNEONIKA_PORT=${address.port}\n`,
+        { mode: 0o600 }
+      );
+      const stderr = await runCliFailure([
+        "runtime-service-run",
+        "--config-root",
+        root,
+        "--env-file",
+        envFilePath
+      ]);
+
+      assert.match(stderr, /EADDRINUSE|address already in use/u);
+      assert.doesNotMatch(stderr, /Mission Control server: ready/u);
+    } finally {
+      await new Promise<void>((resolveClose, rejectClose) => {
+        server.close((error) => error ? rejectClose(error) : resolveClose());
+      });
+      await rm(root, { force: true, recursive: true });
+    }
   });
 
   it("runs context-pack with a channel argument through the real top-level dispatch", async () => {

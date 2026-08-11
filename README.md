@@ -54,12 +54,43 @@ Discord, and records a terminal shadow run. Start both channel taps from the
 same workspace so they resolve to the same owner session. The WhatsApp tap does
 not send a reply.
 
-Upgrade and uninstall use the normal npm lifecycle:
+For a supervised Gateway and Mission Control process, create one private runtime
+environment file and install the generated user service. The service runs the
+CLI from the installed package, writes logs and rollback evidence below the
+private config root, and stores no secret values in its plist/unit or manifest:
+
+```bash
+install -m 600 /dev/null ~/.neonika/runtime.env
+$EDITOR ~/.neonika/runtime.env
+NEON_RUNTIME_SERVICE_MUTATIONS_ENABLED=ready neonika runtime-service install
+neonika runtime-service status
+```
+
+Upgrade the npm package, then run `install` again. That updates the service to
+the new installed CLI, verifies its HTTP health, and automatically restores the
+previous definition if the new runtime does not become ready. This is the path
+Martin can use both for a first supervised install and for later updates:
 
 ```bash
 npm install --global https://github.com/NKDesign30/neonika/releases/latest/download/neonika.tgz
+NEON_RUNTIME_SERVICE_MUTATIONS_ENABLED=ready neonika runtime-service install
+neonika runtime-service status
+```
+
+The remaining lifecycle commands are explicit and default-off:
+
+```bash
+NEON_RUNTIME_SERVICE_MUTATIONS_ENABLED=ready neonika runtime-service restart
+NEON_RUNTIME_SERVICE_MUTATIONS_ENABLED=ready neonika runtime-service rollback
+NEON_RUNTIME_SERVICE_MUTATIONS_ENABLED=ready neonika runtime-service uninstall
 npm uninstall --global neonika
 ```
+
+`rollback` swaps to the last verified definition and restores the current one
+automatically if that target fails health. `uninstall` removes the supervisor
+definition but preserves private logs, audit evidence, and rollback state. On
+macOS this uses a LaunchAgent; on Linux it uses a systemd user service. Neither
+requires a root daemon or invokes a shell.
 
 ## Quickstart
 
