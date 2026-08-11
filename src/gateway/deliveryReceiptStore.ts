@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 
 import type { INeonDeliveryQueueTarget } from "./deliveryQueue.js";
 import type { INeonOutboundSendResult } from "./outboundSender.js";
+import type { TNeonOutboundStage } from "../core/cutover.js";
 
 export type TNeonDeliveryIntentKind = "text" | "media" | "poll" | "embed";
 export type TNeonDeliveryReceiptState = "attempting" | "delivered" | "suppressed" | "uncertain";
@@ -29,6 +30,7 @@ export interface INeonDeliveryReceipt {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly messageId?: string;
+  readonly cutoverStage?: TNeonOutboundStage;
 }
 
 export interface INeonExactlyOnceDeliveryResult {
@@ -37,6 +39,7 @@ export interface INeonExactlyOnceDeliveryResult {
   readonly outboundSent: boolean;
   readonly attempts: number;
   readonly messageId?: string;
+  readonly cutoverStage?: TNeonOutboundStage;
   readonly reason?: string;
 }
 
@@ -123,7 +126,8 @@ export async function executeNeonExactlyOnceDelivery(
           ...attempting,
           state: "delivered",
           updatedAt,
-          messageId: result.messageId
+          messageId: result.messageId,
+          cutoverStage: result.cutoverStage
         };
         await writeNeonDeliveryReceiptFile(paths.receiptPath, delivered);
         return {
@@ -131,7 +135,8 @@ export async function executeNeonExactlyOnceDelivery(
           intentKey,
           outboundSent: true,
           attempts: delivered.attempts,
-          messageId: result.messageId
+          messageId: result.messageId,
+          cutoverStage: result.cutoverStage
         };
       }
 
@@ -258,6 +263,7 @@ function resolveExistingReceipt(
       outboundSent: false,
       attempts: receipt.attempts,
       ...(receipt.messageId ? { messageId: receipt.messageId } : {}),
+      ...(receipt.cutoverStage ? { cutoverStage: receipt.cutoverStage } : {}),
       reason: "delivery receipt already exists"
     };
   }
@@ -324,7 +330,7 @@ function parseReceipt(value: unknown): INeonDeliveryReceipt | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
-  const kind = value["kind"] === "text" || value["kind"] === "media" ? value["kind"] : undefined;
+  const kind = readReceiptKind(value["kind"]);
   const state = readReceiptState(value["state"]);
   if (
     value["version"] !== 1 ||
@@ -358,12 +364,21 @@ function parseReceipt(value: unknown): INeonDeliveryReceipt | undefined {
     attempts: value["attempts"],
     createdAt: value["createdAt"],
     updatedAt: value["updatedAt"],
-    ...(typeof value["messageId"] === "string" ? { messageId: value["messageId"] } : {})
+    ...(typeof value["messageId"] === "string" ? { messageId: value["messageId"] } : {}),
+    ...(value["cutoverStage"] === "canary" || value["cutoverStage"] === "primary"
+      ? { cutoverStage: value["cutoverStage"] }
+      : {})
   };
 }
 
 function readReceiptState(value: unknown): TNeonDeliveryReceiptState | undefined {
   return value === "attempting" || value === "delivered" || value === "suppressed" || value === "uncertain"
+    ? value
+    : undefined;
+}
+
+function readReceiptKind(value: unknown): TNeonDeliveryIntentKind | undefined {
+  return value === "text" || value === "media" || value === "poll" || value === "embed"
     ? value
     : undefined;
 }

@@ -1,5 +1,6 @@
 import type { INeonOutboundSendResult, INeonOutboundSender } from "./outboundSender.js";
 import type { INeonDeliveryQueueTarget } from "./deliveryQueue.js";
+import type { TNeonOutboundStage } from "../core/cutover.js";
 import { redactText } from "../harness/redaction.js";
 import { formatNeonDiscordReplyText } from "./discordReplyFormat.js";
 import { createNeonLocalMediaAttachmentsFromText } from "./localMediaAttachment.js";
@@ -38,6 +39,7 @@ export interface INeonCanaryReplyLoopResult {
   readonly target?: INeonDeliveryQueueTarget;
   readonly bodyPreview: string;
   readonly messageId?: string;
+  readonly cutoverStage?: TNeonOutboundStage;
   readonly reason?: string;
   /** Present when the agent requested a native Discord poll via marker. */
   readonly poll?: INeonCanaryReplyPollResult;
@@ -58,6 +60,7 @@ export interface INeonCanaryReplyLoopResult {
 export interface INeonCanaryReplyPollResult {
   readonly sent: boolean;
   readonly messageId?: string;
+  readonly cutoverStage?: TNeonOutboundStage;
 }
 
 export interface IDeliverNeonCanaryReplyForRunOptions {
@@ -126,6 +129,7 @@ export async function deliverNeonCanaryReplyForRun(
     const sentAny = pollResult?.sent === true || cardResult?.sent === true;
     const previewSource = poll ? `poll: ${poll.question}` : `card: ${card?.title ?? "embed"}`;
     const messageId = pollResult?.messageId ?? cardResult?.messageId;
+    const cutoverStage = pollResult?.cutoverStage ?? cardResult?.cutoverStage;
     return {
       state: sentAny ? "delivered" : "suppressed",
       runId: options.run.runId,
@@ -133,6 +137,7 @@ export async function deliverNeonCanaryReplyForRun(
       target,
       bodyPreview: redactText(previewSource).slice(0, 280),
       ...(messageId ? { messageId } : {}),
+      ...(cutoverStage ? { cutoverStage } : {}),
       ...(pollResult ? { poll: pollResult } : {}),
       ...(cardResult ? { card: cardResult } : {}),
       ...(sentAny && buttons ? { buttons } : {}),
@@ -282,7 +287,9 @@ async function deliverCanaryReplyCard(
   try {
     if (!options.projectRoot) {
       const sent = await sendEmbeds(target, [card]);
-      return sent.outboundSent ? { sent: true, messageId: sent.messageId } : { sent: false };
+      return sent.outboundSent
+        ? { sent: true, messageId: sent.messageId, cutoverStage: sent.cutoverStage }
+        : { sent: false };
     }
 
     const payloadHash = createNeonDeliveryPayloadHash([
@@ -304,7 +311,11 @@ async function deliverCanaryReplyCard(
       send: (deliveryTarget) => sendEmbeds(deliveryTarget, [card])
     });
     return result.state === "delivered" || result.state === "already-delivered"
-      ? { sent: true, ...(result.messageId ? { messageId: result.messageId } : {}) }
+      ? {
+          sent: true,
+          ...(result.messageId ? { messageId: result.messageId } : {}),
+          ...(result.cutoverStage ? { cutoverStage: result.cutoverStage } : {})
+        }
       : { sent: false };
   } catch {
     return { sent: false };
@@ -324,7 +335,9 @@ async function deliverCanaryReplyPoll(
   try {
     if (!options.projectRoot) {
       const sent = await sendPoll(target, poll);
-      return sent.outboundSent ? { sent: true, messageId: sent.messageId } : { sent: false };
+      return sent.outboundSent
+        ? { sent: true, messageId: sent.messageId, cutoverStage: sent.cutoverStage }
+        : { sent: false };
     }
 
     const payloadHash = createNeonDeliveryPayloadHash([
@@ -346,7 +359,11 @@ async function deliverCanaryReplyPoll(
       send: (deliveryTarget) => sendPoll(deliveryTarget, poll)
     });
     return result.state === "delivered" || result.state === "already-delivered"
-      ? { sent: true, ...(result.messageId ? { messageId: result.messageId } : {}) }
+      ? {
+          sent: true,
+          ...(result.messageId ? { messageId: result.messageId } : {}),
+          ...(result.cutoverStage ? { cutoverStage: result.cutoverStage } : {})
+        }
       : { sent: false };
   } catch {
     return { sent: false };
@@ -365,7 +382,8 @@ function projectCanaryReplySendResult(
       outboundSent: true,
       target,
       bodyPreview: result.bodyPreview,
-      messageId: result.messageId
+      messageId: result.messageId,
+      cutoverStage: result.cutoverStage
     };
   }
 
@@ -404,7 +422,8 @@ function projectExactlyOnceReplyResult(
       outboundSent: true,
       target,
       bodyPreview,
-      messageId: result.messageId
+      messageId: result.messageId,
+      ...(result.cutoverStage ? { cutoverStage: result.cutoverStage } : {})
     };
   }
 

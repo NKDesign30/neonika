@@ -16,6 +16,7 @@ import {
   enqueueNeonDeliveryDryRunCandidate,
   issueNeonNodePairingCanaryToken,
   openNeonNodeDeviceSession,
+  recordNeonOperatorAck,
   recordNeonNodeActionApproval,
   recordNeonNodeActionRequest,
   recordNeonNodePairingApproval,
@@ -30,6 +31,7 @@ import {
   type INeonAgentsSnapshot,
   type INeonAutomationSnapshot,
   type INeonChatSnapshot,
+  type INeonCanaryStabilitySnapshot,
   type INeonDeliveryQueueSnapshot,
   type INeonDoctorSnapshot,
   type INeonGatewayRouteInspectionSnapshot,
@@ -88,6 +90,42 @@ describe("Neonika Gateway HTTP server", () => {
         assert.equal(response.headers.get("cache-control"), "no-store");
         assert.equal(body.runCount, 1);
         assert.equal(body.latestRun?.runId, "run-http-1");
+      } finally {
+        await handle.close();
+      }
+    } finally {
+      await rm(projectRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("serves the same genuine Canary evidence used by the Primary gate", async () => {
+    const projectRoot = await createTempProjectRoot();
+
+    try {
+      for (let index = 1; index <= 5; index += 1) {
+        const runId = `run-http-canary-${index}`;
+        await writeNeonGatewayRun(projectRoot, createHttpCanaryRun(runId));
+        await recordNeonOperatorAck(
+          projectRoot,
+          { runId, ackedBy: "operator" },
+          { now: () => new Date("2026-05-31T15:01:00.000Z") }
+        );
+      }
+      const handle = await listenNeonGatewayHttpServer(
+        { projectRoot },
+        { host: "127.0.0.1", port: 0 }
+      );
+
+      try {
+        const response = await fetch(`${handle.url}/api/neon-canary-stability`);
+        const body = (await response.json()) as INeonCanaryStabilitySnapshot;
+
+        assert.equal(response.status, 200);
+        assert.equal(response.headers.get("cache-control"), "no-store");
+        assert.equal(body.verdict, "stable");
+        assert.equal(body.totals.delivered, 5);
+        assert.equal(body.totals.acknowledged, 5);
+        assert.equal(body.primaryReadiness.ready, true);
       } finally {
         await handle.close();
       }
@@ -2027,6 +2065,22 @@ function createHttpRun(
     },
     startedAt: "2026-05-31T15:00:00.000Z",
     completedAt: "2026-05-31T15:00:01.000Z"
+  };
+}
+
+function createHttpCanaryRun(runId: string): INeonGatewayShadowRun {
+  const run = createHttpRun(runId, "completed");
+
+  return {
+    ...run,
+    mode: "live",
+    delivery: {
+      ...run.delivery,
+      state: "delivered",
+      reason: "canary-reply",
+      messageId: `message-${runId}`,
+      cutoverStage: "canary"
+    }
   };
 }
 

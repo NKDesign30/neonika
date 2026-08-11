@@ -1,63 +1,48 @@
-import {
-  readNeonDeliveryApprovalRecords,
-  readNeonDeliveryQueueCandidates,
-  type INeonDeliveryApprovalRecord,
-  type INeonDeliveryQueueCandidate,
-  type TNeonDeliveryAckState,
-  type TNeonDeliveryRecoveryState
-} from "./deliveryQueue.js";
+import { readNeonOperatorAcks, type INeonOperatorAck } from "./operatorAcks.js";
+import { readNeonGatewayRuns } from "./runStore.js";
+import type { INeonGatewayShadowRun } from "./types.js";
 
 /**
- * Read-only canary stability evidence over the persisted delivery store
- * (`delivery-queue.jsonl` + `delivery-approvals.jsonl`).
+ * Authoritative, read-only Canary evidence over persisted Gateway runs and
+ * operator acknowledgements. A delivery qualifies only when the run itself
+ * proves `live + completed + delivered + cutoverStage=canary + messageId`.
+ * Acknowledgements count only when recorded after that delivery completed.
  *
- * This is the evidence an operator (and the canary->primary decision) needs:
- * the last N delivery candidates with their approval/ack/recovery disposition
- * and a stability verdict. It never sends, never arms, never mutates the store.
- *
- * Honesty under the shadow contract: every candidate carries `outboundSent:false`,
- * so this is dry-run pipeline evidence (was the queue->approval->ack->drain path
- * exercised cleanly), not proof of live sends. Primary therefore stays blocked
- * regardless of how clean the evidence looks; unblocking it is an operator decision.
- *
- * Leak-safe: the record exposes a `channel:<id>` route label (an operator-
- * configured id, like the canary posture panel already shows) and never the
- * message content (`finalTextPreview` is deliberately omitted) or any raw error.
+ * The projection contains no message body, message id, channel id, ack note,
+ * error text, workspace path, or operator identity. It never sends or mutates.
  */
 
-export type TNeonCanaryStabilityVerdict = "no-evidence" | "dry-run-stable" | "unstable";
+export type TNeonCanaryStabilityVerdict = "no-evidence" | "collecting" | "stable" | "unstable";
 
 export type TNeonCanaryStabilityDisposition =
-  | "queued"
-  | "approved-pending"
-  | "acked-done"
-  | "rejected"
-  | "pending-recovery";
+  | "awaiting-acknowledgement"
+  | "acknowledged"
+  | "failed";
 
 export interface INeonCanaryStabilityRecord {
-  readonly candidateId: string;
   readonly runId: string;
-  readonly channelLabel: string;
-  readonly ackState: TNeonDeliveryAckState;
-  readonly recoveryState: TNeonDeliveryRecoveryState;
+  readonly channel: INeonGatewayShadowRun["request"]["channel"];
   readonly disposition: TNeonCanaryStabilityDisposition;
-  readonly approved: boolean;
-  readonly outboundSent: false;
-  readonly createdAt: string;
+  readonly delivered: boolean;
+  readonly acknowledged: boolean;
+  readonly occurredAt: string;
 }
 
 export interface INeonCanaryStabilityTotals {
-  readonly total: number;
-  readonly approved: number;
-  readonly ackedDone: number;
-  readonly rejected: number;
-  readonly pendingRecovery: number;
-  readonly suppressed: number;
+  readonly inspected: number;
+  readonly delivered: number;
+  readonly acknowledged: number;
+  readonly unresolvedFailures: number;
 }
 
+export type TNeonCanaryStabilityPrimaryReadinessReason =
+  | "ready"
+  | "needs-five-acknowledged-canary-deliveries"
+  | "unresolved-failures";
+
 export interface INeonCanaryStabilityPrimaryReadiness {
-  readonly ready: false;
-  readonly reason: "primary-blocked-needs-operator";
+  readonly ready: boolean;
+  readonly reason: TNeonCanaryStabilityPrimaryReadinessReason;
 }
 
 export interface INeonCanaryStabilitySnapshot {
@@ -68,125 +53,147 @@ export interface INeonCanaryStabilitySnapshot {
   readonly primaryReadiness: INeonCanaryStabilityPrimaryReadiness;
 }
 
-const DEFAULT_LIMIT = 20;
+const DEFAULT_LIMIT = 50;
+const requiredAcknowledgedDeliveries = 5;
 
-interface INeonCandidateApprovalState {
-  readonly approved: boolean;
-  readonly rejected: boolean;
-}
-
-function resolveApprovalStates(
-  approvals: readonly INeonDeliveryApprovalRecord[]
-): Map<string, INeonCandidateApprovalState> {
-  const byCandidate = new Map<string, INeonCandidateApprovalState>();
-  for (const approval of approvals) {
-    const prior = byCandidate.get(approval.candidateId) ?? { approved: false, rejected: false };
-    byCandidate.set(approval.candidateId, {
-      approved: prior.approved || approval.decision === "approve-canary",
-      rejected: prior.rejected || approval.decision === "reject"
-    });
-  }
-  return byCandidate;
-}
-
-function resolveDisposition(
-  candidate: INeonDeliveryQueueCandidate,
-  approval: INeonCandidateApprovalState
-): TNeonCanaryStabilityDisposition {
-  if (candidate.recoveryState === "pending-drain") {
-    return "pending-recovery";
-  }
-  // Rejection only counts when it was not later superseded by an approval.
-  if (approval.rejected && !approval.approved) {
-    return "rejected";
-  }
-  if (candidate.ackState === "done") {
-    return "acked-done";
-  }
-  if (approval.approved) {
-    return "approved-pending";
-  }
-  return "queued";
-}
-
-/**
- * Pure stability summary over already-read candidates + approvals. Candidates are
- * taken newest-first (ISO `createdAt` sorts chronologically) up to `limit`.
- */
 export function summarizeNeonCanaryStability(
-  candidates: readonly INeonDeliveryQueueCandidate[],
-  approvals: readonly INeonDeliveryApprovalRecord[],
+  runs: readonly INeonGatewayShadowRun[],
+  acknowledgements: readonly INeonOperatorAck[],
   options: { readonly limit?: number } = {}
 ): INeonCanaryStabilitySnapshot {
-  const limit =
-    typeof options.limit === "number" && options.limit > 0 ? Math.floor(options.limit) : DEFAULT_LIMIT;
-  const approvalStates = resolveApprovalStates(approvals);
+  const limit = normalizeLimit(options.limit);
+  const orderedRuns = [...runs]
+    .sort((left, right) => right.completedAt.localeCompare(left.completedAt))
+    .slice(0, limit);
+  const acknowledgementByRunId = new Map(
+    acknowledgements.map((acknowledgement) => [acknowledgement.runId, acknowledgement])
+  );
 
-  const ordered = [...candidates].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
+  const records: INeonCanaryStabilityRecord[] = [];
+  for (const run of orderedRuns) {
+    if (run.status === "failed") {
+      records.push({
+        runId: run.runId,
+        channel: run.request.channel,
+        disposition: "failed",
+        delivered: false,
+        acknowledged: false,
+        occurredAt: run.completedAt
+      });
+      continue;
+    }
+    if (!isGenuineCanaryDelivery(run)) {
+      continue;
+    }
 
-  const records: INeonCanaryStabilityRecord[] = ordered.map((candidate) => {
-    const approval = approvalStates.get(candidate.id) ?? { approved: false, rejected: false };
-    return {
-      candidateId: candidate.id,
-      runId: candidate.runId,
-      channelLabel: `channel:${candidate.target.channelId}`,
-      ackState: candidate.ackState,
-      recoveryState: candidate.recoveryState,
-      disposition: resolveDisposition(candidate, approval),
-      approved: approval.approved,
-      outboundSent: false,
-      createdAt: candidate.createdAt
-    };
-  });
+    const acknowledged = isPositivePostDeliveryAcknowledgement(
+      acknowledgementByRunId.get(run.runId),
+      run.completedAt
+    );
+    records.push({
+      runId: run.runId,
+      channel: run.request.channel,
+      disposition: acknowledged ? "acknowledged" : "awaiting-acknowledgement",
+      delivered: true,
+      acknowledged,
+      occurredAt: run.completedAt
+    });
+  }
 
   const totals: INeonCanaryStabilityTotals = {
-    total: records.length,
-    approved: records.filter((record) => record.approved).length,
-    ackedDone: records.filter((record) => record.disposition === "acked-done").length,
-    rejected: records.filter((record) => record.disposition === "rejected").length,
-    pendingRecovery: records.filter((record) => record.disposition === "pending-recovery").length,
-    suppressed: records.length
+    inspected: orderedRuns.length,
+    delivered: records.filter((record) => record.delivered).length,
+    acknowledged: records.filter((record) => record.acknowledged).length,
+    unresolvedFailures: records.filter((record) => record.disposition === "failed").length
   };
-
+  const primaryReadiness = resolvePrimaryReadiness(totals);
   const verdict: TNeonCanaryStabilityVerdict =
-    records.length === 0 ? "no-evidence" : totals.pendingRecovery > 0 ? "unstable" : "dry-run-stable";
+    totals.unresolvedFailures > 0
+      ? "unstable"
+      : primaryReadiness.ready
+        ? "stable"
+        : totals.delivered === 0
+          ? "no-evidence"
+          : "collecting";
 
-  return {
-    verdict,
-    limit,
-    records,
-    totals,
-    primaryReadiness: { ready: false, reason: "primary-blocked-needs-operator" }
-  };
+  return { verdict, limit, records, totals, primaryReadiness };
 }
 
-/** Reads the persisted delivery store and summarizes canary stability. */
 export async function readNeonCanaryStabilityEvidence(
   projectRoot: string,
   options: { readonly limit?: number } = {}
 ): Promise<INeonCanaryStabilitySnapshot> {
-  const [candidates, approvals] = await Promise.all([
-    readNeonDeliveryQueueCandidates(projectRoot),
-    readNeonDeliveryApprovalRecords(projectRoot)
+  const limit = normalizeLimit(options.limit);
+  const [runs, acknowledgements] = await Promise.all([
+    readNeonGatewayRuns(projectRoot, { maxRuns: limit }),
+    readNeonOperatorAcks(projectRoot)
   ]);
-  return summarizeNeonCanaryStability(candidates, approvals, options);
+  return summarizeNeonCanaryStability(runs, acknowledgements, { limit });
 }
 
 export function renderNeonCanaryStabilityReport(snapshot: INeonCanaryStabilitySnapshot): string {
   const lines: string[] = [
     "Neonika Canary Stability Evidence",
-    `verdict=${snapshot.verdict} runs=${snapshot.totals.total} approved=${snapshot.totals.approved} acked-done=${snapshot.totals.ackedDone} rejected=${snapshot.totals.rejected} pending-recovery=${snapshot.totals.pendingRecovery}`,
+    `verdict=${snapshot.verdict} inspected=${snapshot.totals.inspected} delivered=${snapshot.totals.delivered} acknowledged=${snapshot.totals.acknowledged} unresolved-failures=${snapshot.totals.unresolvedFailures}`,
     `primary: ready=${snapshot.primaryReadiness.ready} (${snapshot.primaryReadiness.reason})`,
     ""
   ];
   if (snapshot.records.length === 0) {
-    lines.push("(no delivery candidates yet — empty evidence)");
+    lines.push("(no genuine canary delivery or unresolved failure evidence — empty evidence)");
     return lines.join("\n");
   }
   for (const record of snapshot.records) {
     lines.push(
-      `- ${record.disposition} ${record.channelLabel} run=${record.runId} ack=${record.ackState} recovery=${record.recoveryState} sent=${record.outboundSent}`
+      `- ${record.disposition} channel=${record.channel} run=${record.runId} delivered=${record.delivered} acknowledged=${record.acknowledged}`
     );
   }
   return lines.join("\n");
+}
+
+function isGenuineCanaryDelivery(run: INeonGatewayShadowRun): boolean {
+  return (
+    run.mode === "live" &&
+    run.status === "completed" &&
+    run.delivery.state === "delivered" &&
+    run.delivery.cutoverStage === "canary" &&
+    Boolean(run.delivery.messageId)
+  );
+}
+
+function isPositivePostDeliveryAcknowledgement(
+  acknowledgement: INeonOperatorAck | undefined,
+  completedAt: string
+): boolean {
+  if (!acknowledgement) {
+    return false;
+  }
+  const acknowledgedTime = Date.parse(acknowledgement.ackedAt);
+  const completedTime = Date.parse(completedAt);
+  return (
+    Number.isFinite(acknowledgedTime) &&
+    Number.isFinite(completedTime) &&
+    acknowledgedTime >= completedTime
+  );
+}
+
+function resolvePrimaryReadiness(
+  totals: INeonCanaryStabilityTotals
+): INeonCanaryStabilityPrimaryReadiness {
+  if (totals.unresolvedFailures > 0) {
+    return { ready: false, reason: "unresolved-failures" };
+  }
+  if (totals.acknowledged < requiredAcknowledgedDeliveries) {
+    return { ready: false, reason: "needs-five-acknowledged-canary-deliveries" };
+  }
+  return { ready: true, reason: "ready" };
+}
+
+function normalizeLimit(value: number | undefined): number {
+  if (value === undefined) {
+    return DEFAULT_LIMIT;
+  }
+  if (!Number.isSafeInteger(value) || value < 1 || value > 1_000) {
+    throw new Error("Canary stability limit must be between 1 and 1000");
+  }
+  return value;
 }

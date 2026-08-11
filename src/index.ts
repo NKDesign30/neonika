@@ -1929,6 +1929,7 @@ export {
   type INeonCanaryStabilityRecord,
   type INeonCanaryStabilitySnapshot,
   type INeonCanaryStabilityTotals,
+  type TNeonCanaryStabilityPrimaryReadinessReason,
   type TNeonCanaryStabilityDisposition,
   type TNeonCanaryStabilityVerdict
 } from "./gateway/canaryStabilityEvidence.js";
@@ -2627,6 +2628,7 @@ export type {
   INeonGatewayShadowInput,
   INeonGatewayShadowResult,
   INeonGatewayShadowRun,
+  TNeonGatewayDeliveryCutoverStage,
   TNeonGatewayDeliveryState,
   TNeonGatewayRunMode,
   TNeonGatewayRunStatus

@@ -105,6 +105,7 @@ export async function runNeonGatewayShadow(
 export interface INeonGatewayDeliveredReplyOutcome {
   readonly messageId: string;
   readonly reason?: string;
+  readonly cutoverStage?: "canary" | "primary";
 }
 
 /**
@@ -125,7 +126,8 @@ export function markNeonGatewayRunDelivered(
       ...run.delivery,
       state: "delivered",
       reason: outcome.reason ?? "canary-reply",
-      messageId: outcome.messageId
+      messageId: outcome.messageId,
+      ...(outcome.cutoverStage ? { cutoverStage: outcome.cutoverStage } : {})
     }
   };
 }

@@ -43,6 +43,7 @@ export type TNeonGatewayRunStatus = "running" | "completed" | "failed" | "cancel
  * real channel message id was returned.
  */
 export type TNeonGatewayDeliveryState = "suppressed" | "delivered";
+export type TNeonGatewayDeliveryCutoverStage = "canary" | "primary";
 
 export interface INeonGatewayInboundMessage {
   readonly channel: TNeonChannel;
@@ -119,6 +120,8 @@ export interface INeonGatewayDeliveryResult {
   readonly finalText: string;
   /** Real channel message id, present only when `state` is `delivered`. */
   readonly messageId?: string;
+  /** Exact outbound stage returned by the gated sender for a real delivery. */
+  readonly cutoverStage?: TNeonGatewayDeliveryCutoverStage;
 }
 
 export interface INeonGatewayShadowRun {

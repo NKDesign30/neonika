@@ -992,7 +992,7 @@ const commands: Record<string, ICommand> = {
     run: runBlockedReadinessReport
   },
   "canary-stability": {
-    description: "Print canary stability evidence from the delivery store (last N runs, verdict, primary stays blocked).",
+    description: "Print genuine persisted Canary deliveries, post-delivery operator acknowledgements, unresolved failures, and Primary readiness.",
     run: runCanaryStabilityReport
   },
   "live-session-readiness": {
@@ -5669,7 +5669,8 @@ async function runDiscordShadowTap(): Promise<undefined> {
             process.cwd(),
             markNeonGatewayRunDelivered(ingress.result.run, {
               messageId: reply.messageId,
-              ...(reply.reason ? { reason: reply.reason } : {})
+              ...(reply.reason ? { reason: reply.reason } : {}),
+              ...(reply.cutoverStage ? { cutoverStage: reply.cutoverStage } : {})
             })
           );
         }

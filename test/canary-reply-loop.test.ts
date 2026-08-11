@@ -38,6 +38,7 @@ describe("Neonika Canary reply loop", () => {
     assert.equal(result.state, "delivered");
     assert.equal(result.outboundSent, true);
     assert.equal(result.messageId, "reply-message-1");
+    assert.equal(result.cutoverStage, "canary");
     assert.equal(result.target?.channelId, "channel-1");
     assert.equal(result.target?.replyToMessageId, "message-1");
     assert.deepEqual(calls, ["Neon reply body"]);
@@ -66,6 +67,49 @@ describe("Neonika Canary reply loop", () => {
     assert.equal(result.state, "delivered");
     assert.equal(result.target?.channelId, "channel-1");
     assert.equal(result.target?.replyToMessageId, undefined);
+  });
+
+  it("preserves Canary stage evidence across a marker-only poll receipt replay", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "neon-canary-poll-stage-"));
+    let sendCalls = 0;
+    const sender: INeonOutboundSender = {
+      sendText() {
+        throw new Error("marker-only poll must not send text");
+      },
+      sendPoll(target, poll) {
+        sendCalls += 1;
+        return Promise.resolve({
+          outboundSent: true,
+          target,
+          bodyPreview: poll.question,
+          cutoverStage: "canary",
+          messageId: "poll-message-1",
+          sentAt: "2026-06-04T11:00:00.000Z"
+        });
+      }
+    };
+    const marker = '<NEON_POLL question="Ship it?">Yes|No</NEON_POLL>';
+
+    try {
+      const first = await deliverNeonCanaryReplyForRun({
+        run: createRun({ finalText: marker }),
+        projectRoot,
+        sender
+      });
+      const replay = await deliverNeonCanaryReplyForRun({
+        run: createRun({ finalText: marker }),
+        projectRoot,
+        sender
+      });
+
+      assert.equal(first.state, "delivered");
+      assert.equal(first.cutoverStage, "canary");
+      assert.equal(replay.state, "delivered");
+      assert.equal(replay.cutoverStage, "canary");
+      assert.equal(sendCalls, 1);
+    } finally {
+      await rm(projectRoot, { force: true, recursive: true });
+    }
   });
 
   it("formats long Discord summary replies before sending", async () => {

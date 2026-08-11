@@ -23,6 +23,7 @@ import {
   type TNeonDoctorState
 } from "../doctor/neonDoctor.js";
 import { createNeonGatewayRouteInspectionSnapshot } from "../gateway/routeInspection.js";
+import { readNeonCanaryStabilityEvidence } from "../gateway/canaryStabilityEvidence.js";
 import { readNeonGatewayRuns, readNeonGatewayStatus } from "../gateway/runStore.js";
 import type { INeonGatewayShadowRun } from "../gateway/types.js";
 import { loadNeonCutoverEnv } from "./cutoverPromotion.js";
@@ -55,6 +56,9 @@ export interface INeonCutoverGateSource {
   readonly mirrorAcceptedCount: number;
   readonly gatewayRuns: number;
   readonly activeEvidenceRuns?: number;
+  readonly canaryDeliveries?: number;
+  readonly acknowledgedCanaryDeliveries?: number;
+  readonly unresolvedFailures?: number;
   readonly latestRunId: string | null;
   readonly rollbackConfigured: boolean;
 }
@@ -74,7 +78,8 @@ interface ICutoverFacts {
   readonly routeState: string;
   readonly runCount: number;
   readonly shadowRunCount: number;
-  readonly completedCount: number;
+  readonly canaryDeliveryCount: number;
+  readonly acknowledgedCanaryDeliveryCount: number;
   readonly failedCount: number;
   readonly deliverySuppressedCount: number;
   readonly latestRunId: string | null;
@@ -98,7 +103,7 @@ export async function createNeonCutoverGateSnapshot(
   const env = options.env ?? (await loadNeonCutoverEnv(projectRoot));
   const currentStage = options.currentStage ?? readCutoverStage(env) ?? neonDefaultCutoverStage;
   const now = options.now ?? (() => new Date());
-  const [doctor, routes, status, activeRuns, mirrorEvidence] = await Promise.all([
+  const [doctor, routes, status, activeRuns, mirrorEvidence, canaryEvidence] = await Promise.all([
     createNeonDoctorSnapshot(projectRoot, {
       currentStage,
       now
@@ -111,7 +116,8 @@ export async function createNeonCutoverGateSnapshot(
     readNeonGatewayRuns(projectRoot, { maxRuns: activeCutoverEvidenceRunLimit }),
     createNeonMirrorEvidenceSnapshot(projectRoot, {
       now
-    })
+    }),
+    readNeonCanaryStabilityEvidence(projectRoot, { limit: activeCutoverEvidenceRunLimit })
   ]);
   const activeEvidence = createActiveCutoverRunEvidence(activeRuns);
   const facts: ICutoverFacts = {
@@ -120,8 +126,9 @@ export async function createNeonCutoverGateSnapshot(
     routeState: routes.state,
     runCount: activeEvidence.runCount,
     shadowRunCount: activeEvidence.shadowRunCount,
-    completedCount: activeEvidence.completedCount,
-    failedCount: activeEvidence.failedCount,
+    canaryDeliveryCount: canaryEvidence.totals.delivered,
+    acknowledgedCanaryDeliveryCount: canaryEvidence.totals.acknowledged,
+    failedCount: canaryEvidence.totals.unresolvedFailures,
     deliverySuppressedCount: activeEvidence.deliverySuppressedCount,
     latestRunId: status.latestRun?.runId ?? null,
     memoryState: findDoctorCheckState(doctor, "memory"),
@@ -150,6 +157,9 @@ export async function createNeonCutoverGateSnapshot(
       mirrorAcceptedCount: mirrorEvidence.totals.accepted,
       gatewayRuns: status.runCount,
       activeEvidenceRuns: activeEvidence.runCount,
+      canaryDeliveries: canaryEvidence.totals.delivered,
+      acknowledgedCanaryDeliveries: canaryEvidence.totals.acknowledged,
+      unresolvedFailures: canaryEvidence.totals.unresolvedFailures,
       latestRunId: status.latestRun?.runId ?? null,
       rollbackConfigured: facts.rollbackConfigured
     }
@@ -167,6 +177,7 @@ export function renderNeonCutoverGateReport(snapshot: INeonCutoverGateSnapshot):
     `Routes: ${snapshot.source.routeState}`,
     `Mirror Evidence: ${snapshot.source.mirrorEvidenceState} accepted=${snapshot.source.mirrorAcceptedCount}`,
     `Runs: ${snapshot.source.gatewayRuns} (active evidence=${activeEvidenceRuns})`,
+    `Canary Evidence: delivered=${snapshot.source.canaryDeliveries ?? 0} acknowledged=${snapshot.source.acknowledgedCanaryDeliveries ?? 0} unresolved-failures=${snapshot.source.unresolvedFailures ?? 0}`,
     ...snapshot.gates.map((gate) => {
       const recovery = gate.recovery.length > 0 ? ` recovery=${gate.recovery.join(" | ")}` : "";
       return `${gate.state.toUpperCase()} ${gate.label}: ${gate.summary}${recovery}`;
@@ -190,7 +201,8 @@ function buildCutoverGates(facts: ICutoverFacts): readonly INeonCutoverGate[] {
     canaryApproved: facts.canaryApproved,
     primaryApproved: facts.primaryApproved,
     doctorHasNoFailures: facts.doctor.state !== "fail",
-    completedCount: facts.completedCount,
+    completedCount: facts.acknowledgedCanaryDeliveryCount,
+    acknowledgedCanaryDeliveryCount: facts.acknowledgedCanaryDeliveryCount,
     retireEvidenceReady: facts.retireEvidenceReady
   });
   const stateById = new Map<TCutoverStageId, ICutoverGateState["state"]>(
@@ -209,8 +221,6 @@ function buildCutoverGates(facts: ICutoverFacts): readonly INeonCutoverGate[] {
 interface IActiveCutoverRunEvidence {
   readonly runCount: number;
   readonly shadowRunCount: number;
-  readonly completedCount: number;
-  readonly failedCount: number;
   readonly deliverySuppressedCount: number;
 }
 
@@ -220,8 +230,6 @@ function createActiveCutoverRunEvidence(
   return {
     runCount: runs.length,
     shadowRunCount: runs.filter((run) => run.mode === "shadow").length,
-    completedCount: runs.filter((run) => run.status === "completed").length,
-    failedCount: runs.filter((run) => run.status === "failed").length,
     deliverySuppressedCount: runs.filter((run) => run.delivery.state === "suppressed").length
   };
 }
@@ -344,13 +352,14 @@ function buildPrimaryGate(facts: ICutoverFacts, state: TNeonCutoverGateState): I
     return createLockedGate("primary", "Canary gate must pass before primary routing.");
   }
 
-  const stableRuns = facts.completedCount >= 5 && facts.failedCount === 0;
+  const stableRuns = facts.acknowledgedCanaryDeliveryCount >= 5 && facts.failedCount === 0;
   const doctorHasNoFailures = facts.doctor.state !== "fail";
   const exitGate = evaluatePrimaryExitGate(
     {
       primaryApproved: facts.primaryApproved,
       doctorHasNoFailures,
-      completedCount: facts.completedCount,
+      completedCount: facts.acknowledgedCanaryDeliveryCount,
+      acknowledgedCanaryDeliveryCount: facts.acknowledgedCanaryDeliveryCount,
       failedCount: facts.failedCount
     },
     "pass"
@@ -359,24 +368,29 @@ function buildPrimaryGate(facts: ICutoverFacts, state: TNeonCutoverGateState): I
 
   return createGate("primary", state, {
     summary: passed
-      ? "Primary switch has stability evidence and approval."
-      : "Primary needs more stable runs, no Doctor failures, and explicit approval.",
+      ? "Primary switch has acknowledged Canary delivery evidence and approval."
+      : "Primary needs acknowledged Canary deliveries, no unresolved failures, a clean Doctor, and explicit approval.",
     requiredEvidence: [
       "Canary gate is green.",
-      "At least five completed runs with zero failures.",
+      "At least five genuine Canary deliveries, each positively acknowledged afterwards.",
+      "No unresolved active Gateway failures.",
       "Doctor reports no failures.",
       "the operator approves primary routing."
     ],
     evidence: [
-      `completed=${facts.completedCount}`,
-      `failed=${facts.failedCount}`,
+      `canaryDelivered=${facts.canaryDeliveryCount}`,
+      `canaryAcknowledged=${facts.acknowledgedCanaryDeliveryCount}`,
+      `unresolvedFailures=${facts.failedCount}`,
       `doctor=${facts.doctor.state}`,
       `approval=${facts.primaryApproved ? "approved" : "pending"}`,
       `primaryExitGateMet=${exitGate.met}`,
       ...exitGate.reasons.map((reason) => `primaryExitGate: ${reason}`)
     ],
     recovery: [
-      ...missingRecovery(stableRuns, "Capture at least five clean canary runs."),
+      ...missingRecovery(
+        stableRuns,
+        "Capture and positively acknowledge at least five genuine Canary deliveries with no unresolved failures."
+      ),
       ...missingRecovery(doctorHasNoFailures, "Fix failing Doctor checks."),
       ...missingRecovery(facts.primaryApproved, "Set NEON_CUTOVER_PRIMARY_APPROVED=ready after operator approval.")
     ],

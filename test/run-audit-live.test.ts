@@ -60,12 +60,14 @@ async function withTempRoot<T>(run: (projectRoot: string) => Promise<T>): Promis
 describe("Neon run audit live widening", () => {
   it("marks a sent run as live/delivered with the real message id", () => {
     const delivered = markNeonGatewayRunDelivered(createShadowRun("neon-shadow-mark"), {
-      messageId: REAL_MESSAGE_ID
+      messageId: REAL_MESSAGE_ID,
+      cutoverStage: "canary"
     });
 
     assert.equal(delivered.mode, "live");
     assert.equal(delivered.delivery.state, "delivered");
     assert.equal(delivered.delivery.messageId, REAL_MESSAGE_ID);
+    assert.equal(delivered.delivery.cutoverStage, "canary");
     assert.equal(delivered.delivery.reason, "canary-reply");
     // The rest of the run is untouched.
     assert.equal(delivered.runId, "neon-shadow-mark");
@@ -76,7 +78,8 @@ describe("Neon run audit live widening", () => {
     await withTempRoot(async (projectRoot) => {
       const delivered = markNeonGatewayRunDelivered(createShadowRun("neon-shadow-roundtrip"), {
         messageId: REAL_MESSAGE_ID,
-        reason: "none"
+        reason: "none",
+        cutoverStage: "canary"
       });
       await writeNeonGatewayRunLatest(projectRoot, delivered);
 
@@ -86,6 +89,7 @@ describe("Neon run audit live widening", () => {
       assert.equal(run?.mode, "live");
       assert.equal(run?.delivery.state, "delivered");
       assert.equal(run?.delivery.messageId, REAL_MESSAGE_ID);
+      assert.equal(run?.delivery.cutoverStage, "canary");
       assert.equal(run?.delivery.reason, "none");
     });
   });

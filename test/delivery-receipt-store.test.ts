@@ -64,9 +64,12 @@ describe("Neon exactly-once delivery receipts", () => {
       const receipt = await readNeonDeliveryReceipt(projectRoot, options.intentId);
 
       assert.equal(first.state, "delivered");
+      assert.equal(first.cutoverStage, "canary");
       assert.equal(replay.state, "already-delivered");
       assert.equal(replay.messageId, "discord-message-2");
+      assert.equal(replay.cutoverStage, "canary");
       assert.equal(receipt?.state, "delivered");
+      assert.equal(receipt?.cutoverStage, "canary");
       assert.equal(receipt?.attempts, 1);
       assert.equal(receipt?.nonce, createNeonDiscordDeliveryNonce(options.intentId, 0));
       assert.equal(sendCalls, 1);

@@ -6,6 +6,7 @@ import { describe, it } from "node:test";
 
 import {
   createNeonDoctorSnapshot,
+  recordNeonOperatorAck,
   renderNeonDoctorExplainReport,
   renderNeonDoctorReport,
   resolveGatewayStatePaths,
@@ -232,8 +233,15 @@ describe("Neonika Doctor", () => {
     const projectRoot = await createTempProjectRoot();
 
     try {
+      await writeNeonGatewayRun(projectRoot, createDoctorRun("run-cutover-shadow-baseline", "attached"));
       for (let index = 1; index <= 5; index += 1) {
-        await writeNeonGatewayRun(projectRoot, createDoctorRun(`run-cutover-cascade-${index}`, "attached"));
+        const runId = `run-cutover-cascade-${index}`;
+        await writeNeonGatewayRun(projectRoot, createDoctorCanaryRun(runId));
+        await recordNeonOperatorAck(
+          projectRoot,
+          { runId, ackedBy: "operator" },
+          { now: () => new Date("2026-05-31T19:00:00.000Z") }
+        );
       }
       await chmod(resolveGatewayStatePaths(projectRoot).stateRoot, 0o700);
       await writeFile(join(projectRoot, ".env"), "NEON_TEST=[REDACTED]\n", {
@@ -264,6 +272,7 @@ describe("Neonika Doctor", () => {
         referenceRoot,
         env: {
           ...createReadyDiscordEnv(),
+          NEON_CUTOVER_STAGE: "primary",
           NEON_CUTOVER_ROLLBACK_COMMAND: "echo rollback",
           NEON_CUTOVER_CANARY_APPROVED: "ready",
           NEON_CUTOVER_PRIMARY_APPROVED: "ready",
@@ -1081,6 +1090,22 @@ function createDoctorRunWithFindings(
     request: {
       ...base.request,
       suspiciousFindings
+    }
+  };
+}
+
+function createDoctorCanaryRun(runId: string): INeonGatewayShadowRun {
+  const run = createDoctorRun(runId, "attached");
+
+  return {
+    ...run,
+    mode: "live",
+    delivery: {
+      ...run.delivery,
+      state: "delivered",
+      reason: "canary-reply",
+      messageId: `message-${runId}`,
+      cutoverStage: "canary"
     }
   };
 }
