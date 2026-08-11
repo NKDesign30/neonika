@@ -9230,10 +9230,9 @@ async function runCutoverGate(): Promise<string> {
 }
 
 async function runCutoverRetireSmoke(): Promise<string> {
-  const configRoot = readFlagValue(process.argv.slice(3), "--config-root");
-  const projectRoot = configRoot
-    ? resolveNeonSetupPaths(configRoot).configRoot
-    : process.cwd();
+  const projectRoot = resolveNeonSetupPaths(
+    readFlagValue(process.argv.slice(3), "--config-root")
+  ).configRoot;
   const verifiedAt = new Date().toISOString();
   const evidence = await writeNeonRetireRoundTripEvidence(projectRoot, verifiedAt);
 

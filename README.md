@@ -125,7 +125,8 @@ NEON_RUNTIME_SERVICE_MUTATIONS_ENABLED=ready neonika runtime-service stand-down 
 The Retire gate ignores manual evidence flags. `cutover-retire-smoke` writes a
 private 0600 record containing only counts, timestamp, and a SHA-256 bundle
 digest. Stand-down samples Neonika health three times across a bounded window;
-any degraded sample immediately executes the configured predecessor restore.
+any degraded sample or failed operation-evidence write immediately executes the
+configured predecessor restore.
 `neonika runtime-service predecessor-restore` remains available independently
 of Retire readiness.
 
