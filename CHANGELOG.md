@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-11
+
+- Replaced the manual Retire evidence flag with a private, atomic
+  export/import proof bound to a SHA-256 digest, and added a bounded
+  multi-sample stand-down observation window with automatic predecessor
+  recovery.
 - Added a separate owner-only WhatsApp `/neon` canary tap with an independent
   enable flag, persisted outbound-arm checks, exactly-once receipts, replay-loop
   protection, bounded reconnects, and permanently no-send shadow ingress.
@@ -15,6 +21,10 @@
 - Added default-off productive live-index memory writeback with exact primary
   target validation, verified private pre-write backups, atomic batches,
   leak-safe observability, and a separately gated bounded rollback command.
+- Made failed-run supersession auditable while keeping archived run contents
+  out of public snapshots.
+- Required five genuine acknowledged Canary deliveries before Primary can
+  pass, instead of accepting unrelated completed runs.
 
 ## [0.5.0] - 2026-08-11
 

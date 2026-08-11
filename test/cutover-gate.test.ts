@@ -11,11 +11,13 @@ import {
   evaluatePrimaryExitGate,
   evaluateRetireExitGate,
   evaluateShadowExitGate,
+  isNeonRetireStandDownReady,
   recordNeonOperatorAck,
   renderNeonCutoverGateReport,
   rescueNeonGatewayRunStore,
   writeNeonGatewayRun,
   writeNeonMirrorEvidence,
+  writeNeonRetireRoundTripEvidence,
   type INeonGatewayShadowRun
 } from "../src/index.js";
 
@@ -119,6 +121,28 @@ describe("Neonika Cutover gates", () => {
       assert.equal(snapshot.gates.find((gate) => gate.id === "retire")?.state, "warn");
       assert.doesNotMatch(report, new RegExp(secretToken));
       assert.doesNotMatch(serialized, new RegExp(secretToken));
+
+      const manualFlagOnly = await createNeonCutoverGateSnapshot(projectRoot, {
+        ...options,
+        env: {
+          ...options.env,
+          NEON_CUTOVER_RETIRE_EVIDENCE: "ready"
+        }
+      });
+      assert.equal(manualFlagOnly.gates.find((gate) => gate.id === "retire")?.state, "warn");
+      assert.equal(isNeonRetireStandDownReady(manualFlagOnly), false);
+
+      await writeNeonRetireRoundTripEvidence(
+        projectRoot,
+        "2026-05-31T20:10:00.000Z"
+      );
+      const retireReady = await createNeonCutoverGateSnapshot(projectRoot, {
+        ...options
+      });
+      assert.equal(retireReady.state, "ready");
+      assert.equal(retireReady.gates.find((gate) => gate.id === "retire")?.state, "pass");
+      assert.equal(retireReady.source.retireEvidenceState, "ready");
+      assert.equal(isNeonRetireStandDownReady(retireReady), true);
     } finally {
       await rm(projectRoot, { force: true, recursive: true });
     }

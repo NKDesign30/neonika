@@ -373,6 +373,7 @@ import {
   renderNeonNodeRunnerSnapshotReport,
   issueNeonNodePairingCanaryToken,
   renderNeonCutoverGateReport,
+  isNeonRetireStandDownReady,
   neonDefaultCutoverStage,
   resolveCutoverStageFromEnv,
   loadNeonCutoverEnv,
@@ -382,7 +383,7 @@ import {
   resolveNeonCutoverPromotionPath,
   sanitizeNeonCutoverPromotionEnv,
   renderNeonRetireRoundTripReport,
-  verifyNeonRetireRoundTrip,
+  writeNeonRetireRoundTripEvidence,
   readNeonGatewayRuns,
   readCodexThreadBinding,
   renderNeonDoctorExplainReport,
@@ -9229,10 +9230,17 @@ async function runCutoverGate(): Promise<string> {
 }
 
 async function runCutoverRetireSmoke(): Promise<string> {
-  const runs = await readNeonGatewayRuns(process.cwd(), { maxRuns: 500 });
-  const result = verifyNeonRetireRoundTrip(runs, new Date().toISOString());
+  const configRoot = readFlagValue(process.argv.slice(3), "--config-root");
+  const projectRoot = configRoot
+    ? resolveNeonSetupPaths(configRoot).configRoot
+    : process.cwd();
+  const verifiedAt = new Date().toISOString();
+  const evidence = await writeNeonRetireRoundTripEvidence(projectRoot, verifiedAt);
 
-  return renderNeonRetireRoundTripReport(result);
+  return [
+    renderNeonRetireRoundTripReport(evidence.roundTrip),
+    `Evidence: persisted privately (${evidence.record.imported} run(s), SHA-256 bound)`
+  ].join("\n");
 }
 
 function createChatSmokeRun(projectRoot: string): INeonGatewayShadowRun {
@@ -13014,9 +13022,8 @@ async function executeRuntimeServiceCommand(): Promise<string> {
   const predecessor = resolveNeonRuntimePredecessorCommands(process.env);
   let retireGateReady = false;
   if (action === "stand-down") {
-    const cutover = await createNeonCutoverGateSnapshot(process.cwd());
-    retireGateReady = cutover.currentStage === "retire" &&
-      cutover.gates.find((gate) => gate.id === "retire")?.state === "pass";
+    const cutover = await createNeonCutoverGateSnapshot(configRoot);
+    retireGateReady = isNeonRetireStandDownReady(cutover);
   }
   const result = await executeNeonRuntimeServiceOperation(plan, action, {
     executor,
@@ -13154,6 +13161,7 @@ async function runRuntimeServiceLiveSmoke(): Promise<string> {
   const configRoot = join(root, "config");
   const firstEnvFilePath = join(root, "first.env");
   const secondEnvFilePath = join(root, "second.env");
+  const predecessorStatePath = join(root, "predecessor.state");
   const label = currentPlatform === "darwin"
     ? `com.neonika.runtime.smoke.${process.pid}`
     : `neonika-runtime-smoke-${process.pid}.service`;
@@ -13172,6 +13180,7 @@ async function runRuntimeServiceLiveSmoke(): Promise<string> {
     const environment = `NEONIKA_HOST=127.0.0.1\nNEONIKA_PORT=${port}\n`;
     await writeFile(firstEnvFilePath, environment, { mode: 0o600 });
     await writeFile(secondEnvFilePath, `${environment}NEON_RUNTIME_GENERATION=two\n`, { mode: 0o600 });
+    await writeFile(predecessorStatePath, "running\n", { mode: 0o600 });
     const firstPlan = createRuntimeServiceCliPlan(configRoot, firstEnvFilePath, label);
     const secondPlan = createRuntimeServiceCliPlan(configRoot, secondEnvFilePath, label);
     cleanupPlan = firstPlan;
@@ -13189,16 +13198,55 @@ async function runRuntimeServiceLiveSmoke(): Promise<string> {
     const restart = await executeNeonRuntimeServiceOperation(secondPlan, "restart", options);
     const rollback = await executeNeonRuntimeServiceOperation(secondPlan, "rollback", options);
     const status = await createNeonRuntimeServiceSnapshot(firstPlan, { executor, healthProbe });
+    const predecessorControlScript =
+      "require('node:fs').writeFileSync(process.argv[1], `${process.argv[2]}\\n`, { mode: 0o600 })";
+    const standDown = await executeNeonRuntimeServiceOperation(firstPlan, "stand-down", {
+      ...options,
+      predecessor: {
+        retireGateReady: true,
+        standDownCommand: {
+          command: process.execPath,
+          args: ["-e", predecessorControlScript, predecessorStatePath, "stopped"]
+        },
+        rollbackCommand: {
+          command: process.execPath,
+          args: ["-e", predecessorControlScript, predecessorStatePath, "running"]
+        }
+      },
+      predecessorObservation: {
+        intervalMs: 100,
+        sampleCount: 3
+      }
+    });
+    const stoodDown = (await readFile(predecessorStatePath, "utf8")).trim() === "stopped";
+    const predecessorRestore = await executeNeonRuntimeServiceOperation(firstPlan, "predecessor-restore", {
+      ...options,
+      predecessor: {
+        retireGateReady: false,
+        rollbackCommand: {
+          command: process.execPath,
+          args: ["-e", predecessorControlScript, predecessorStatePath, "running"]
+        }
+      }
+    });
+    const predecessorRestored = (await readFile(predecessorStatePath, "utf8")).trim() === "running";
     if (
       install.state !== "executed" ||
       update.state !== "executed" ||
       restart.state !== "executed" ||
       rollback.state !== "executed" ||
-      status.state !== "ready"
+      status.state !== "ready" ||
+      standDown.state !== "executed" ||
+      standDown.observation?.state !== "ready" ||
+      !stoodDown ||
+      predecessorRestore.state !== "executed" ||
+      !predecessorRestored
     ) {
       throw new Error(
         `runtime service live smoke states: install=${install.state}, update=${update.state}, ` +
-        `restart=${restart.state}, rollback=${rollback.state}, status=${status.state}`
+        `restart=${restart.state}, rollback=${rollback.state}, status=${status.state}, ` +
+        `stand-down=${standDown.state}, observation=${standDown.observation?.state ?? "missing"}, ` +
+        `restore=${predecessorRestore.state}`
       );
     }
     const uninstall = await executeNeonRuntimeServiceOperation(firstPlan, "uninstall", {
@@ -13219,8 +13267,10 @@ async function runRuntimeServiceLiveSmoke(): Promise<string> {
     report = [
       "Neonika Runtime Service Live Smoke: ok",
       `Manager: ${firstPlan.manager}`,
-      "Lifecycle: install -> update -> restart -> rollback -> status -> uninstall",
+      "Lifecycle: install -> update -> restart -> rollback -> status -> observed stand-down -> predecessor restore -> uninstall",
       "Health: ready",
+      `Retire observation: ${standDown.observation.samplesPassed}/${standDown.observation.samplesRequired} samples ready`,
+      "Predecessor drill: isolated stop -> restore",
       `Cleanup: supervisor definition ${uninstalledStatus.installState}`
     ].join("\n");
   } catch (error) {

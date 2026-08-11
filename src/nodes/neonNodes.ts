@@ -55,6 +55,7 @@ export interface ICreateNeonNodesSnapshotOptions {
   readonly arch?: string;
   readonly pid?: number;
   readonly gatewayUrl?: string;
+  readonly homeDir?: string;
 }
 
 export interface INeonLocalNodeSummary {
@@ -256,7 +257,8 @@ export async function createNeonNodesSnapshot(
       ...(options.now ? { now: options.now } : {}),
       ...(options.env ? { env: options.env } : {}),
       ...(options.platform ? { platform: options.platform } : {}),
-      ...(options.arch ? { arch: options.arch } : {})
+      ...(options.arch ? { arch: options.arch } : {}),
+      ...(options.homeDir ? { homeDir: options.homeDir } : {})
     }
   );
   const runnerServiceActions = await createNeonNodeRunnerServiceActionSnapshot(

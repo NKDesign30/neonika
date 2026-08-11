@@ -30,7 +30,7 @@ describe("Neon cutover promotion state", () => {
       NEON_CUTOVER_ROLLBACK_COMMAND: "systemctl --user stop neonika-gateway",
       NEON_DISCORD_BOT_TOKEN: "MToooooo.secret.value",
       DISCORD_BOT_TOKEN: "MTaaaaaa.secret.value",
-      NEON_CUTOVER_RETIRE_EVIDENCE: "   ",
+      NEON_CUTOVER_RETIRE_EVIDENCE: "ready",
       UNRELATED_KEY: "keep-out"
     });
 

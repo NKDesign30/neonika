@@ -9,7 +9,13 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, it } from "node:test";
 import { promisify } from "node:util";
 
-import { bootstrapNeonMemorySchema, createNeonMemoryBackup } from "../src/index.js";
+import {
+  bootstrapNeonMemorySchema,
+  createNeonMemoryBackup,
+  createNeonRetireEvidenceSnapshot,
+  writeNeonGatewayRun,
+  type INeonGatewayShadowRun
+} from "../src/index.js";
 
 const execFileAsync = promisify(execFile);
 const cliPath = join(process.cwd(), "dist", "src", "cli.js");
@@ -154,6 +160,29 @@ describe("Neonika CLI runtime entry points", () => {
     assert.match(stdout, /Secrets persisted: false/u);
     assert.match(stdout, /Shell used: false/u);
     assert.doesNotMatch(stdout, /(?:TOKEN|SECRET)=/u);
+  });
+
+  it("records Retire evidence under the explicit runtime config root, independent of cwd", async () => {
+    const root = await mkdtemp(join(tmpdir(), "neonika-cli-retire-root-"));
+    const configRoot = join(root, "config");
+    const unrelatedCwd = join(root, "unrelated");
+
+    try {
+      await mkdir(configRoot, { mode: 0o700, recursive: true });
+      await mkdir(unrelatedCwd, { mode: 0o700, recursive: true });
+      await writeNeonGatewayRun(configRoot, createCliRetireRun());
+
+      const stdout = await runCli(
+        ["cutover-retire-smoke", "--config-root", configRoot],
+        unrelatedCwd
+      );
+
+      assert.match(stdout, /Neonika Retire Export\/Import: ok/u);
+      assert.equal((await createNeonRetireEvidenceSnapshot(configRoot)).state, "ready");
+      assert.equal((await createNeonRetireEvidenceSnapshot(unrelatedCwd)).state, "needs-evidence");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
   });
 
   it("keeps the supervised runtime on its configured port instead of falling back", { timeout: 30_000 }, async () => {
@@ -351,6 +380,39 @@ function seedMemoryDb(dbPath: string, values: readonly string[]): void {
   } finally {
     database.close();
   }
+}
+
+function createCliRetireRun(): INeonGatewayShadowRun {
+  return {
+    runId: "cli-retire-proof",
+    mode: "shadow",
+    status: "completed",
+    request: {
+      channel: "cli",
+      accountId: "default",
+      channelId: "local",
+      userId: "operator",
+      agentId: "chaty",
+      workspaceRoot: "/Users/operator/neonika",
+      mode: "read-only",
+      contentPreview: "Retire proof",
+      receivedAt: "2026-08-11T20:00:00.000Z"
+    },
+    harnessId: "codex-app-server",
+    harnessSessionKey: "cli-retire-proof",
+    memoryState: "attached",
+    events: [{ kind: "final", text: "ok" }],
+    finalText: "ok",
+    delivery: {
+      state: "suppressed",
+      targetChannel: "cli",
+      targetChannelId: "local",
+      reason: "shadow-mode",
+      finalText: "ok"
+    },
+    startedAt: "2026-08-11T20:00:00.000Z",
+    completedAt: "2026-08-11T20:00:01.000Z"
+  };
 }
 
 function insertMemoryRow(dbPath: string, value: string): void {

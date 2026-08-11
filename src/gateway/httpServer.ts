@@ -160,6 +160,8 @@ export interface INeonGatewayHttpServerOptions {
    */
   readonly transcriptProjectsDir?: string;
   readonly liveIndexCodexSessionsDir?: string;
+  /** Test-only filesystem seam; never accepted from an HTTP request. */
+  readonly nodeRunnerServiceHomeDir?: string;
 }
 
 export type TNeonGatewayRunControlHttpAction = Extract<TNeonRunLifecycleAction, "abort" | "stop">;
@@ -734,7 +736,7 @@ async function handleGatewayRequest(
     }
 
     if (requestUrl.pathname === "/api/neon-nodes") {
-      await handleNeonNodes(context);
+      await handleNeonNodes(context, options);
       return;
     }
 
@@ -779,7 +781,7 @@ async function handleGatewayRequest(
     }
 
     if (requestUrl.pathname === "/api/neon-nodes/runner/service") {
-      await handleNeonNodeRunnerService(context);
+      await handleNeonNodeRunnerService(context, options);
       return;
     }
 
@@ -1034,13 +1036,19 @@ async function handleNeonWorkspace(context: IRouteContext): Promise<void> {
   writeJson(context.response, 200, await createNeonWorkspaceSnapshot(context.projectRoot));
 }
 
-async function handleNeonNodes(context: IRouteContext): Promise<void> {
+async function handleNeonNodes(
+  context: IRouteContext,
+  options: INeonGatewayHttpServerOptions
+): Promise<void> {
   const gatewayUrl = context.runtime.getSnapshot().network.url;
 
   writeJson(
     context.response,
     200,
-    await createNeonNodesSnapshot(context.projectRoot, gatewayUrl ? { gatewayUrl } : {})
+    await createNeonNodesSnapshot(context.projectRoot, {
+      ...(gatewayUrl ? { gatewayUrl } : {}),
+      ...(options.nodeRunnerServiceHomeDir ? { homeDir: options.nodeRunnerServiceHomeDir } : {})
+    })
   );
 }
 
@@ -1072,8 +1080,20 @@ async function handleNeonNodeRunner(context: IRouteContext): Promise<void> {
   writeJson(context.response, 200, await createNeonNodeRunnerSnapshot(context.projectRoot));
 }
 
-async function handleNeonNodeRunnerService(context: IRouteContext): Promise<void> {
-  writeJson(context.response, 200, await createNeonNodeRunnerServiceSnapshot(context.projectRoot));
+async function handleNeonNodeRunnerService(
+  context: IRouteContext,
+  options: INeonGatewayHttpServerOptions
+): Promise<void> {
+  writeJson(
+    context.response,
+    200,
+    await createNeonNodeRunnerServiceSnapshot(
+      context.projectRoot,
+      options.nodeRunnerServiceHomeDir
+        ? { homeDir: options.nodeRunnerServiceHomeDir }
+        : {}
+    )
+  );
 }
 
 async function handleNeonNodeRunnerServiceActions(context: IRouteContext): Promise<void> {

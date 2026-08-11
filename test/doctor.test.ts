@@ -15,6 +15,7 @@ import {
   writeNeonGatewayRun,
   writeNeonHeartbeatDaemonLiveState,
   writeNeonMirrorEvidence,
+  writeNeonRetireRoundTripEvidence,
   type INeonGatewayPersistedFinding,
   type INeonGatewayShadowRun,
   type INeonHeartbeatDaemonLiveState,
@@ -305,6 +306,10 @@ describe("Neonika Doctor", () => {
         reviewer: "neo",
         now: () => new Date("2026-05-31T20:00:00.000Z")
       });
+      await writeNeonRetireRoundTripEvidence(
+        projectRoot,
+        "2026-05-31T20:00:30.000Z"
+      );
 
       const snapshot = await createNeonDoctorSnapshot(projectRoot, {
         now: () => new Date("2026-05-31T20:01:00.000Z"),
@@ -314,8 +319,7 @@ describe("Neonika Doctor", () => {
           NEON_CUTOVER_STAGE: "primary",
           NEON_CUTOVER_ROLLBACK_COMMAND: "echo rollback",
           NEON_CUTOVER_CANARY_APPROVED: "ready",
-          NEON_CUTOVER_PRIMARY_APPROVED: "ready",
-          NEON_CUTOVER_RETIRE_EVIDENCE: "ready"
+          NEON_CUTOVER_PRIMARY_APPROVED: "ready"
         }
       });
       const cutoverCheck = snapshot.checks.find((check) => check.id === "cutover");
