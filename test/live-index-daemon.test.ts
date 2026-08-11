@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { describe, it } from "node:test";
 
 import {
+  bootstrapNeonMemorySchema,
+  createNeonLiveIndexDaemon,
+  createNeonLiveIndexDaemonPublicSnapshot,
   createNeonLocalEmbeddingProvider,
-  resolveNeonMemoryDbWriteGate,
+  resolveNeonMemoryWritebackGate,
   scanNeonLiveIndexDaemon,
   searchNeonMemoryDb,
   writeNeonGatewayRun,
@@ -14,9 +18,36 @@ import {
 } from "../src/index.js";
 
 describe("Neon live-index daemon", () => {
+  it("coalesces overlapping scans so one interval cannot race another writeback", async () => {
+    const fixture = await createDaemonFixture();
+    const now = Date.now();
+    const service = createNeonLiveIndexDaemon({
+      projectRoot: fixture.projectRoot,
+      transcriptProjectsDir: fixture.transcriptProjectsDir,
+      codexSessionsDir: fixture.codexSessionsDir,
+      now: () => new Date(now)
+    });
+
+    try {
+      const [first, second] = await Promise.all([
+        service.scanNow("cli"),
+        service.scanNow("api")
+      ]);
+      const metrics = await readFile(first.metricsPath, "utf8");
+
+      assert.equal(first.state?.scanCount, 1);
+      assert.equal(second.state?.scanCount, 1);
+      assert.equal(metrics.trim().split("\n").length, 1);
+    } finally {
+      await service.stop();
+      await rm(fixture.projectRoot, { force: true, recursive: true });
+    }
+  });
+
   it("persists source state and detects unchanged follow-up scans", async () => {
     const fixture = await createDaemonFixture();
-    const now = (): Date => new Date("2026-06-08T12:00:00.000Z");
+    const fixtureTime = Date.now();
+    const now = (): Date => new Date(fixtureTime);
 
     try {
       const first = await scanNeonLiveIndexDaemon({
@@ -46,6 +77,12 @@ describe("Neon live-index daemon", () => {
       assert.equal(second.state?.sources.codex.unchanged, 1);
       assert.equal(persisted.scanCount, 2);
       assert.equal(metrics.trim().split("\n").length, 2);
+      assert.equal((await stat(first.statePath)).mode & 0o777, 0o600);
+      assert.equal((await stat(first.metricsPath)).mode & 0o777, 0o600);
+      assert.equal(
+        (await stat(join(fixture.projectRoot, "state", "indexer"))).mode & 0o777,
+        0o700
+      );
     } finally {
       await rm(fixture.projectRoot, { force: true, recursive: true });
     }
@@ -53,16 +90,21 @@ describe("Neon live-index daemon", () => {
 
   it("promotes only changed records to an armed isolated memory DB", async () => {
     const fixture = await createDaemonFixture();
-    const now = (): Date => new Date("2026-06-08T12:00:00.000Z");
+    const fixtureTime = Date.now();
+    const now = (): Date => new Date(fixtureTime);
     const dbPath = join(fixture.projectRoot, "isolated-semantic-memory.db");
+    const backupDir = join(fixture.projectRoot, "memory-backups");
 
     try {
+      await createPrivateMemoryDb(dbPath);
       const first = await scanNeonLiveIndexDaemon({
         projectRoot: fixture.projectRoot,
         transcriptProjectsDir: fixture.transcriptProjectsDir,
         codexSessionsDir: fixture.codexSessionsDir,
         memoryDbPath: dbPath,
-        memoryGate: resolveNeonMemoryDbWriteGate({ NEON_MEMORY_WRITE_ENABLED: "ready" }),
+        primaryMemoryDbPath: dbPath,
+        memoryBackupDir: backupDir,
+        memoryWritebackGate: readyWritebackGate(),
         embedder: createNeonLocalEmbeddingProvider(),
         now,
         reason: "smoke"
@@ -72,7 +114,9 @@ describe("Neon live-index daemon", () => {
         transcriptProjectsDir: fixture.transcriptProjectsDir,
         codexSessionsDir: fixture.codexSessionsDir,
         memoryDbPath: dbPath,
-        memoryGate: resolveNeonMemoryDbWriteGate({ NEON_MEMORY_WRITE_ENABLED: "ready" }),
+        primaryMemoryDbPath: dbPath,
+        memoryBackupDir: backupDir,
+        memoryWritebackGate: readyWritebackGate(),
         embedder: createNeonLocalEmbeddingProvider(),
         now,
         reason: "smoke"
@@ -82,7 +126,9 @@ describe("Neon live-index daemon", () => {
         transcriptProjectsDir: fixture.transcriptProjectsDir,
         codexSessionsDir: fixture.codexSessionsDir,
         memoryDbPath: dbPath,
-        memoryGate: resolveNeonMemoryDbWriteGate({ NEON_MEMORY_WRITE_ENABLED: "ready" }),
+        primaryMemoryDbPath: dbPath,
+        memoryBackupDir: backupDir,
+        memoryWritebackGate: readyWritebackGate(),
         embedder: createNeonLocalEmbeddingProvider(),
         now,
         reason: "smoke"
@@ -92,31 +138,42 @@ describe("Neon live-index daemon", () => {
       assert.equal(first.memoryPromotion.state, "planned");
       assert.equal(first.memoryPromotion.changedRecords, 3);
       assert.equal(first.memoryPromotion.promotableRecords, 0);
-      assert.equal(first.memoryPromotion.writes.length, 0);
+      assert.equal(first.memoryPromotion.writtenRecords, 0);
+      assert.equal(first.memoryPromotion.writeback.target.state, "validated");
       assert.equal(second.memoryPromotion.state, "written");
       assert.equal(second.memoryPromotion.changedRecords, 0);
       assert.equal(second.memoryPromotion.promotableRecords, 3);
-      assert.equal(second.memoryPromotion.writes.filter((write) => write.state === "written").length, 3);
-      assert.equal(second.memoryPromotion.safety.targetedRealMemoryDb, false);
+      assert.equal(second.memoryPromotion.writtenRecords, 3);
+      assert.equal(second.memoryPromotion.writeback.backup.state, "verified");
       assert.equal(third.memoryPromotion.state, "planned");
       assert.equal(third.memoryPromotion.changedRecords, 0);
       assert.equal(third.memoryPromotion.promotableRecords, 0);
-      assert.equal(third.memoryPromotion.writes.length, 0);
+      assert.equal(third.memoryPromotion.writtenRecords, 0);
       assert.ok(hits.length > 0);
+
+      const metrics = await readFile(second.metricsPath, "utf8");
+      assert.match(metrics, /"backupState":"verified"/u);
+      assert.match(metrics, /"targetState":"validated"/u);
+      assert.doesNotMatch(metrics, new RegExp(escapeRegExp(fixture.projectRoot), "u"));
+      assert.doesNotMatch(metrics, /dbPath|statePath|metricsPath|"content"/u);
+
+      const publicSnapshot = createNeonLiveIndexDaemonPublicSnapshot(second);
+      const serialized = JSON.stringify(publicSnapshot);
+      assert.equal(publicSnapshot.state?.scanCount, 2);
+      assert.doesNotMatch(serialized, new RegExp(escapeRegExp(fixture.projectRoot), "u"));
+      assert.doesNotMatch(serialized, /"records":\[|"content"|dbPath|statePath|metricsPath/u);
     } finally {
       await rm(fixture.projectRoot, { force: true, recursive: true });
     }
   });
 
-  it("survives a failing write and retries the entry on the next scan", async () => {
-    // Regression: an uncaught throw in the write loop propagated out of scanNow
-    // and killed the daemon, so every later scan stopped happening. The entries
-    // must instead stay unmarked and be picked up once writing works again.
+  it("keeps a blocked target unmarked and retries the batch on the next scan", async () => {
     const fixture = await createDaemonFixture();
-    const now = (): Date => new Date("2026-06-08T12:00:00.000Z");
+    const fixtureTime = Date.now();
+    const now = (): Date => new Date(fixtureTime);
     const workingDb = join(fixture.projectRoot, "isolated-semantic-memory.db");
-    // A path under a directory that does not exist: opening it throws.
     const unwritableDb = join(fixture.projectRoot, "missing-dir", "nested", "memory.db");
+    const backupDir = join(fixture.projectRoot, "memory-backups");
 
     const scan = (dbPath: string): ReturnType<typeof scanNeonLiveIndexDaemon> =>
       scanNeonLiveIndexDaemon({
@@ -124,31 +181,30 @@ describe("Neon live-index daemon", () => {
         transcriptProjectsDir: fixture.transcriptProjectsDir,
         codexSessionsDir: fixture.codexSessionsDir,
         memoryDbPath: dbPath,
-        memoryGate: resolveNeonMemoryDbWriteGate({ NEON_MEMORY_WRITE_ENABLED: "ready" }),
+        primaryMemoryDbPath: dbPath,
+        memoryBackupDir: backupDir,
+        memoryWritebackGate: readyWritebackGate(),
         embedder: createNeonLocalEmbeddingProvider(),
         now,
         reason: "smoke"
       });
 
     try {
+      await createPrivateMemoryDb(workingDb);
       await scan(workingDb); // first scan only registers the records
       const failing = await scan(unwritableDb);
 
-      // It returned instead of throwing, and it says so out loud.
-      assert.ok(failing.memoryPromotion.failedRecords > 0, "expected the failures to be counted");
-      assert.equal(failing.memoryPromotion.writes.filter((write) => write.state === "written").length, 0);
+      assert.equal(failing.memoryPromotion.state, "blocked");
+      assert.equal(failing.memoryPromotion.writtenRecords, 0);
       assert.ok(
-        failing.diagnostics.some((entry) => entry.includes("failed=")),
-        "expected the failure to appear in the diagnostics"
+        failing.diagnostics.some((entry) => entry.includes("target-not-regular")),
+        "expected the target guard to appear in diagnostics"
       );
 
       // Nothing was lost: the same records are promotable again and now land.
       const recovered = await scan(workingDb);
       assert.equal(recovered.memoryPromotion.failedRecords, 0);
-      assert.ok(
-        recovered.memoryPromotion.writes.filter((write) => write.state === "written").length > 0,
-        "expected the previously failed entries to be written on the retry"
-      );
+      assert.equal(recovered.memoryPromotion.writtenRecords, 3);
       const hits = searchNeonMemoryDb("Codex", { dbPath: workingDb, category: "live-index", limit: 5 });
       assert.ok(hits.length > 0);
     } finally {
@@ -159,21 +215,26 @@ describe("Neon live-index daemon", () => {
   it("keeps rejected records unpromoted in a mixed batch without churn", async () => {
     const fixture = await createDaemonFixture();
     await writeSlopTranscriptFixture(fixture.transcriptProjectsDir);
-    const now = (): Date => new Date("2026-06-08T12:00:00.000Z");
+    const fixtureTime = Date.now();
+    const now = (): Date => new Date(fixtureTime);
     const dbPath = join(fixture.projectRoot, "isolated-semantic-memory.db");
+    const backupDir = join(fixture.projectRoot, "memory-backups");
     const scan = (): ReturnType<typeof scanNeonLiveIndexDaemon> =>
       scanNeonLiveIndexDaemon({
         projectRoot: fixture.projectRoot,
         transcriptProjectsDir: fixture.transcriptProjectsDir,
         codexSessionsDir: fixture.codexSessionsDir,
         memoryDbPath: dbPath,
-        memoryGate: resolveNeonMemoryDbWriteGate({ NEON_MEMORY_WRITE_ENABLED: "ready" }),
+        primaryMemoryDbPath: dbPath,
+        memoryBackupDir: backupDir,
+        memoryWritebackGate: readyWritebackGate(),
         embedder: createNeonLocalEmbeddingProvider(),
         now,
         reason: "smoke"
       });
 
     try {
+      await createPrivateMemoryDb(dbPath);
       const first = await scan();
       const second = await scan();
       const third = await scan();
@@ -183,7 +244,7 @@ describe("Neon live-index daemon", () => {
       assert.equal(first.collection?.totals.records, 4);
       assert.equal(second.memoryPromotion.promotableRecords, 3);
       assert.equal(second.memoryPromotion.rejectedRecords, 1);
-      assert.equal(second.memoryPromotion.writes.filter((write) => write.state === "written").length, 3);
+      assert.equal(second.memoryPromotion.writtenRecords, 3);
       // The rejected record must never be marked as promoted.
       assert.ok(slopRecord);
       assert.equal(slopRecord.promotedContentHash, undefined);
@@ -191,7 +252,7 @@ describe("Neon live-index daemon", () => {
       // and rejected again - no writes, no churn.
       assert.equal(third.memoryPromotion.promotableRecords, 0);
       assert.equal(third.memoryPromotion.rejectedRecords, 1);
-      assert.equal(third.memoryPromotion.writes.length, 0);
+      assert.equal(third.memoryPromotion.writtenRecords, 0);
       assert.equal(third.memoryPromotion.state, "planned");
     } finally {
       await rm(fixture.projectRoot, { force: true, recursive: true });
@@ -199,6 +260,27 @@ describe("Neon live-index daemon", () => {
   });
 
 });
+
+function readyWritebackGate(): ReturnType<typeof resolveNeonMemoryWritebackGate> {
+  return resolveNeonMemoryWritebackGate({
+    NEON_MEMORY_WRITE_ENABLED: "ready",
+    NEON_LIVE_INDEX_WRITEBACK_ENABLED: "ready"
+  });
+}
+
+async function createPrivateMemoryDb(dbPath: string): Promise<void> {
+  const database = new DatabaseSync(dbPath);
+  try {
+    bootstrapNeonMemorySchema(database);
+  } finally {
+    database.close();
+  }
+  await chmod(dbPath, 0o600);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
 
 interface IDaemonFixture {
   readonly projectRoot: string;

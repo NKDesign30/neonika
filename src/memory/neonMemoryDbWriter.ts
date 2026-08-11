@@ -35,6 +35,9 @@ import {
 const memoryWriteEnabledEnvKey = "NEON_MEMORY_WRITE_ENABLED";
 const maxMemoryEntryLength = 8_000;
 const defaultImportanceScore = 50;
+const defaultEmbeddingConcurrency = 4;
+const maxEmbeddingConcurrency = 16;
+const defaultEmbeddingTimeoutMs = 30_000;
 
 export interface INeonMemoryDbWriteInput {
   readonly sourceFile: string;
@@ -58,6 +61,7 @@ export interface INeonMemoryDbWriteResult {
   readonly entryId: number | undefined;
   readonly contentHash: string | undefined;
   readonly embedded: boolean;
+  readonly degraded: boolean;
   readonly dbPath: string | undefined;
   readonly safety: { readonly targetedRealMemoryDb: boolean };
   readonly diagnostics: readonly string[];
@@ -83,6 +87,27 @@ export interface IWriteNeonMemoryDbEntryOptions {
    *   polluted the v2 DB (one row per session state).
    */
   readonly dedupe?: "content-hash" | "source-file";
+}
+
+export interface IWriteNeonMemoryDbEntriesOptions
+  extends Omit<IWriteNeonMemoryDbEntryOptions, "input"> {
+  readonly inputs: readonly INeonMemoryDbWriteInput[];
+  readonly embeddingConcurrency?: number;
+  readonly embeddingTimeoutMs?: number;
+}
+
+interface IPreparedNeonMemoryDbWrite {
+  readonly sourceFile: string;
+  readonly content: string;
+  readonly agent: string;
+  readonly category: string;
+  readonly importanceScore: number;
+  readonly entryDate: string | null;
+  readonly timestamp: string;
+  readonly contentHash: string;
+  readonly embeddingBlob: Uint8Array | null;
+  readonly embeddingDegraded: boolean;
+  readonly diagnostics: readonly string[];
 }
 
 /**
@@ -171,6 +196,7 @@ function blocked(
     entryId: undefined,
     contentHash: undefined,
     embedded: false,
+    degraded: false,
     dbPath: undefined,
     safety: { targetedRealMemoryDb },
     diagnostics
@@ -191,47 +217,60 @@ function truncate(text: string, maxLength: number): string {
 export async function writeNeonMemoryDbEntry(
   options: IWriteNeonMemoryDbEntryOptions
 ): Promise<INeonMemoryDbWriteResult> {
+  const results = await writeNeonMemoryDbEntries({
+    ...options,
+    inputs: [options.input]
+  });
+  return results[0] ?? blocked(["memory-write blocked: no input"], targetsRealNeonDb(options.dbPath));
+}
+
+/**
+ * Writes a batch in one SQLite transaction. Live-index promotion uses this seam
+ * so one rejected row cannot leave an earlier row committed. Embeddings are
+ * prepared before the transaction; an unavailable embedder still degrades each
+ * row to FTS-only, matching the single-entry writer.
+ */
+export async function writeNeonMemoryDbEntries(
+  options: IWriteNeonMemoryDbEntriesOptions
+): Promise<readonly INeonMemoryDbWriteResult[]> {
   const targetsRealDb = targetsRealNeonDb(options.dbPath);
 
   if (targetsRealDb && options.allowRealDb !== true) {
-    return blocked(
+    return options.inputs.map(() => blocked(
       ["productive memory-write refused: target is the real semantic-memory DB (set allowRealDb to override)"],
       true
-    );
+    ));
   }
   if (!options.gate.enabled) {
-    return blocked(
+    return options.inputs.map(() => blocked(
       [`productive memory-write blocked: ${options.gate.envKey} is not armed`],
       targetsRealDb
-    );
+    ));
+  }
+  if (options.dedupe === "source-file" && hasDuplicateSourceFiles(options.inputs)) {
+    return options.inputs.map(() => blocked(
+      ["memory-write batch blocked: duplicate source file in one batch"],
+      targetsRealDb
+    ));
   }
 
-  const content = truncate(redactText(options.input.content.replace(/\s+/g, " ").trim()), maxMemoryEntryLength);
-  if (content.length === 0) {
-    return blocked(["memory-write blocked: empty content"], targetsRealDb);
-  }
-
-  const sourceFile = redactText(options.input.sourceFile.trim()) || "neonika:unsourced";
-  const agent = redactText(options.input.agent.trim()) || "neo";
-  const category = redactText(options.input.category.trim()) || "discoveries";
-  const importanceScore =
-    typeof options.input.importanceScore === "number" && Number.isFinite(options.input.importanceScore)
-      ? options.input.importanceScore
-      : defaultImportanceScore;
-  const entryDate = options.input.entryDate ?? null;
   const timestamp = (options.now?.() ?? new Date()).toISOString();
-  const contentHash = computeNeonContentHash(sourceFile, content);
-
-  const diagnostics: string[] = [];
-  let embeddingBlob: Uint8Array | null = null;
-  if (options.embedder) {
-    try {
-      const vector = await options.embedder.embed(content);
-      embeddingBlob = neonVectorToBuffer(vector);
-    } catch (error) {
-      const reason = error instanceof Error ? redactText(error.message) : "unknown error";
-      diagnostics.push(`embedding skipped (row written FTS-only): ${reason}`);
-    }
+  const prepared = await prepareNeonMemoryDbWriteBatch({
+    inputs: options.inputs,
+    timestamp,
+    embedder: options.embedder,
+    concurrency: normalizeEmbeddingConcurrency(options.embeddingConcurrency),
+    timeoutMs: normalizeEmbeddingTimeout(options.embeddingTimeoutMs)
+  });
+  if (prepared.some((entry) => entry === undefined)) {
+    return options.inputs.map(() => blocked(
+      ["memory-write batch blocked: one or more entries have empty content"],
+      targetsRealDb
+    ));
+  }
+  const validPrepared = prepared.filter((entry): entry is IPreparedNeonMemoryDbWrite => entry !== undefined);
+  if (validPrepared.length === 0) {
+    return [];
   }
 
   const database = openNeonMemoryDatabase(options.dbPath);
@@ -239,78 +278,21 @@ export async function writeNeonMemoryDbEntry(
     bootstrapNeonMemorySchema(database);
     database.exec("BEGIN IMMEDIATE");
     try {
-      // Replace semantics: drop stale states of the same source before the
-      // upsert. The FTS delete-trigger keeps the index consistent. Doing this
-      // inside the same transaction also resolves the A->B->A hash-collision
-      // case (the stale A row is gone before hash(A) is re-inserted).
-      let replacedRows = 0;
-      if (options.dedupe === "source-file") {
-        const replaced = database
-          .prepare("DELETE FROM memory_entries WHERE source_file = ? AND content_hash <> ?")
-          .run(sourceFile, contentHash);
-        replacedRows = Number(replaced.changes);
-      }
-
-      // Determine insert-vs-update deterministically before the upsert: a created_at
-      // vs updated_at comparison breaks when a test injects a fixed `now()` (both
-      // timestamps equal). A content_hash pre-check is exact regardless of clock.
-      const priorRow = database
-        .prepare("SELECT id FROM memory_entries WHERE content_hash = ?")
-        .get(contentHash) as { id?: number } | undefined;
-      const wasExisting = typeof priorRow?.id === "number";
-
-      const row = database
-        .prepare(
-          `INSERT INTO memory_entries (
-              source_file, content, entry_date, agent, category, embedding,
-              content_hash, importance_score, created_at, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(content_hash) DO UPDATE SET
-              content = excluded.content,
-              entry_date = excluded.entry_date,
-              agent = excluded.agent,
-              category = excluded.category,
-              embedding = excluded.embedding,
-              importance_score = excluded.importance_score,
-              updated_at = excluded.updated_at
-            RETURNING id`
-        )
-        .get(
-          sourceFile,
-          content,
-          entryDate,
-          agent,
-          category,
-          embeddingBlob,
-          contentHash,
-          importanceScore,
-          timestamp,
-          timestamp
-        ) as { id?: number } | undefined;
-
-      database.exec("COMMIT");
-
-      const entryId = typeof row?.id === "number" ? row.id : undefined;
-      const inserted = !wasExisting;
-
-      return {
-        state: "written",
-        inserted,
-        updated: !inserted,
-        entryId,
-        contentHash,
-        embedded: embeddingBlob !== null,
+      const results = validPrepared.map((entry) => writePreparedNeonMemoryDbEntry({
+        database,
+        entry,
+        dedupe: options.dedupe,
         dbPath: options.dbPath,
-        safety: { targetedRealMemoryDb: targetsRealDb },
-        diagnostics: [
-          inserted ? "memory entry inserted" : "memory entry updated (content_hash conflict)",
-          ...(replacedRows > 0 ? [`replaced ${replacedRows} stale state(s) of the same source`] : []),
-          ...diagnostics
-        ]
-      };
+        targetsRealDb
+      }));
+      database.exec("COMMIT");
+      return results;
     } catch (error) {
-      database.exec("ROLLBACK");
+      try {
+        database.exec("ROLLBACK");
+      } catch {
+        // SQLite may already have aborted the transaction. Preserve the original error.
+      }
       throw error;
     }
   } finally {
@@ -318,13 +300,220 @@ export async function writeNeonMemoryDbEntry(
   }
 }
 
+async function prepareNeonMemoryDbWrite(
+  input: INeonMemoryDbWriteInput,
+  timestamp: string,
+  embedder: INeonEmbeddingProvider | undefined,
+  embeddingTimeoutMs: number
+): Promise<IPreparedNeonMemoryDbWrite | undefined> {
+  const content = truncate(redactText(input.content.replace(/\s+/g, " ").trim()), maxMemoryEntryLength);
+  if (content.length === 0) {
+    return undefined;
+  }
+
+  const sourceFile = normalizeSourceFile(input.sourceFile);
+  const agent = redactText(input.agent.trim()) || "neo";
+  const category = redactText(input.category.trim()) || "discoveries";
+  const importanceScore =
+    typeof input.importanceScore === "number" && Number.isFinite(input.importanceScore)
+      ? input.importanceScore
+      : defaultImportanceScore;
+  const entryDate = input.entryDate ?? null;
+  const contentHash = computeNeonContentHash(sourceFile, content);
+
+  const diagnostics: string[] = [];
+  let embeddingBlob: Uint8Array | null = null;
+  let embeddingDegraded = false;
+  if (embedder) {
+    try {
+      const vector = await embedWithTimeout(embedder, content, embeddingTimeoutMs);
+      embeddingBlob = neonVectorToBuffer(vector);
+    } catch (error) {
+      embeddingDegraded = true;
+      const reason = error instanceof Error ? redactText(error.message) : "unknown error";
+      diagnostics.push(`embedding skipped (row written FTS-only): ${reason}`);
+    }
+  }
+
+  return {
+    sourceFile,
+    content,
+    agent,
+    category,
+    importanceScore,
+    entryDate,
+    timestamp,
+    contentHash,
+    embeddingBlob,
+    embeddingDegraded,
+    diagnostics
+  };
+}
+
+async function prepareNeonMemoryDbWriteBatch(options: {
+  readonly inputs: readonly INeonMemoryDbWriteInput[];
+  readonly timestamp: string;
+  readonly embedder: INeonEmbeddingProvider | undefined;
+  readonly concurrency: number;
+  readonly timeoutMs: number;
+}): Promise<readonly (IPreparedNeonMemoryDbWrite | undefined)[]> {
+  const prepared: Array<IPreparedNeonMemoryDbWrite | undefined> = new Array(options.inputs.length);
+  let nextIndex = 0;
+  const worker = async (): Promise<void> => {
+    while (nextIndex < options.inputs.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const input = options.inputs[index];
+      if (input) {
+        prepared[index] = await prepareNeonMemoryDbWrite(
+          input,
+          options.timestamp,
+          options.embedder,
+          options.timeoutMs
+        );
+      }
+    }
+  };
+  const workerCount = Math.min(options.concurrency, options.inputs.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return prepared;
+}
+
+async function embedWithTimeout(
+  embedder: INeonEmbeddingProvider,
+  content: string,
+  timeoutMs: number
+): Promise<Float32Array> {
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`embedding timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([
+      embedder.embed(content, { signal: controller.signal }),
+      timedOut
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+function hasDuplicateSourceFiles(inputs: readonly INeonMemoryDbWriteInput[]): boolean {
+  const seen = new Set<string>();
+  for (const input of inputs) {
+    const sourceFile = normalizeSourceFile(input.sourceFile);
+    if (seen.has(sourceFile)) {
+      return true;
+    }
+    seen.add(sourceFile);
+  }
+  return false;
+}
+
+function normalizeSourceFile(sourceFile: string): string {
+  return redactText(sourceFile.trim()) || "neonika:unsourced";
+}
+
+function normalizeEmbeddingConcurrency(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return defaultEmbeddingConcurrency;
+  }
+  return Math.max(1, Math.min(maxEmbeddingConcurrency, Math.floor(value)));
+}
+
+function normalizeEmbeddingTimeout(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return defaultEmbeddingTimeoutMs;
+  }
+  return Math.max(1, Math.floor(value));
+}
+
+function writePreparedNeonMemoryDbEntry(options: {
+  readonly database: DatabaseSync;
+  readonly entry: IPreparedNeonMemoryDbWrite;
+  readonly dedupe: IWriteNeonMemoryDbEntriesOptions["dedupe"];
+  readonly dbPath: string;
+  readonly targetsRealDb: boolean;
+}): INeonMemoryDbWriteResult {
+  const { database, entry } = options;
+  // Replace semantics: drop stale states of the same source before the upsert.
+  // This stays inside the batch transaction, including A -> B -> A revisions.
+  let replacedRows = 0;
+  if (options.dedupe === "source-file") {
+    const replaced = database
+      .prepare("DELETE FROM memory_entries WHERE source_file = ? AND content_hash <> ?")
+      .run(entry.sourceFile, entry.contentHash);
+    replacedRows = Number(replaced.changes);
+  }
+
+  const priorRow = database
+    .prepare("SELECT id FROM memory_entries WHERE content_hash = ?")
+    .get(entry.contentHash) as { id?: number } | undefined;
+  const wasExisting = typeof priorRow?.id === "number";
+
+  const row = database
+    .prepare(
+      `INSERT INTO memory_entries (
+          source_file, content, entry_date, agent, category, embedding,
+          content_hash, importance_score, created_at, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(content_hash) DO UPDATE SET
+          content = excluded.content,
+          entry_date = excluded.entry_date,
+          agent = excluded.agent,
+          category = excluded.category,
+          embedding = excluded.embedding,
+          importance_score = excluded.importance_score,
+          updated_at = excluded.updated_at
+        RETURNING id`
+    )
+    .get(
+      entry.sourceFile,
+      entry.content,
+      entry.entryDate,
+      entry.agent,
+      entry.category,
+      entry.embeddingBlob,
+      entry.contentHash,
+      entry.importanceScore,
+      entry.timestamp,
+      entry.timestamp
+    ) as { id?: number } | undefined;
+
+  const entryId = typeof row?.id === "number" ? row.id : undefined;
+  const inserted = !wasExisting;
+
+  return {
+    state: "written",
+    inserted,
+    updated: !inserted,
+    entryId,
+    contentHash: entry.contentHash,
+    embedded: entry.embeddingBlob !== null,
+    degraded: entry.embeddingDegraded,
+    dbPath: options.dbPath,
+    safety: { targetedRealMemoryDb: options.targetsRealDb },
+    diagnostics: [
+      inserted ? "memory entry inserted" : "memory entry updated (content_hash conflict)",
+      ...(replacedRows > 0 ? [`replaced ${replacedRows} stale state(s) of the same source`] : []),
+      ...entry.diagnostics
+    ]
+  };
+}
+
 export function renderNeonMemoryDbWriteReport(result: INeonMemoryDbWriteResult): string {
   return [
     `Neonika Memory DB Write: ${result.state}`,
-    `Inserted: ${result.inserted}  Updated: ${result.updated}  Embedded: ${result.embedded}`,
+    `Inserted: ${result.inserted}  Updated: ${result.updated}  Embedded: ${result.embedded}  Degraded: ${result.degraded}`,
     `Entry id: ${result.entryId ?? "none"}`,
-    `Content hash: ${result.contentHash ?? "none"}`,
-    `DB: ${result.dbPath ?? "none (gated)"}`,
+    `DB: ${result.dbPath ? "configured" : "none (gated)"}`,
     `Safety: targetedRealMemoryDb=${result.safety.targetedRealMemoryDb}`,
     ...result.diagnostics.map((diagnostic) => `- ${diagnostic}`)
   ].join("\n");

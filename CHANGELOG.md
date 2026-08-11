@@ -5,6 +5,9 @@
 - Added default-off Cron and Heartbeat agent execution with roster-selected
   harnesses, agent-scoped memory, persisted running-to-terminal evidence,
   bounded transient retries, and Canary-gated Discord delivery.
+- Added default-off productive live-index memory writeback with exact primary
+  target validation, verified private pre-write backups, atomic batches,
+  leak-safe observability, and a separately gated bounded rollback command.
 
 ## [0.5.0] - 2026-08-11
 

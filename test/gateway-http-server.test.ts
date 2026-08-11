@@ -45,8 +45,8 @@ import {
   type INeonInFlightRunRecord,
   type INeonInFlightRunRegistry,
   type INeonLiveSessionReadinessSnapshot,
-  type INeonLiveIndexDaemonSnapshot,
-  type INeonLiveIndexMemorySyncResult,
+  type INeonLiveIndexDaemonPublicSnapshot,
+  type INeonLiveIndexMemorySyncPublicSnapshot,
   type INeonMirrorEvidenceSnapshot,
   type INeonOnboardingSnapshot,
   type INeonNodesSnapshot,
@@ -1656,13 +1656,31 @@ describe("Neonika Gateway HTTP server", () => {
 
   it("serves the live-index sync projection over HTTP without default memory writes", async () => {
     const projectRoot = await createTempProjectRoot();
+    const sensitiveMarker = "sk-live-index-sync-boundary-marker-1234567890";
+    const mutationToken = "live-index-sync-mutation-fixture";
     const transcriptProjectsDir = join(projectRoot, "claude-projects");
     const liveIndexCodexSessionsDir = join(projectRoot, "codex-sessions");
+    const envKeys = [
+      "NEON_LIVE_INDEX_MEMORY_DB_PATH",
+      "NEON_MEMORY_DB_PATH",
+      "NEON_MEMORY_BACKUP_DIR",
+      "NEON_MEMORY_WRITE_ENABLED",
+      "NEON_LIVE_INDEX_WRITEBACK_ENABLED",
+      NEON_GATEWAY_HTTP_MUTATION_TOKEN_ENV
+    ] as const;
+    const previousEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
 
     try {
+      for (const key of envKeys) {
+        delete process.env[key];
+      }
+      process.env[NEON_GATEWAY_HTTP_MUTATION_TOKEN_ENV] = mutationToken;
       await mkdir(transcriptProjectsDir, { recursive: true });
       await mkdir(liveIndexCodexSessionsDir, { recursive: true });
-      await writeNeonGatewayRun(projectRoot, createHttpRun("run-http-live-index", "completed"));
+      await writeNeonGatewayRun(
+        projectRoot,
+        createHttpRun("run-http-live-index", "completed", sensitiveMarker)
+      );
 
       const handle = await listenNeonGatewayHttpServer(
         { projectRoot, transcriptProjectsDir, liveIndexCodexSessionsDir },
@@ -1673,35 +1691,61 @@ describe("Neonika Gateway HTTP server", () => {
       );
 
       try {
-        const response = await fetch(`${handle.url}/api/neon-live-index-sync`);
-        const body = (await response.json()) as INeonLiveIndexMemorySyncResult;
+        const rejectedGet = await fetch(`${handle.url}/api/neon-live-index-sync`);
+        const unauthorizedPost = await fetch(`${handle.url}/api/neon-live-index-sync`, {
+          method: "POST"
+        });
+        const response = await fetch(`${handle.url}/api/neon-live-index-sync`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${mutationToken}` }
+        });
+        const body = (await response.json()) as INeonLiveIndexMemorySyncPublicSnapshot;
+        const serialized = JSON.stringify(body);
 
+        assert.equal(rejectedGet.status, 405);
+        assert.equal(unauthorizedPost.status, 401);
         assert.equal(response.status, 200);
         assert.equal(body.state, "planned");
-        assert.equal(body.collection.totals.discord, 1);
-        assert.equal(body.collection.totals.claude, 0);
-        assert.equal(body.collection.totals.codex, 0);
-        assert.equal(body.collection.totals.records, 1);
-        assert.equal(body.writes.length, 0);
-        assert.equal(body.dbPath, undefined);
-        assert.equal(body.safety.targetedRealMemoryDb, false);
+        assert.equal(body.totals.discord, 1);
+        assert.equal(body.totals.claude, 0);
+        assert.equal(body.totals.codex, 0);
+        assert.equal(body.totals.records, 1);
+        assert.equal(body.writeback.writes.written, 0);
+        assert.equal(serialized.includes(sensitiveMarker), false);
+        assert.doesNotMatch(serialized, new RegExp(escapeRegExp(projectRoot), "u"));
+        assert.doesNotMatch(serialized, /"records":\[|"content"|dbPath|statePath|metricsPath/u);
       } finally {
         await handle.close();
       }
     } finally {
+      for (const key of envKeys) {
+        const value = previousEnv[key];
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
       await rm(projectRoot, { force: true, recursive: true });
     }
   });
 
   it("serves the live-index daemon state over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
+    const sensitiveMarker = "sk-live-index-daemon-boundary-marker-1234567890";
+    const mutationToken = "live-index-daemon-mutation-fixture";
     const transcriptProjectsDir = join(projectRoot, "claude-projects");
     const liveIndexCodexSessionsDir = join(projectRoot, "codex-sessions");
+    const previousMutationToken = process.env[NEON_GATEWAY_HTTP_MUTATION_TOKEN_ENV];
 
     try {
+      process.env[NEON_GATEWAY_HTTP_MUTATION_TOKEN_ENV] = mutationToken;
       await mkdir(transcriptProjectsDir, { recursive: true });
       await mkdir(liveIndexCodexSessionsDir, { recursive: true });
-      await writeNeonGatewayRun(projectRoot, createHttpRun("run-http-live-index-daemon", "completed"));
+      await writeNeonGatewayRun(
+        projectRoot,
+        createHttpRun("run-http-live-index-daemon", "completed", sensitiveMarker)
+      );
 
       const handle = await listenNeonGatewayHttpServer(
         { projectRoot, transcriptProjectsDir, liveIndexCodexSessionsDir },
@@ -1712,9 +1756,26 @@ describe("Neonika Gateway HTTP server", () => {
       );
 
       try {
-        const response = await fetch(`${handle.url}/api/neon-live-index-daemon`);
-        const body = (await response.json()) as INeonLiveIndexDaemonSnapshot;
+        const readOnlyResponse = await fetch(`${handle.url}/api/neon-live-index-daemon`);
+        const readOnlyBody = (await readOnlyResponse.json()) as INeonLiveIndexDaemonPublicSnapshot;
+        const ignoredGetScan = await fetch(`${handle.url}/api/neon-live-index-daemon?scan=1`);
+        const ignoredGetScanBody = (await ignoredGetScan.json()) as INeonLiveIndexDaemonPublicSnapshot;
+        const unauthorizedScan = await fetch(`${handle.url}/api/neon-live-index-daemon?scan=1`, {
+          method: "POST"
+        });
+        const response = await fetch(`${handle.url}/api/neon-live-index-daemon?scan=1`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${mutationToken}` }
+        });
+        const body = (await response.json()) as INeonLiveIndexDaemonPublicSnapshot;
+        const serialized = JSON.stringify(body);
 
+        assert.equal(readOnlyResponse.status, 200);
+        assert.equal(readOnlyBody.state, undefined);
+        assert.equal(readOnlyBody.collection, undefined);
+        assert.equal(ignoredGetScan.status, 200);
+        assert.equal(ignoredGetScanBody.state, undefined);
+        assert.equal(unauthorizedScan.status, 401);
         assert.equal(response.status, 200);
         assert.equal(body.running, false);
         assert.equal(body.enabled, false);
@@ -1722,12 +1783,19 @@ describe("Neonika Gateway HTTP server", () => {
         assert.equal(body.collection?.totals.records, 1);
         assert.equal(body.state?.scanCount, 1);
         assert.equal(body.state?.sources.discord.changed, 1);
-        assert.match(body.statePath, /live-index-daemon-state\.json/u);
-        assert.match(body.metricsPath, /live-index-daemon-metrics\.jsonl/u);
+        assert.deepEqual(body.storage, { state: "private", metrics: "private" });
+        assert.equal(serialized.includes(sensitiveMarker), false);
+        assert.doesNotMatch(serialized, new RegExp(escapeRegExp(projectRoot), "u"));
+        assert.doesNotMatch(serialized, /"records":\[|"content"|dbPath|statePath|metricsPath/u);
       } finally {
         await handle.close();
       }
     } finally {
+      if (previousMutationToken === undefined) {
+        delete process.env[NEON_GATEWAY_HTTP_MUTATION_TOKEN_ENV];
+      } else {
+        process.env[NEON_GATEWAY_HTTP_MUTATION_TOKEN_ENV] = previousMutationToken;
+      }
       await rm(projectRoot, { force: true, recursive: true });
     }
   });
@@ -2021,7 +2089,8 @@ function createHttpCutoverGate(
 
 function createHttpRun(
   runId: string,
-  status: INeonGatewayShadowRun["status"]
+  status: INeonGatewayShadowRun["status"],
+  contentPreview = "HTTP smoke"
 ): INeonGatewayShadowRun {
   return {
     runId,
@@ -2035,7 +2104,7 @@ function createHttpRun(
       agentId: "chaty",
       workspaceRoot: "/Users/operator/neon-projects/neonika",
       mode: "read-only",
-      contentPreview: "HTTP smoke",
+      contentPreview,
       receivedAt: "2026-05-31T14:30:00.000Z"
     },
     harnessId: "codex-app-server",
@@ -2110,6 +2179,10 @@ function createHttpInFlightRegistry(): INeonInFlightRunRegistry {
       running: [record]
     })
   };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
 async function createTempProjectRoot(): Promise<string> {

@@ -131,6 +131,38 @@ Doctor fails closed if a record is incomplete, malformed, missing its archive or
 has a digest mismatch. Stop Gateway listeners before Apply, keep the archive
 private, and do not hand-edit either JSON or JSONL state.
 
+### Productive memory writeback and rollback
+
+Onboarding configures the same private Neonika SQLite database as both recall
+primary and live-index target, plus a private backup directory. Productive
+promotion still remains off until the daemon and both write gates are armed:
+
+```bash
+NEON_LIVE_INDEX_DAEMON_ENABLED=ready \
+NEON_MEMORY_WRITE_ENABLED=ready \
+NEON_LIVE_INDEX_WRITEBACK_ENABLED=ready \
+node dist/src/cli.js live-index-production-check
+```
+
+The check prints no local paths. It requires both configured database paths to
+resolve to the same owner-only primary database. Each non-empty promotion batch
+first creates and verifies a private SQLite snapshot, then commits the complete
+batch in one transaction. Public CLI and HTTP projections plus private daemon
+metrics expose only states and counts, never database paths or memory content.
+
+Restore is deliberately separate from writeback. Stop the live-index daemon and
+other writers, choose a snapshot id from private operator storage, arm rollback
+for that single invocation, and disarm it afterward:
+
+```bash
+NEON_MEMORY_ROLLBACK_ENABLED=ready \
+node dist/src/cli.js memory-writeback-rollback <snapshot-id>
+```
+
+Restore verifies the source, preserves the current database in a safety
+snapshot, replaces atomically, and verifies the result. A failed verification
+gets at most one recovery attempt from that safety snapshot.
+
 ## Bundled skills
 
 Fresh installations include Neonika's reviewed adaptation of Matt Pocock's

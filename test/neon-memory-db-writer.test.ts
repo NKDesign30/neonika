@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { afterEach, beforeEach, describe, it } from "node:test";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { afterEach, beforeEach, describe, it } from "node:test";
 
 import {
   defaultNeonMemoryDbPath,
@@ -11,9 +12,12 @@ import {
   computeNeonContentHash,
   createNeonLocalEmbeddingProvider,
   hybridSearchNeonMemoryDb,
+  renderNeonMemoryDbWriteReport,
   resolveNeonMemoryDbWriteGate,
   searchNeonMemoryDb,
+  writeNeonMemoryDbEntries,
   writeNeonMemoryDbEntry,
+  type INeonEmbeddingProvider,
   type INeonMemoryDbWriteGate
 } from "../src/index.js";
 
@@ -119,6 +123,9 @@ describe("neon memory db writer (gated, isolated)", () => {
     assert.equal(result.inserted, true);
     assert.equal(result.safety.targetedRealMemoryDb, false);
     assert.ok(typeof result.entryId === "number");
+    const report = renderNeonMemoryDbWriteReport(result);
+    assert.doesNotMatch(report, new RegExp(escapeRegExp(root), "u"));
+    assert.doesNotMatch(report, /Content hash:/u);
 
     const hits = searchNeonMemoryDb("memory autarky writer roundtrip", { dbPath });
     assert.ok(hits.length >= 1);
@@ -168,6 +175,105 @@ describe("neon memory db writer (gated, isolated)", () => {
     assert.ok(rows.some((row) => row.matchType === "hybrid" || row.matchType === "vector"));
   });
 
+  it("bounds concurrent embeddings while preserving input order", async () => {
+    let active = 0;
+    let maxActive = 0;
+    const embedder: INeonEmbeddingProvider = {
+      name: "test:bounded",
+      dimensions: 2,
+      embed: async (_text, options): Promise<Float32Array> => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        try {
+          await waitForEmbeddingFixture(10, options?.signal);
+          return new Float32Array([1, 0]);
+        } finally {
+          active -= 1;
+        }
+      }
+    };
+    const inputs = Array.from({ length: 6 }, (_, index) => ({
+      sourceFile: `bounded-${index}.md`,
+      content: `bounded embedding ${index}`,
+      agent: "neo",
+      category: "discoveries"
+    }));
+
+    const results = await writeNeonMemoryDbEntries({
+      dbPath,
+      gate: armedGate,
+      embedder,
+      inputs,
+      embeddingConcurrency: 2,
+      embeddingTimeoutMs: 100
+    });
+
+    assert.equal(maxActive, 2);
+    assert.equal(results.length, inputs.length);
+    assert.ok(results.every((result) => result.embedded && !result.degraded));
+    for (const [index, result] of results.entries()) {
+      const input = inputs[index];
+      assert.ok(input);
+      assert.equal(result.contentHash, computeNeonContentHash(input.sourceFile, input.content));
+    }
+  });
+
+  it("times out a hanging embedding and reports the FTS-only degradation", async () => {
+    const embedder: INeonEmbeddingProvider = {
+      name: "test:hanging",
+      dimensions: 2,
+      embed: async (_text, options): Promise<Float32Array> =>
+        await waitForAbortedEmbeddingFixture(options?.signal)
+    };
+
+    const [result] = await writeNeonMemoryDbEntries({
+      dbPath,
+      gate: armedGate,
+      embedder,
+      inputs: [{
+        sourceFile: "timeout.md",
+        content: "timeout fallback remains searchable",
+        agent: "neo",
+        category: "discoveries"
+      }],
+      embeddingConcurrency: 1,
+      embeddingTimeoutMs: 10
+    });
+
+    assert.equal(result?.state, "written");
+    assert.equal(result?.embedded, false);
+    assert.equal(result?.degraded, true);
+    assert.ok(result?.diagnostics.some((entry) => entry.includes("timed out")));
+    assert.equal(searchNeonMemoryDb("timeout fallback", { dbPath }).length, 1);
+  });
+
+  it("blocks a source-file batch with duplicate source keys before opening the database", async () => {
+    const results = await writeNeonMemoryDbEntries({
+      dbPath,
+      gate: armedGate,
+      dedupe: "source-file",
+      inputs: [
+        {
+          sourceFile: "live-index/duplicate.md",
+          content: "first state",
+          agent: "neo",
+          category: "live-index"
+        },
+        {
+          sourceFile: "live-index/duplicate.md",
+          content: "second state",
+          agent: "neo",
+          category: "live-index"
+        }
+      ]
+    });
+
+    assert.equal(results.length, 2);
+    assert.ok(results.every((result) => result.state === "blocked"));
+    assert.ok(results.every((result) => result.diagnostics.some((entry) => entry.includes("duplicate source"))));
+    assert.equal(existsSync(dbPath), false);
+  });
+
   it("redacts secret-shaped content before storing", async () => {
     await writeNeonMemoryDbEntry({
       dbPath,
@@ -194,6 +300,32 @@ describe("neon memory db writer (gated, isolated)", () => {
     assert.notEqual(hash, computeNeonContentHash("other.md", "hello"));
   });
 });
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+async function waitForEmbeddingFixture(delayMs: number, signal: AbortSignal | undefined): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(resolve, delayMs);
+    signal?.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(new Error("embedding fixture aborted"));
+    }, { once: true });
+  });
+}
+
+async function waitForAbortedEmbeddingFixture(signal: AbortSignal | undefined): Promise<Float32Array> {
+  return await new Promise<Float32Array>((_resolve, reject) => {
+    if (!signal) {
+      reject(new Error("missing embedding abort signal"));
+      return;
+    }
+    signal.addEventListener("abort", () => {
+      reject(new Error("embedding fixture aborted"));
+    }, { once: true });
+  });
+}
 
 describe("neon memory db write gate (unified env parsing)", () => {
   it("accepts the shared ready|true|1|yes value set", () => {

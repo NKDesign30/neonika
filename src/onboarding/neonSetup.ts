@@ -200,6 +200,13 @@ export function applyNeonSetupEnvironment(
 ): INeonSetupEnvironmentResult {
   const applied: string[] = [];
   applyEnvDefault(env, applied, "NEON_MEMORY_DB_PATH", paths.memoryDbPath);
+  applyEnvDefault(env, applied, "NEON_LIVE_INDEX_MEMORY_DB_PATH", paths.memoryDbPath);
+  applyEnvDefault(
+    env,
+    applied,
+    "NEON_MEMORY_BACKUP_DIR",
+    join(paths.configRoot, "memory", "backups")
+  );
   applyEnvDefault(env, applied, "NEON_OWNER_ID", config.identity.ownerId);
   applyEnvDefault(
     env,

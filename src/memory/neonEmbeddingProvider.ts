@@ -24,6 +24,10 @@ export const DEFAULT_NEON_OLLAMA_BASE_URL = "http://localhost:11434";
 /** Characters sent to the embedder at most; see the note in `embed`. */
 export const MAX_EMBED_INPUT_CHARS = 4000;
 
+export interface INeonEmbeddingRequestOptions {
+  readonly signal?: AbortSignal;
+}
+
 /**
  * Embedding is async because the canonical provider (Ollama) is an HTTP call.
  * The local feature-hash provider is pure CPU but exposes the same async shape
@@ -32,7 +36,10 @@ export const MAX_EMBED_INPUT_CHARS = 4000;
 export interface INeonEmbeddingProvider {
   readonly name: string;
   readonly dimensions: number;
-  readonly embed: (text: string) => Promise<Float32Array>;
+  readonly embed: (
+    text: string,
+    options?: INeonEmbeddingRequestOptions
+  ) => Promise<Float32Array>;
 }
 
 export interface INeonOllamaEmbeddingOptions {
@@ -175,7 +182,10 @@ export function createNeonOllamaEmbeddingProvider(
   const dimensions = options.dimensions ?? NEON_OLLAMA_EMBEDDING_DIMENSIONS;
   const timeoutMs = options.timeoutMs ?? 30_000;
 
-  async function embed(text: string): Promise<Float32Array> {
+  async function embed(
+    text: string,
+    requestOptions?: INeonEmbeddingRequestOptions
+  ): Promise<Float32Array> {
     // kiss: hard character cap instead of real token counting. Ollama runs
     // nomic-embed-text with a 2048-token context and answers HTTP 400
     // ("the input length exceeds the context length") for anything longer —
@@ -190,11 +200,15 @@ export function createNeonOllamaEmbeddingProvider(
     // starts costing recall: chunk the text, embed each chunk, average the
     // vectors (or keep the best-matching chunk per entry).
     const input = text.length > MAX_EMBED_INPUT_CHARS ? text.slice(0, MAX_EMBED_INPUT_CHARS) : text;
+    const timeoutSignal = AbortSignal.timeout(timeoutMs);
+    const signal = requestOptions?.signal
+      ? AbortSignal.any([requestOptions.signal, timeoutSignal])
+      : timeoutSignal;
     const response = await fetch(`${baseUrl}/api/embed`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model, input }),
-      signal: AbortSignal.timeout(timeoutMs)
+      signal
     });
     if (!response.ok) {
       throw new Error(`Ollama embed failed: HTTP ${response.status}`);

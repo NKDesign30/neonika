@@ -1,20 +1,21 @@
 import { createHash } from "node:crypto";
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { redactText } from "../harness/redaction.js";
 import {
   collectNeonLiveIndexRecords,
+  createNeonLiveIndexPublicDiagnostics,
   type ICollectNeonLiveIndexOptions,
   type INeonLiveIndexCollection,
   type INeonLiveIndexRecord,
   type TNeonLiveIndexSource
 } from "./liveIndexSync.js";
 import {
-  writeNeonMemoryDbEntry,
-  type INeonMemoryDbWriteGate,
-  type INeonMemoryDbWriteResult
-} from "../memory/neonMemoryDbWriter.js";
+  executeNeonMemoryWriteback,
+  resolveNeonMemoryWritebackGate,
+  type INeonMemoryWritebackGate,
+  type INeonMemoryWritebackResult
+} from "../memory/neonMemoryWriteback.js";
 import type { INeonEmbeddingProvider } from "../memory/neonEmbeddingProvider.js";
 import { applyNeonLiveIndexQualityGate } from "./liveIndexQualityGate.js";
 
@@ -56,23 +57,22 @@ export interface INeonLiveIndexDaemonState {
   readonly sources: Record<TNeonLiveIndexSource, INeonLiveIndexDaemonSourceState>;
 }
 
-export type TNeonLiveIndexMemoryPromotionState = "disabled" | "planned" | "written" | "blocked";
+export type TNeonLiveIndexMemoryPromotionState =
+  | "disabled"
+  | "planned"
+  | "written"
+  | "blocked"
+  | "failed";
 
 export interface INeonLiveIndexMemoryPromotionSnapshot {
   readonly state: TNeonLiveIndexMemoryPromotionState;
-  readonly dbPath?: string;
   readonly changedRecords: number;
   readonly promotableRecords: number;
   readonly rejectedRecords: number;
-  readonly writes: readonly INeonMemoryDbWriteResult[];
-  /**
-   * Entries whose write threw. They stay unmarked in the daemon state, so the
-   * next scan sees them as changed again and retries them.
-   */
+  readonly writtenRecords: number;
+  readonly blockedRecords: number;
   readonly failedRecords: number;
-  /** Redacted reasons for the first few failures, for the diagnostic line. */
-  readonly failureReasons?: readonly string[];
-  readonly safety: { readonly targetedRealMemoryDb: boolean };
+  readonly writeback: INeonMemoryWritebackResult;
 }
 
 export interface INeonLiveIndexDaemonSnapshot {
@@ -93,9 +93,29 @@ export interface INeonLiveIndexDaemonOptions extends ICollectNeonLiveIndexOption
   readonly intervalMs?: number;
   readonly enabled?: boolean;
   readonly memoryDbPath?: string;
-  readonly memoryGate?: INeonMemoryDbWriteGate;
-  readonly allowRealMemoryDb?: boolean;
+  readonly primaryMemoryDbPath?: string;
+  readonly memoryBackupDir?: string;
+  readonly memoryWritebackGate?: INeonMemoryWritebackGate;
   readonly embedder?: INeonEmbeddingProvider;
+}
+
+export interface INeonLiveIndexDaemonPublicState {
+  readonly version: typeof STATE_VERSION;
+  readonly scanCount: number;
+  readonly lastScanAt: string;
+  readonly lastScanReason: TNeonLiveIndexDaemonScanReason;
+  readonly sources: Record<TNeonLiveIndexSource, INeonLiveIndexDaemonSourceState>;
+}
+
+export interface INeonLiveIndexDaemonPublicSnapshot {
+  readonly running: boolean;
+  readonly enabled: boolean;
+  readonly intervalMs: number;
+  readonly storage: { readonly state: "private"; readonly metrics: "private" };
+  readonly state?: INeonLiveIndexDaemonPublicState;
+  readonly collection?: Pick<INeonLiveIndexCollection, "generatedAt" | "totals" | "diagnostics">;
+  readonly memoryPromotion: INeonLiveIndexMemoryPromotionSnapshot;
+  readonly diagnostics: readonly string[];
 }
 
 export interface INeonLiveIndexDaemonService {
@@ -114,13 +134,20 @@ export function resolveNeonLiveIndexDaemonOptionsFromEnv(
   const intervalMs = parseIntervalMs(env["NEON_LIVE_INDEX_DAEMON_INTERVAL_MS"]);
   const statePath = env["NEON_LIVE_INDEX_DAEMON_STATE_PATH"]?.trim();
   const metricsPath = env["NEON_LIVE_INDEX_DAEMON_METRICS_PATH"]?.trim();
+  const memoryDbPath = env["NEON_LIVE_INDEX_MEMORY_DB_PATH"]?.trim();
+  const primaryMemoryDbPath = env["NEON_MEMORY_DB_PATH"]?.trim();
+  const memoryBackupDir = env["NEON_MEMORY_BACKUP_DIR"]?.trim();
 
   return {
     projectRoot,
     enabled: isEnabledEnv(env["NEON_LIVE_INDEX_DAEMON_ENABLED"]),
     intervalMs,
     ...(statePath ? { statePath } : {}),
-    ...(metricsPath ? { metricsPath } : {})
+    ...(metricsPath ? { metricsPath } : {}),
+    ...(memoryDbPath ? { memoryDbPath } : {}),
+    ...(primaryMemoryDbPath ? { primaryMemoryDbPath } : {}),
+    ...(memoryBackupDir ? { memoryBackupDir } : {}),
+    memoryWritebackGate: resolveNeonMemoryWritebackGate(env)
   };
 }
 
@@ -141,6 +168,7 @@ export function createNeonLiveIndexDaemon(
   const intervalMs = clampInterval(options.intervalMs ?? DEFAULT_INTERVAL_MS);
   const enabled = options.enabled ?? false;
   let timer: ReturnType<typeof setInterval> | undefined;
+  let activeScan: Promise<INeonLiveIndexDaemonSnapshot> | undefined;
   let latest: INeonLiveIndexDaemonSnapshot = {
     running: false,
     enabled,
@@ -149,21 +177,24 @@ export function createNeonLiveIndexDaemon(
     metricsPath,
     memoryPromotion: {
       state: "disabled",
-      ...(options.memoryDbPath ? { dbPath: options.memoryDbPath } : {}),
       changedRecords: 0,
       promotableRecords: 0,
+      writtenRecords: 0,
+      blockedRecords: 0,
       failedRecords: 0,
       rejectedRecords: 0,
-      writes: [],
-      safety: { targetedRealMemoryDb: false }
+      writeback: emptyWritebackResult("memory writeback has not run")
     },
     diagnostics: enabled
       ? ["live-index daemon ready; waiting for first scan"]
       : ["live-index daemon interval disabled; api/manual scans remain available"]
   };
 
-  const scanNow = async (reason: TNeonLiveIndexDaemonScanReason): Promise<INeonLiveIndexDaemonSnapshot> => {
-    latest = await scanNeonLiveIndexDaemon({
+  const scanNow = (reason: TNeonLiveIndexDaemonScanReason): Promise<INeonLiveIndexDaemonSnapshot> => {
+    if (activeScan) {
+      return activeScan;
+    }
+    const scan = scanNeonLiveIndexDaemon({
       ...options,
       projectRoot,
       statePath,
@@ -172,8 +203,16 @@ export function createNeonLiveIndexDaemon(
       enabled,
       reason,
       running: timer !== undefined
+    }).then((snapshot) => {
+      latest = snapshot;
+      return snapshot;
+    }).finally(() => {
+      if (activeScan === scan) {
+        activeScan = undefined;
+      }
     });
-    return latest;
+    activeScan = scan;
+    return scan;
   };
 
   return {
@@ -253,7 +292,13 @@ export async function scanNeonLiveIndexDaemon(
     promotable: quality.accepted.length,
     rejected: quality.summary.rejected,
     memoryState: memoryPromotion.state,
-    memoryWrites: memoryPromotion.writes.filter((write) => write.state === "written").length
+    memoryWrites: memoryPromotion.writtenRecords,
+    backupState: memoryPromotion.writeback.backup.state,
+    ...(memoryPromotion.writeback.backup.snapshotId
+      ? { backupSnapshotId: memoryPromotion.writeback.backup.snapshotId }
+      : {}),
+    targetState: memoryPromotion.writeback.target.state,
+    targetReason: memoryPromotion.writeback.target.reason
   });
 
   return {
@@ -271,22 +316,54 @@ export async function scanNeonLiveIndexDaemon(
 
 export function renderNeonLiveIndexDaemonReport(snapshot: INeonLiveIndexDaemonSnapshot): string {
   const state = snapshot.state;
-  const written = snapshot.memoryPromotion.writes.filter((write) => write.state === "written").length;
-  const blocked = snapshot.memoryPromotion.writes.filter((write) => write.state === "blocked").length;
 
   return [
     "Neonika Live Index Daemon",
     `Enabled: ${snapshot.enabled}`,
     `Running: ${snapshot.running}`,
     `Interval: ${snapshot.intervalMs}ms`,
-    `State: ${snapshot.statePath}`,
-    `Metrics: ${snapshot.metricsPath}`,
+    "State storage: private",
+    "Metrics storage: private",
     `Scans: ${state?.scanCount ?? 0}`,
     `Last scan: ${state?.lastScanAt ?? "never"} (${state?.lastScanReason ?? "none"})`,
     `Sources: discord=${state?.sources.discord.records ?? 0}/${state?.sources.discord.changed ?? 0} changed claude=${state?.sources.claude.records ?? 0}/${state?.sources.claude.changed ?? 0} changed codex=${state?.sources.codex.records ?? 0}/${state?.sources.codex.changed ?? 0} changed`,
-    `Memory promotion: ${snapshot.memoryPromotion.state} changed=${snapshot.memoryPromotion.changedRecords} promotable=${snapshot.memoryPromotion.promotableRecords} rejected=${snapshot.memoryPromotion.rejectedRecords} written=${written} blocked=${blocked} db=${snapshot.memoryPromotion.dbPath ?? "none"} realDb=${snapshot.memoryPromotion.safety.targetedRealMemoryDb}`,
+    `Memory promotion: ${snapshot.memoryPromotion.state} changed=${snapshot.memoryPromotion.changedRecords} promotable=${snapshot.memoryPromotion.promotableRecords} rejected=${snapshot.memoryPromotion.rejectedRecords} written=${snapshot.memoryPromotion.writtenRecords} blocked=${snapshot.memoryPromotion.blockedRecords} failed=${snapshot.memoryPromotion.failedRecords}`,
+    `Writeback target: ${snapshot.memoryPromotion.writeback.target.state} (${snapshot.memoryPromotion.writeback.target.reason})`,
+    `Pre-write backup: ${snapshot.memoryPromotion.writeback.backup.state}${snapshot.memoryPromotion.writeback.backup.snapshotId ? ` (${snapshot.memoryPromotion.writeback.backup.snapshotId})` : ""}`,
     ...snapshot.diagnostics.map((diagnostic) => `- ${diagnostic}`)
   ].join("\n");
+}
+
+export function createNeonLiveIndexDaemonPublicSnapshot(
+  snapshot: INeonLiveIndexDaemonSnapshot
+): INeonLiveIndexDaemonPublicSnapshot {
+  const state = snapshot.state
+    ? {
+        version: snapshot.state.version,
+        scanCount: snapshot.state.scanCount,
+        lastScanAt: snapshot.state.lastScanAt,
+        lastScanReason: snapshot.state.lastScanReason,
+        sources: snapshot.state.sources
+      }
+    : undefined;
+  const collection = snapshot.collection
+    ? {
+        generatedAt: snapshot.collection.generatedAt,
+        totals: snapshot.collection.totals,
+        diagnostics: createNeonLiveIndexPublicDiagnostics(snapshot.collection.diagnostics)
+      }
+    : undefined;
+
+  return {
+    running: snapshot.running,
+    enabled: snapshot.enabled,
+    intervalMs: snapshot.intervalMs,
+    storage: { state: "private", metrics: "private" },
+    ...(state ? { state } : {}),
+    ...(collection ? { collection } : {}),
+    memoryPromotion: snapshot.memoryPromotion,
+    diagnostics: createNeonLiveIndexPublicDiagnostics(snapshot.diagnostics)
+  };
 }
 
 function buildDaemonState(input: {
@@ -368,8 +445,12 @@ async function readDaemonState(path: string): Promise<INeonLiveIndexDaemonState 
 }
 
 async function persistDaemonState(path: string, state: INeonLiveIndexDaemonState): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  await preparePrivateStorageParent(path);
+  await writeFile(path, `${JSON.stringify(state, null, 2)}\n`, {
+    encoding: "utf8",
+    mode: 0o600
+  });
+  await chmod(path, 0o600);
 }
 
 async function appendDaemonMetric(path: string, metric: {
@@ -384,9 +465,23 @@ async function appendDaemonMetric(path: string, metric: {
   readonly rejected: number;
   readonly memoryState: TNeonLiveIndexMemoryPromotionState;
   readonly memoryWrites: number;
+  readonly backupState: INeonMemoryWritebackResult["backup"]["state"];
+  readonly backupSnapshotId?: string;
+  readonly targetState: INeonMemoryWritebackResult["target"]["state"];
+  readonly targetReason: INeonMemoryWritebackResult["target"]["reason"];
 }): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-  await appendFile(path, `${JSON.stringify(metric)}\n`, "utf8");
+  await preparePrivateStorageParent(path);
+  await appendFile(path, `${JSON.stringify(metric)}\n`, {
+    encoding: "utf8",
+    mode: 0o600
+  });
+  await chmod(path, 0o600);
+}
+
+async function preparePrivateStorageParent(path: string): Promise<void> {
+  const parent = dirname(path);
+  await mkdir(parent, { recursive: true, mode: 0o700 });
+  await chmod(parent, 0o700);
 }
 
 function getStableUnpromotedRecordKeys(
@@ -413,84 +508,45 @@ async function promoteRecordsToMemory(input: {
   readonly rejectedRecords: number;
 }): Promise<INeonLiveIndexMemoryPromotionSnapshot> {
   const dbPath = input.options.memoryDbPath;
-  const gate = input.options.memoryGate;
-  const disabledSnapshot = (state: TNeonLiveIndexMemoryPromotionState): INeonLiveIndexMemoryPromotionSnapshot => ({
-    state,
-    ...(dbPath ? { dbPath } : {}),
-    changedRecords: input.changedRecords,
-    promotableRecords: input.recordsToPromote.length,
-    rejectedRecords: input.rejectedRecords,
-    writes: [],
-    failedRecords: 0,
-    safety: { targetedRealMemoryDb: false }
+  const writebackGate = input.options.memoryWritebackGate;
+  if (!dbPath || !writebackGate) {
+    return {
+      state: "disabled",
+      changedRecords: input.changedRecords,
+      promotableRecords: input.recordsToPromote.length,
+      rejectedRecords: input.rejectedRecords,
+      writtenRecords: 0,
+      blockedRecords: 0,
+      failedRecords: 0,
+      writeback: emptyWritebackResult("memory writeback is not configured")
+    };
+  }
+
+  const writeback = await executeNeonMemoryWriteback({
+    targetDbPath: dbPath,
+    primaryDbPath: input.options.primaryMemoryDbPath,
+    backupDir: input.options.memoryBackupDir,
+    gate: writebackGate,
+    inputs: input.recordsToPromote.map((record) => ({
+      sourceFile: record.sourceFile,
+      content: record.content,
+      agent: record.agent,
+      category: record.category,
+      entryDate: record.entryDate,
+      importanceScore: record.importanceScore
+    })),
+    ...(input.options.embedder ? { embedder: input.options.embedder } : {}),
+    ...(input.options.now ? { now: input.options.now } : {})
   });
-
-  if (!dbPath || !gate) {
-    return disabledSnapshot("disabled");
-  }
-
-  if (input.recordsToPromote.length === 0) {
-    return disabledSnapshot(gate.enabled ? "planned" : "blocked");
-  }
-
-  const writes: INeonMemoryDbWriteResult[] = [];
-  const failures: string[] = [];
-  for (const record of input.recordsToPromote) {
-    // One bad entry must not take the batch — or the daemon — down with it. An
-    // uncaught throw here propagated all the way out of scanNow and killed the
-    // process, which stopped every later scan until someone restarted it. The
-    // synthetic blocked result keeps `writes` index-aligned with
-    // `recordsToPromote`, so applyMemoryPromotion leaves this record unmarked
-    // and the next scan retries it.
-    try {
-      writes.push(
-      await writeNeonMemoryDbEntry({
-        dbPath,
-        gate,
-        // Digests are ephemeral state: one row per source, latest state wins.
-        dedupe: "source-file",
-        input: {
-          sourceFile: record.sourceFile,
-          content: record.content,
-          agent: record.agent,
-          category: record.category,
-          entryDate: record.entryDate,
-          importanceScore: record.importanceScore
-        },
-        ...(input.options.allowRealMemoryDb !== undefined
-          ? { allowRealDb: input.options.allowRealMemoryDb }
-          : {}),
-        ...(input.options.embedder ? { embedder: input.options.embedder } : {}),
-        ...(input.options.now ? { now: input.options.now } : {})
-        })
-      );
-    } catch (error) {
-      failures.push(redactText(error instanceof Error ? error.message : String(error)));
-      writes.push({
-        state: "blocked",
-        inserted: false,
-        updated: false,
-        entryId: undefined,
-        contentHash: undefined,
-        embedded: false,
-        dbPath,
-        diagnostics: ["live-index write threw; entry left unmarked for the next scan"],
-        safety: { targetedRealMemoryDb: false }
-      });
-    }
-  }
-
-  const written = writes.filter((write) => write.state === "written").length;
   return {
-    state: written > 0 ? "written" : "blocked",
-    dbPath,
+    state: writeback.state,
     changedRecords: input.changedRecords,
     promotableRecords: input.recordsToPromote.length,
     rejectedRecords: input.rejectedRecords,
-    writes,
-    failedRecords: failures.length,
-    ...(failures.length > 0 ? { failureReasons: failures.slice(0, 3) } : {}),
-    safety: { targetedRealMemoryDb: writes.some((write) => write.safety.targetedRealMemoryDb) }
+    writtenRecords: writeback.writes.written,
+    blockedRecords: writeback.writes.blocked,
+    failedRecords: writeback.state === "failed" ? input.recordsToPromote.length : 0,
+    writeback
   };
 }
 
@@ -500,14 +556,10 @@ function applyMemoryPromotion(
   promotion: INeonLiveIndexMemoryPromotionSnapshot,
   promotedAt: string
 ): INeonLiveIndexDaemonState {
-  if (promotion.writes.length === 0) {
+  if (promotion.state !== "written") {
     return state;
   }
-  const writtenByKey = new Set(
-    promotedRecords
-      .filter((_, index) => promotion.writes[index]?.state === "written")
-      .map((record) => createRecordKey(record))
-  );
+  const writtenByKey = new Set(promotedRecords.map((record) => createRecordKey(record)));
 
   return {
     ...state,
@@ -518,14 +570,31 @@ function applyMemoryPromotion(
 }
 
 function renderMemoryPromotionDiagnostic(promotion: INeonLiveIndexMemoryPromotionSnapshot): string {
-  const written = promotion.writes.filter((write) => write.state === "written").length;
-  const blocked = promotion.writes.filter((write) => write.state === "blocked").length;
-  // Failures are surfaced, never swallowed: a silent zero here would look like a
-  // quiet scan instead of entries that did not make it into memory.
-  const failed = promotion.failedRecords > 0
-    ? `, failed=${promotion.failedRecords} (${(promotion.failureReasons ?? []).join("; ")})`
-    : "";
-  return `live-index memory promotion: ${promotion.state}, changed=${promotion.changedRecords}, promotable=${promotion.promotableRecords}, rejected=${promotion.rejectedRecords}, written=${written}, blocked=${blocked}${failed}, realDb=${promotion.safety.targetedRealMemoryDb}`;
+  return `live-index memory promotion: ${promotion.state}, changed=${promotion.changedRecords}, promotable=${promotion.promotableRecords}, rejected=${promotion.rejectedRecords}, written=${promotion.writtenRecords}, blocked=${promotion.blockedRecords}, failed=${promotion.failedRecords}, target=${promotion.writeback.target.reason}, backup=${promotion.writeback.backup.state}`;
+}
+
+function emptyWritebackResult(diagnostic: string): INeonMemoryWritebackResult {
+  return {
+    state: "planned",
+    target: {
+      state: "blocked",
+      reason: "not-evaluated",
+      targetConfigured: false,
+      matchesPrimary: false,
+      ownerOnly: false
+    },
+    backup: { state: "not-created", entries: 0, rotated: 0 },
+    writes: {
+      requested: 0,
+      written: 0,
+      inserted: 0,
+      updated: 0,
+      embedded: 0,
+      degraded: 0,
+      blocked: 0
+    },
+    diagnostics: [diagnostic]
+  };
 }
 
 function countChanged(state: INeonLiveIndexDaemonState): number {
