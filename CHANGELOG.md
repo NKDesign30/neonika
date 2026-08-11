@@ -2,7 +2,8 @@
 
 ## [Unreleased]
 
-- Next changes are collected here.
+- Added a portable Ultraresearch skill with explicit source accounting,
+  untrusted-source handling and public-repository leak safeguards.
 
 ## [0.4.0] - 2026-07-29
 

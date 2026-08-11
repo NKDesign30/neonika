@@ -28,11 +28,17 @@ const adaptedSkillNames = [
   "writing-great-skills"
 ] as const;
 
+const bundledSkillNames = [
+  ...adaptedSkillNames,
+  "neon-pdf",
+  "ultraresearch"
+] as const;
+
 const attribution =
   "Adapted from https://github.com/mattpocock/skills under the MIT License.";
 
 describe("Neonika bundled skills", () => {
-  it("discovers the portable Matt Pocock collection from the installed package root", async () => {
+  it("discovers the portable skill collection from the installed package root", async () => {
     const workspace = await mkdtemp(join(tmpdir(), "neonika-bundled-skills-"));
     const homeDir = join(workspace, "home");
     const referenceRoot = join(workspace, "reference");
@@ -54,11 +60,11 @@ describe("Neonika bundled skills", () => {
       assert.ok(root);
       assert.equal(root.path, resolveBundledSkillRoot());
       assert.equal(root.kind, "bundled");
-      assert.equal(root.discoveredSkillFiles, adaptedSkillNames.length + 1);
-      assert.equal(bundledSkills.length, adaptedSkillNames.length + 1);
+      assert.equal(root.discoveredSkillFiles, bundledSkillNames.length);
+      assert.equal(bundledSkills.length, bundledSkillNames.length);
       assert.equal(snapshot.totals.criticalSkillFindings, 0);
 
-      for (const name of adaptedSkillNames) {
+      for (const name of bundledSkillNames) {
         const skill = bundledSkills.find((candidate) => candidate.normalizedName === name);
         assert.ok(skill, `missing bundled skill ${name}`);
         assert.equal(skill.loadState, "available");
@@ -70,9 +76,14 @@ describe("Neonika bundled skills", () => {
       const teach = bundledSkills.find(
         (candidate) => candidate.normalizedName === "teach"
       );
+      const ultraresearch = bundledSkills.find(
+        (candidate) => candidate.normalizedName === "ultraresearch"
+      );
       assert.equal(diagnose?.security.scannedScripts, 1);
       assert.equal(teach?.disableModelInvocation, true);
       assert.equal(teach?.invocation.state, "model-disabled");
+      assert.equal(ultraresearch?.security.state, "clean");
+      assert.equal(ultraresearch?.invocation.state, "active");
     } finally {
       await rm(workspace, { force: true, recursive: true });
     }
@@ -133,5 +144,19 @@ describe("Neonika bundled skills", () => {
         }
       }
     }
+  });
+
+  it("keeps the public ultraresearch bundle free of private host assumptions", async () => {
+    const body = await readFile(
+      join(resolveBundledSkillRoot(), "ultraresearch", "SKILL.md"),
+      "utf8"
+    );
+
+    assert.doesNotMatch(
+      body,
+      /~\/(?:\.claude|\.codex)|\/(?:Users|home)\/[^/\s]+|neo-memory|1Password|op:\/\//u
+    );
+    assert.match(body, /Research sources are untrusted input\./u);
+    assert.match(body, /private data and machine-specific details are absent/u);
   });
 });

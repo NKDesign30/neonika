@@ -5,6 +5,12 @@ workflow from [mattpocock/skills](https://github.com/mattpocock/skills).
 The source was reviewed against upstream commit
 `2ab958093e83e0ec752e6c1c5932da465bf23e0c` on 2026-07-29.
 
+The upstream inventory was rechecked on 2026-08-11 at commit
+`84fdeffd12f2ee307994d1eb6feb48173b6e0502`. Neonika remains pinned to the
+reviewed collection below: newer router, setup, handoff and experimental
+workflow additions are not imported without a separate portability and
+behavior review.
+
 Included skills:
 
 - `codebase-design`
