@@ -115,7 +115,9 @@ node dist/src/cli.js tui                      # read-only terminal dashboard
 
 Fresh installations include Neonika's reviewed adaptation of Matt Pocock's
 engineering skill workflow: Wayfinder, Teach, TDD, domain modeling, architecture
-improvement, prototyping, triage and the related handoff skills.
+improvement, prototyping, triage and the related handoff skills. They also
+include Neonika's portable Ultraresearch workflow for explicit, evidence-heavy
+100+ source investigations.
 
 ```bash
 neonika skills          # inventory, ownership and security posture
