@@ -2,6 +2,7 @@ import { resolveNeonCronTimerGate } from "../automation/cronTimerRuntime.js";
 import { resolveNeonDreamingGate } from "../automation/dreamingRuntime.js";
 import { resolveNeonHeartbeatTimerGate } from "../automation/heartbeatTimerRuntime.js";
 import { resolveNeonHookDispatchGate } from "../automation/hookDispatch.js";
+import { resolveNeonScheduledAgentExecutionGate } from "../automation/scheduledAgentExecution.js";
 import { resolveNeonDoctorFixGate } from "../doctor/doctorFixRuntime.js";
 import { resolveNeonDeliveryDrainGate } from "../gateway/deliveryDrainRuntime.js";
 import { resolveNeonInFlightRunGate } from "../gateway/inFlightRunRegistry.js";
@@ -141,6 +142,13 @@ const GATE_DESCRIPTORS: readonly IGateDescriptor[] = [
     category: "automation",
     sideEffect: "emit autonomous heartbeat wake intents",
     resolve: (env) => resolveNeonHeartbeatTimerGate(env)
+  },
+  {
+    key: "scheduled-agent-execution",
+    envKey: "NEON_SCHEDULED_AGENT_EXECUTION_ENABLED",
+    category: "automation",
+    sideEffect: "invoke selected agent harnesses for deduplicated cron and heartbeat windows",
+    resolve: (env) => resolveNeonScheduledAgentExecutionGate(env)
   },
   {
     key: "hook-dispatch",

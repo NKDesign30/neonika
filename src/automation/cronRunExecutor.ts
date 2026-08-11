@@ -1,4 +1,4 @@
-import { writeNeonGatewayRun } from "../gateway/runStore.js";
+import { writeNeonGatewayRunLatest } from "../gateway/runStore.js";
 import type { INeonGatewayShadowRun } from "../gateway/types.js";
 import {
   appendNeonWorkspaceNote,
@@ -6,6 +6,11 @@ import {
   type INeonWorkspaceNotesGate
 } from "../workspace/workspaceNotes.js";
 import type { INeonCronDaemonTickResult } from "./cronDaemonRuntime.js";
+import type { INeonCronStoreJob } from "./cronStore.js";
+import {
+  executeNeonScheduledAgentRun,
+  type INeonScheduledAgentRuntime
+} from "./scheduledAgentExecution.js";
 
 type TNeonCronShadowRunKind = "current" | "catch-up";
 
@@ -19,12 +24,16 @@ export interface INeonCronExecutionResult {
   readonly createdRunIds: readonly string[];
   readonly createdRunCount: number;
   readonly createdWorkspaceNoteCount: number;
+  readonly executedRunCount: number;
+  readonly failedRunCount: number;
+  readonly retryCount: number;
+  readonly deliveredRunCount: number;
   readonly safety: {
-    readonly outboundSent: false;
-    readonly sentDiscord: false;
+    readonly outboundSent: boolean;
+    readonly sentDiscord: boolean;
     readonly wroteRunStore: boolean;
     readonly wroteWorkspaceNotes: boolean;
-    readonly executed: false;
+    readonly executed: boolean;
   };
   readonly diagnostics: readonly string[];
 }
@@ -35,6 +44,8 @@ export interface IExecuteNeonCronRunIntentsOptions {
   readonly agentId?: string;
   readonly workspaceNotesGate?: INeonWorkspaceNotesGate;
   readonly env?: Readonly<Record<string, string | undefined>>;
+  readonly agentRuntime?: INeonScheduledAgentRuntime;
+  readonly jobs?: readonly INeonCronStoreJob[];
   /** Injectable writer for tests; defaults to the real gateway run store. */
   readonly writeRun?: (projectRoot: string, run: INeonGatewayShadowRun) => Promise<void>;
 }
@@ -90,21 +101,51 @@ export function buildNeonCronShadowRun(params: {
 export async function executeNeonCronRunIntents(
   options: IExecuteNeonCronRunIntentsOptions
 ): Promise<INeonCronExecutionResult> {
-  const writeRun = options.writeRun ?? writeNeonGatewayRun;
+  const writeRun = options.writeRun ?? writeNeonGatewayRunLatest;
   const workspaceNotesGate =
     options.workspaceNotesGate ?? resolveNeonWorkspaceNotesGate(options.env ?? {});
   const createdRunIds: string[] = [];
   let createdWorkspaceNoteCount = 0;
+  let executedRunCount = 0;
+  let failedRunCount = 0;
+  let retryCount = 0;
+  let deliveredRunCount = 0;
   const emissions = buildCronShadowRunEmissions(options.tick);
 
   for (const emission of emissions) {
-    const run = buildNeonCronShadowRun({
+    const job = options.jobs?.find((candidate) => candidate.id === emission.jobId);
+    const shadowRun = buildNeonCronShadowRun({
       projectRoot: options.projectRoot,
       tickAt: options.tick.tickAt,
       ...(options.agentId ? { agentId: options.agentId } : {}),
       emission
     });
-    await writeRun(options.projectRoot, run);
+    const scheduled = options.agentRuntime?.gate.enabled
+      ? await executeNeonScheduledAgentRun({
+          projectRoot: options.projectRoot,
+          specification: {
+            runId: shadowRun.runId,
+            source: "cron",
+            sourceId: emission.jobId,
+            agentId: shadowRun.request.agentId,
+            goal: `cron ${emission.jobId}`,
+            content: buildCronAgentPrompt(emission, job),
+            receivedAt: options.tick.tickAt,
+            ...(job?.deliveryTarget ? { deliveryTarget: job.deliveryTarget } : {})
+          },
+          runtime: options.agentRuntime,
+          writeRun
+        })
+      : undefined;
+    const run = scheduled?.run ?? shadowRun;
+    if (!scheduled) {
+      await writeRun(options.projectRoot, run);
+    } else {
+      executedRunCount += scheduled.attempts > 0 ? 1 : 0;
+      failedRunCount += scheduled.state === "failed" ? 1 : 0;
+      retryCount += scheduled.retryCount;
+      deliveredRunCount += scheduled.outboundSent ? 1 : 0;
+    }
     createdRunIds.push(run.runId);
 
     const noteResult = await appendNeonWorkspaceNote({
@@ -114,7 +155,9 @@ export async function executeNeonCronRunIntents(
         kind: "cron",
         title: `Cron ${emission.jobId} ${emission.kind}`,
         source: `cron:${emission.jobId}:${emission.kind}`,
-        body: `Cron window ${emission.windowKey} emitted a terminal shadow run-record ${run.runId}. Delivery stayed suppressed.`
+        body: scheduled
+          ? `Cron window ${emission.windowKey} produced terminal run-record ${run.runId} with status ${run.status}; delivery ${run.delivery.state}.`
+          : `Cron window ${emission.windowKey} emitted a terminal shadow run-record ${run.runId}. Delivery stayed suppressed.`
       },
       now: () => new Date(options.tick.tickAt)
     });
@@ -125,20 +168,48 @@ export async function executeNeonCronRunIntents(
 
   const wroteRunStore = createdRunIds.length > 0;
   const wroteWorkspaceNotes = createdWorkspaceNoteCount > 0;
+  const outboundSent = deliveredRunCount > 0;
+  const executed = executedRunCount > 0;
+  const scheduledAgentEnabled = options.agentRuntime?.gate.enabled === true;
   return {
     createdRunIds,
     createdRunCount: createdRunIds.length,
     createdWorkspaceNoteCount,
-    safety: { outboundSent: false, sentDiscord: false, wroteRunStore, wroteWorkspaceNotes, executed: false },
+    executedRunCount,
+    failedRunCount,
+    retryCount,
+    deliveredRunCount,
+    safety: {
+      outboundSent,
+      sentDiscord: outboundSent,
+      wroteRunStore,
+      wroteWorkspaceNotes,
+      executed
+    },
     diagnostics: [
-      wroteRunStore
-        ? `Wrote ${createdRunIds.length} terminal shadow cron run-record(s); delivery suppressed on every record.`
+      scheduledAgentEnabled && wroteRunStore
+        ? `Processed ${createdRunIds.length} scheduled cron run(s); ${executedRunCount} invoked a harness, ${failedRunCount} failed, ${retryCount} retry attempt(s), ${deliveredRunCount} delivered.`
+        : wroteRunStore
+          ? `Wrote ${createdRunIds.length} terminal shadow cron run-record(s); delivery suppressed on every record.`
         : "No cron run intents to execute; no run-store write.",
       wroteWorkspaceNotes
         ? `Wrote ${createdWorkspaceNoteCount} local workspace note(s).`
         : `No workspace note written (${workspaceNotesGate.reason}).`
     ]
   };
+}
+
+function buildCronAgentPrompt(
+  emission: INeonCronShadowRunEmission,
+  job: INeonCronStoreJob | undefined
+): string {
+  const label = job?.label.trim() || emission.jobId;
+  return [
+    `Execute scheduled cron job "${label}" (${emission.jobId}).`,
+    `Window: ${emission.windowKey}.`,
+    `Emission: ${emission.kind}.`,
+    "Perform the configured work in read-only mode and report the result concisely."
+  ].join("\n");
 }
 
 function buildCronShadowRunEmissions(tick: INeonCronDaemonTickResult): readonly INeonCronShadowRunEmission[] {

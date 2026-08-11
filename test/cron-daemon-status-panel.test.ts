@@ -9,7 +9,9 @@ import {
   renderNeonCronDaemonStatusReport,
   renderNeonMissionControlCronDaemonStatusPanel,
   resolveNeonCronDaemonCursorPath,
-  writeNeonCronDaemonCursor
+  resolveNeonCronDaemonLivePath,
+  writeNeonCronDaemonCursor,
+  writeNeonCronDaemonLiveState
 } from "../src/index.js";
 
 const now = new Date("2026-06-02T12:00:00.000Z");
@@ -85,6 +87,40 @@ describe("Neonika Cron daemon status panel", () => {
     assert.match(panel, /Cron Daemon/u);
     assert.match(panel, /not loaded/u);
     assert.doesNotMatch(panel, /tick #/u);
+  });
+
+  it("projects persisted agent execution and delivery counters as evidence", async () => {
+    const projectRoot = await tempProjectRoot();
+    try {
+      await writeNeonCronDaemonLiveState(resolveNeonCronDaemonLivePath(projectRoot), {
+        version: 1,
+        pid: 42,
+        alive: true,
+        gateEnabled: true,
+        intervalMs: 60_000,
+        startedAt: now.toISOString(),
+        tickCount: 1,
+        dueIntentsLastTick: 1,
+        catchupIntentsLastTick: 0,
+        createdRunsTotal: 1,
+        createdWorkspaceNotesTotal: 0,
+        executedRunsTotal: 1,
+        failedRunsTotal: 0,
+        retryAttemptsTotal: 1,
+        deliveredRunsTotal: 1
+      });
+      const snapshot = await createNeonCronDaemonStatusSnapshot(projectRoot, {
+        env: { NEON_SCHEDULED_AGENT_EXECUTION_ENABLED: "ready" },
+        now: () => now
+      });
+
+      assert.equal(snapshot.executionGate.enabled, true);
+      assert.equal(snapshot.safety.agentExecuted, true);
+      assert.equal(snapshot.safety.outboundSent, true);
+      assert.match(renderNeonCronDaemonStatusReport(snapshot), /executed 1.*retries 1.*delivered 1/u);
+    } finally {
+      await rm(projectRoot, { force: true, recursive: true });
+    }
   });
 
   it("tags the gate as armed in the panel when the timer gate is enabled", async () => {

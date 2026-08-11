@@ -15,11 +15,11 @@ import {
  * prevents-duplicate-timers) and rearmed via `computeNextRunAtMs`
  * (`src/cron/schedule.ts`).
  *
- * Neonika deliberately stops short of execution. The timer is the autonomous
+ * This pure timer deliberately stops short of execution. The timer is the autonomous
  * side effect, so it is **default-off**: a tick only evaluates anything when
  * `NEON_CRON_TIMER_ENABLED` is explicitly ready. When armed it emits read-only
  * `shadow-run-intent`s — it never starts a run, writes the cron store, or sends.
- * Actual execution stays behind the harness write-mode gate (DP-4).
+ * The daemon service may execute them only behind the independent scheduled-agent gate.
  *
  * intentionally-different vs upstream:
  * - "prevents-duplicate-timers" becomes due-window dedup: a job already emitted
@@ -90,7 +90,7 @@ export function evaluateNeonCronTick(
       safety: { executed: false, outboundSent: false },
       diagnostics: [
         "Cron timer is disabled (default). No tick ran; set NEON_CRON_TIMER_ENABLED to arm read-only intent evaluation.",
-        "Even when armed the timer only emits shadow run intents; execution stays gated by the harness write-mode gate (DP-4)."
+        "Even when armed the timer only emits run intents; scheduled-agent execution stays separately gated."
       ]
     };
   }
@@ -134,7 +134,7 @@ export function evaluateNeonCronTick(
     safety: { executed: false, outboundSent: false },
     diagnostics: [
       `Cron timer armed: evaluated ${cronJobs.length} cron job(s), emitted ${emitted.length} read-only run intent(s), deduped ${deduped.length}.`,
-      "Timer emits shadow run intents only; execution stays gated by the harness write-mode gate (DP-4)."
+      "Timer emits run intents only; scheduled-agent execution stays separately gated."
     ]
   };
 }

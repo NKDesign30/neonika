@@ -88,10 +88,14 @@ describe("Neon heartbeat daemon status panel (read-only)", () => {
         dueIntentsLastTick: 0,
         dueCommitmentsLastTick: 2,
         lifecycleCommitmentsLastTick: 1,
-        createdRunsTotal: 0
+        createdRunsTotal: 0,
+        executedRunsTotal: 1,
+        failedRunsTotal: 0,
+        retryAttemptsTotal: 1,
+        deliveredRunsTotal: 1
       });
       const snapshot = await createNeonHeartbeatDaemonStatusSnapshot(root, {
-        env: {},
+        env: { NEON_SCHEDULED_AGENT_EXECUTION_ENABLED: "ready" },
         now: () => fixedNow,
         agents
       });
@@ -100,10 +104,14 @@ describe("Neon heartbeat daemon status panel (read-only)", () => {
 
       assert.equal(snapshot.gate.enabled, false);
       assert.equal(snapshot.daemon?.gateEnabled, true);
+      assert.equal(snapshot.executionGate.enabled, true);
+      assert.equal(snapshot.safety.agentExecuted, true);
+      assert.equal(snapshot.safety.outboundSent, true);
       assert.match(report, /view gate disabled/u);
       assert.match(report, /daemonGate=armed/u);
       assert.match(report, /dueCommitments\(lastTick\) 2/u);
       assert.match(report, /lifecycleCommitments\(lastTick\) 1/u);
+      assert.match(report, /executed 1.*retries 1.*delivered 1/u);
       assert.match(panel, /view gate/u);
       assert.match(panel, /daemonGate armed/u);
       assert.match(panel, /commitments\(lastTick\) 2/u);

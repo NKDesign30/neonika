@@ -12,6 +12,7 @@ import {
   type INeonCommitmentLifecycleResult
 } from "../commitments/commitmentLifecycle.js";
 import type { INeonGatewayShadowRun } from "../gateway/types.js";
+import type { INeonChannelRouteRef } from "../channels/routeProjection.js";
 import {
   resolveNeonHeartbeatDaemonCursorPath,
   runNeonHeartbeatDaemonTick,
@@ -27,23 +28,21 @@ import {
   type INeonHeartbeatCommitmentWakeInput,
   type INeonHeartbeatTimerGate
 } from "./heartbeatTimerRuntime.js";
+import type { INeonScheduledAgentRuntime } from "./scheduledAgentExecution.js";
 
 /**
- * Heartbeat daemon service (shadow).
+ * Heartbeat daemon service.
  *
  * The autonomous loop upstream runs via `startHeartbeatRunner` (recursive
  * setTimeout) and Neonika deliberately left out of the pure runtime. This
- * service wires it up for the SHADOW step: a real `setInterval` ticks the pure
- * `runNeonHeartbeatDaemonTick`, feeds the emitted wake intents through the run
- * executor (terminal shadow run-records, delivery suppressed), and persists a
+ * service wires a real `setInterval` to the pure tick runtime and persists a
  * liveness state file so a separate process (CLI status / Doctor / HTTP) can see
  * `alive / lastTick / nextTick / dueIntents / createdRuns`.
  *
- * Shadow invariants kept: stage is never changed here, outbound stays suppressed
- * (the executor's literal-false safety), and emission stays behind the
- * `NEON_HEARTBEAT_TIMER_ENABLED` gate — a gate-closed tick ticks but emits and
- * writes nothing. `tickOnce` is exposed so tests drive ticks deterministically
- * without the real timer.
+ * Default-off invariants remain: emission requires `NEON_HEARTBEAT_TIMER_ENABLED`,
+ * agent work independently requires `NEON_SCHEDULED_AGENT_EXECUTION_ENABLED`,
+ * and delivery still goes through the Canary sender policy. `tickOnce` keeps
+ * deterministic service verification possible without a wall-clock timer.
  */
 export interface INeonHeartbeatDaemonLiveState {
   readonly version: 1;
@@ -59,6 +58,10 @@ export interface INeonHeartbeatDaemonLiveState {
   readonly dueCommitmentsLastTick: number;
   readonly lifecycleCommitmentsLastTick: number;
   readonly createdRunsTotal: number;
+  readonly executedRunsTotal: number;
+  readonly failedRunsTotal: number;
+  readonly retryAttemptsTotal: number;
+  readonly deliveredRunsTotal: number;
   readonly stoppedAt?: string;
 }
 
@@ -96,6 +99,8 @@ export interface ICreateNeonHeartbeatDaemonServiceOptions {
   readonly livePath?: string;
   readonly maxCatchupPerJob?: number;
   readonly unrefTimer?: boolean;
+  readonly agentRuntime?: INeonScheduledAgentRuntime;
+  readonly deliveryTarget?: INeonChannelRouteRef;
   readonly writeRun?: (projectRoot: string, run: INeonGatewayShadowRun) => Promise<void>;
 }
 
@@ -168,7 +173,11 @@ export function createNeonHeartbeatDaemonService(
     dueIntentsLastTick: 0,
     dueCommitmentsLastTick: 0,
     lifecycleCommitmentsLastTick: 0,
-    createdRunsTotal: 0
+    createdRunsTotal: 0,
+    executedRunsTotal: 0,
+    failedRunsTotal: 0,
+    retryAttemptsTotal: 0,
+    deliveredRunsTotal: 0
   };
   let timer: ReturnType<typeof setInterval> | undefined;
   let ticking = false;
@@ -193,6 +202,8 @@ export function createNeonHeartbeatDaemonService(
       projectRoot: options.projectRoot,
       emissions: tick.tick.emissions,
       tickAt: tick.tickAt,
+      ...(options.agentRuntime ? { agentRuntime: options.agentRuntime } : {}),
+      ...(options.deliveryTarget ? { deliveryTarget: options.deliveryTarget } : {}),
       ...(options.writeRun ? { writeRun: options.writeRun } : {})
     });
     const commitmentLifecycle =
@@ -227,7 +238,11 @@ export function createNeonHeartbeatDaemonService(
       dueIntentsLastTick: tick.tick.emitted.length,
       dueCommitmentsLastTick: commitmentWakes.length,
       lifecycleCommitmentsLastTick: commitmentLifecycle.updatedIds.length,
-      createdRunsTotal: state.createdRunsTotal + execution.createdRunCount
+      createdRunsTotal: state.createdRunsTotal + execution.createdRunCount,
+      executedRunsTotal: state.executedRunsTotal + execution.executedRunCount,
+      failedRunsTotal: state.failedRunsTotal + execution.failedRunCount,
+      retryAttemptsTotal: state.retryAttemptsTotal + execution.retryCount,
+      deliveredRunsTotal: state.deliveredRunsTotal + execution.deliveredRunCount
     };
     await writeNeonHeartbeatDaemonLiveState(livePath, state);
     return { tick, execution, commitmentLifecycle, state };
@@ -305,6 +320,10 @@ function normalizeLiveState(value: unknown): INeonHeartbeatDaemonLiveState | und
     dueCommitmentsLastTick: toCount(record["dueCommitmentsLastTick"]),
     lifecycleCommitmentsLastTick: toCount(record["lifecycleCommitmentsLastTick"]),
     createdRunsTotal: toCount(record["createdRunsTotal"]),
+    executedRunsTotal: toCount(record["executedRunsTotal"]),
+    failedRunsTotal: toCount(record["failedRunsTotal"]),
+    retryAttemptsTotal: toCount(record["retryAttemptsTotal"]),
+    deliveredRunsTotal: toCount(record["deliveredRunsTotal"]),
     ...(stoppedAt ? { stoppedAt } : {})
   };
 }

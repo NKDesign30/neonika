@@ -12,7 +12,7 @@ describe("Neon gated side-effect posture", () => {
     assert.equal(posture.state, "fully-shadowed");
     assert.equal(posture.totals.armed, 0);
     assert.equal(posture.totals.shadowed, posture.totals.gates);
-    assert.equal(posture.totals.gates, 16);
+    assert.equal(posture.totals.gates, 17);
     assert.deepEqual(posture.armedEnvKeys, []);
     assert.ok(posture.gates.every((gate) => gate.armed === false));
   });
@@ -25,16 +25,18 @@ describe("Neon gated side-effect posture", () => {
       NEON_CRON_TIMER_ENABLED: "ready",
       NEON_HEARTBEAT_DAEMON_ENABLED: "ready",
       NEON_HEARTBEAT_TIMER_ENABLED: "ready",
+      NEON_SCHEDULED_AGENT_EXECUTION_ENABLED: "ready",
       NEON_WORKSPACE_NOTES_ENABLED: "ready"
     });
     assert.equal(posture.state, "partially-armed");
-    assert.equal(posture.totals.armed, 7);
+    assert.equal(posture.totals.armed, 8);
     assert.ok(posture.armedEnvKeys.includes("NEON_DELIVERY_DRAIN_ENABLED"));
     assert.ok(posture.armedEnvKeys.includes("NEON_LIVE_RUN_LIFECYCLE_ENABLED"));
     assert.ok(posture.armedEnvKeys.includes("NEON_CRON_DAEMON_ENABLED"));
     assert.ok(posture.armedEnvKeys.includes("NEON_CRON_TIMER_ENABLED"));
     assert.ok(posture.armedEnvKeys.includes("NEON_HEARTBEAT_DAEMON_ENABLED"));
     assert.ok(posture.armedEnvKeys.includes("NEON_HEARTBEAT_TIMER_ENABLED"));
+    assert.ok(posture.armedEnvKeys.includes("NEON_SCHEDULED_AGENT_EXECUTION_ENABLED"));
     assert.ok(posture.armedEnvKeys.includes("NEON_WORKSPACE_NOTES_ENABLED"));
   });
 
@@ -63,7 +65,7 @@ describe("Neon gated side-effect posture", () => {
   it("renders a readable posture report in both states", () => {
     const shadowed = renderNeonGatedSideEffectPostureReport(resolveNeonGatedSideEffectPosture({}));
     assert.match(shadowed, /State: fully-shadowed/);
-    assert.match(shadowed, /Gates: 16 \(armed 0/);
+    assert.match(shadowed, /Gates: 17 \(armed 0/);
 
     const armed = renderNeonGatedSideEffectPostureReport(
       resolveNeonGatedSideEffectPosture({ NEON_DOCTOR_FIX_ENABLED: "1" })

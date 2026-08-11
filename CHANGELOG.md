@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Added default-off Cron and Heartbeat agent execution with roster-selected
+  harnesses, agent-scoped memory, persisted running-to-terminal evidence,
+  bounded transient retries, and Canary-gated Discord delivery.
+
 ## [0.5.0] - 2026-08-11
 
 - Added a portable Ultraresearch skill with explicit source accounting,

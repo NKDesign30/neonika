@@ -1033,7 +1033,11 @@ describe("Neonika Doctor", () => {
       assert.equal(check.state, "pass");
       assert.match(check.summary, /Not running/);
       // Static shadow invariant must always be surfaced.
-      assert.ok(check.details.some((detail) => detail === "outbound=suppressed (shadow heartbeat never sends)"));
+      assert.ok(
+        check.details.some(
+          (detail) => detail === "outbound=suppressed (no gated heartbeat delivery recorded)"
+        )
+      );
     } finally {
       await rm(projectRoot, { force: true, recursive: true });
     }
@@ -1056,7 +1060,11 @@ describe("Neonika Doctor", () => {
         dueIntentsLastTick: 1,
         dueCommitmentsLastTick: 1,
         lifecycleCommitmentsLastTick: 1,
-        createdRunsTotal: 5
+        createdRunsTotal: 5,
+        executedRunsTotal: 0,
+        failedRunsTotal: 0,
+        retryAttemptsTotal: 0,
+        deliveredRunsTotal: 0
       };
       await writeNeonHeartbeatDaemonLiveState(resolveNeonHeartbeatDaemonLivePath(projectRoot), stale);
 

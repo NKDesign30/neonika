@@ -19,9 +19,12 @@ import {
   resolveNeonHeartbeatDaemonLivePath,
   resolveNeonHeartbeatAgentsFromEnv,
   resolveNeonHeartbeatTimerGate,
+  resolveNeonAgentAttachment,
+  resolveNeonScheduledAgentExecutionGate,
   writeNeonHeartbeatDaemonLiveState,
   type INeonHeartbeatAgentState,
-  type INeonHeartbeatDaemonLiveState
+  type INeonHeartbeatDaemonLiveState,
+  type INeonScheduledAgentRuntime
 } from "../src/index.js";
 
 const agents: readonly INeonHeartbeatAgentState[] = [
@@ -36,6 +39,41 @@ async function tempRoot(): Promise<string> {
 }
 
 describe("Neon heartbeat daemon service (shadow)", () => {
+  it("invokes the selected harness once per persisted heartbeat window when agent execution is armed", async () => {
+    const root = await tempRoot();
+    const now = (): Date => new Date("2026-06-02T12:00:00.000Z");
+    let harnessCalls = 0;
+
+    try {
+      const service = createNeonHeartbeatDaemonService({
+        projectRoot: root,
+        schedulerSeed: "neonika",
+        agents: [{ agentId: "chaty", intervalMs: 900_000 }],
+        intervalMs: 900_000,
+        gate: armedGate,
+        agentRuntime: heartbeatScheduledRuntime(() => {
+          harnessCalls += 1;
+        }),
+        now
+      });
+
+      const first = await service.tickOnce();
+      const duplicate = await service.tickOnce();
+      const runs = await readNeonGatewayRuns(root);
+
+      assert.equal(first.execution.executedRunCount, 1);
+      assert.equal(first.state.executedRunsTotal, 1);
+      assert.equal(duplicate.execution.createdRunCount, 0);
+      assert.equal(harnessCalls, 1);
+      assert.equal(runs.length, 1);
+      assert.equal(runs[0]?.status, "completed");
+      assert.equal(runs[0]?.memoryState, "attached");
+      assert.match(runs[0]?.finalText ?? "", /heartbeat complete/u);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("resolves runtime heartbeat agents from env instead of smoke fixtures", () => {
     assert.deepEqual(resolveNeonHeartbeatAgentsFromEnv({ NEON_HEARTBEAT_AGENTS: "chaty:15m,neo:30s" }), [
       { agentId: "chaty", intervalMs: 900_000 },
@@ -229,7 +267,11 @@ describe("Neon heartbeat daemon service (shadow)", () => {
       dueIntentsLastTick: 0,
       dueCommitmentsLastTick: 0,
       lifecycleCommitmentsLastTick: 0,
-      createdRunsTotal: 0
+      createdRunsTotal: 0,
+      executedRunsTotal: 0,
+      failedRunsTotal: 0,
+      retryAttemptsTotal: 0,
+      deliveredRunsTotal: 0
     };
     // Grace is 60s: within grace is not stale, well past it is.
     assert.equal(isNeonHeartbeatDaemonStale(alive, base + 30_000), false, "within grace");
@@ -252,7 +294,11 @@ describe("Neon heartbeat daemon service (shadow)", () => {
         dueIntentsLastTick: 2,
         dueCommitmentsLastTick: 0,
         lifecycleCommitmentsLastTick: 0,
-        createdRunsTotal: 6
+        createdRunsTotal: 6,
+        executedRunsTotal: 0,
+        failedRunsTotal: 0,
+        retryAttemptsTotal: 0,
+        deliveredRunsTotal: 0
       };
       await writeNeonHeartbeatDaemonLiveState(livePath, state);
       const read = await readNeonHeartbeatDaemonLiveState(livePath);
@@ -263,3 +309,30 @@ describe("Neon heartbeat daemon service (shadow)", () => {
     }
   });
 });
+
+function heartbeatScheduledRuntime(onRun: () => void): INeonScheduledAgentRuntime {
+  return {
+    gate: resolveNeonScheduledAgentExecutionGate({
+      NEON_SCHEDULED_AGENT_EXECUTION_ENABLED: "ready"
+    }),
+    resolveAgent: (agentId) => resolveNeonAgentAttachment(agentId),
+    resolveHarness: () => ({
+      id: "codex-app-server",
+      async run(input) {
+        onRun();
+        return {
+          sessionKey: "heartbeat:chaty",
+          memoryState: input.memory.state,
+          events: [{ kind: "final", text: "heartbeat complete" }],
+          finalText: "heartbeat complete"
+        };
+      }
+    }),
+    resolveMemory: async () => ({
+      state: "attached",
+      hitCount: 1,
+      note: "heartbeat memory"
+    }),
+    maxAttempts: 1
+  };
+}

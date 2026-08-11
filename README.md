@@ -245,6 +245,31 @@ into argv, so anything that could read as a further CLI flag is refused rather
 than passed through. The Codex harness needs no equivalent: it runs whatever the
 local `codex` CLI is configured with and pins nothing.
 
+### Scheduled agent execution
+
+Cron and heartbeat daemons remain no-execution/no-send by default. Arming a
+daemon and its timer only creates deduplicated terminal shadow evidence. Real
+agent turns require a third, independent gate:
+
+```bash
+NEON_CRON_DAEMON_ENABLED=ready
+NEON_CRON_TIMER_ENABLED=ready
+NEON_SCHEDULED_AGENT_EXECUTION_ENABLED=ready
+node dist/src/cli.js cron-daemon-run
+```
+
+The armed path selects the harness from the agent roster, attaches agent-scoped
+memory, persists running then terminal state under one deterministic run id,
+and retries only classified transient failures (two attempts by default, hard
+cap three via `NEON_SCHEDULED_AGENT_MAX_ATTEMPTS`). Cron delivery uses the
+job's explicit target; heartbeat delivery is eligible only when exactly one
+Canary Discord channel is configured. Every send still passes through the
+existing Canary stage, approval, outbound-enable, allowlist, and transport
+policy. Without all of them, delivery is recorded as suppressed.
+Live scheduled Discord delivery is available inside `discord-shadow-tap`, where
+the real Discord transport is already owned; standalone daemon commands never
+construct a channel transport and therefore remain suppressed.
+
 ## Development
 
 ```bash

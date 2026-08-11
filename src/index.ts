@@ -1285,6 +1285,17 @@ export {
   type TNeonHarnessSelectionReason
 } from "./harness/harnessSelector.js";
 export {
+  executeNeonScheduledAgentRun,
+  resolveNeonScheduledAgentExecutionGate,
+  type IExecuteNeonScheduledAgentRunOptions,
+  type INeonScheduledAgentExecutionGate,
+  type INeonScheduledAgentExecutionResult,
+  type INeonScheduledAgentRuntime,
+  type INeonScheduledAgentSpecification,
+  type TNeonScheduledAgentExecutionReason,
+  type TNeonScheduledAgentExecutionState
+} from "./automation/scheduledAgentExecution.js";
+export {
   ClaudeStreamProcessTransport,
   createClaudeProcessTransport,
   resolveClaudeEnvironment,

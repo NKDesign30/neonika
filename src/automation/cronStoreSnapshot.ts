@@ -106,8 +106,8 @@ function buildNeonCronStoreAutomationJob(
     ...(nextRunAtMs !== undefined ? { nextRunAt: new Date(nextRunAtMs).toISOString() } : {}),
     source: "cron-store",
     summary: job.deliveryTarget
-      ? "Operator-defined cron job with a delivery target; shadow executor still suppresses outbound."
-      : "Operator-defined cron job; shadow executor writes run-store visibility only."
+      ? "Operator-defined cron job with a delivery target; outbound remains subject to the Canary policy."
+      : "Operator-defined cron job; default execution remains a terminal shadow marker."
   };
 }
 
