@@ -62,6 +62,13 @@ describe("Neonika fresh-install setup", () => {
       assert.equal(result.config.channels.whatsapp.selfChatMode, true);
       assert.ok(environment.applied.includes("NEON_MEMORY_DB_PATH"));
       assert.equal(runtimeEnv["NEON_MEMORY_DB_PATH"], result.paths.memoryDbPath);
+      assert.ok(environment.applied.includes("NEON_LIVE_INDEX_MEMORY_DB_PATH"));
+      assert.equal(runtimeEnv["NEON_LIVE_INDEX_MEMORY_DB_PATH"], result.paths.memoryDbPath);
+      assert.ok(environment.applied.includes("NEON_MEMORY_BACKUP_DIR"));
+      assert.equal(
+        runtimeEnv["NEON_MEMORY_BACKUP_DIR"],
+        join(result.paths.configRoot, "memory", "backups")
+      );
       assert.equal(runtimeEnv["NEON_DISCORD_BOT_TOKEN"], fakeSecret);
       assert.deepEqual(
         result.config.identity.links.map((link) => link.channel),

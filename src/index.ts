@@ -1693,12 +1693,14 @@ export {
 } from "./indexer/transcriptScheduleIntent.js";
 export {
   collectNeonLiveIndexRecords,
+  createNeonLiveIndexMemorySyncPublicSnapshot,
   defaultCodexSessionsDir,
   renderNeonLiveIndexMemorySyncReport,
   runNeonLiveIndexMemorySync,
   type ICollectNeonLiveIndexOptions,
   type INeonLiveIndexCollection,
   type INeonLiveIndexMemorySyncResult,
+  type INeonLiveIndexMemorySyncPublicSnapshot,
   type INeonLiveIndexRecord,
   type INeonLiveIndexTotals,
   type IRunNeonLiveIndexMemorySyncOptions,
@@ -1717,12 +1719,15 @@ export {
 } from "./indexer/liveIndexQualityGate.js";
 export {
   createNeonLiveIndexDaemon,
+  createNeonLiveIndexDaemonPublicSnapshot,
   defaultNeonLiveIndexDaemonMetricsPath,
   defaultNeonLiveIndexDaemonStatePath,
   renderNeonLiveIndexDaemonReport,
   resolveNeonLiveIndexDaemonOptionsFromEnv,
   scanNeonLiveIndexDaemon,
   type INeonLiveIndexDaemonOptions,
+  type INeonLiveIndexDaemonPublicSnapshot,
+  type INeonLiveIndexDaemonPublicState,
   type INeonLiveIndexDaemonRecordState,
   type INeonLiveIndexDaemonService,
   type INeonLiveIndexDaemonSnapshot,
@@ -2479,19 +2484,46 @@ export {
   computeNeonContentHash,
   renderNeonMemoryDbWriteReport,
   resolveNeonMemoryDbWriteGate,
+  writeNeonMemoryDbEntries,
   writeNeonMemoryDbEntry,
   type INeonMemoryDbWriteGate,
   type INeonMemoryDbWriteInput,
   type INeonMemoryDbWriteResult,
+  type IWriteNeonMemoryDbEntriesOptions,
   type IWriteNeonMemoryDbEntryOptions
 } from "./memory/neonMemoryDbWriter.js";
 export {
   createNeonMemoryBackup,
   renderNeonMemoryBackupReport,
   rotateNeonMemoryBackups,
+  verifyNeonMemorySnapshot,
   type INeonMemoryBackupOptions,
-  type INeonMemoryBackupResult
+  type INeonMemoryBackupResult,
+  type INeonMemorySnapshotVerification
 } from "./memory/neonMemoryBackup.js";
+export {
+  NEON_LIVE_INDEX_WRITEBACK_ENV,
+  NEON_MEMORY_ROLLBACK_ENV,
+  executeNeonMemoryWriteback,
+  renderNeonMemoryRollbackReport,
+  renderNeonMemoryWritebackReport,
+  resolveNeonMemoryRollbackGate,
+  resolveNeonMemoryWritebackGate,
+  rollbackNeonMemoryWriteback,
+  validateNeonMemoryWritebackTarget,
+  type IExecuteNeonMemoryWritebackOptions,
+  type INeonMemoryRollbackGate,
+  type INeonMemoryRollbackResult,
+  type INeonMemoryWritebackBackupObservation,
+  type INeonMemoryWritebackCounts,
+  type INeonMemoryWritebackGate,
+  type INeonMemoryWritebackResult,
+  type INeonMemoryWritebackTarget,
+  type IRollbackNeonMemoryWritebackOptions,
+  type TNeonMemoryRollbackReason,
+  type TNeonMemoryWritebackGateReason,
+  type TNeonMemoryWritebackTargetReason
+} from "./memory/neonMemoryWriteback.js";
 export {
   computeNeonMemoryRetention,
   recalcNeonMemoryImportance,

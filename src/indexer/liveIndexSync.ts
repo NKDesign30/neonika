@@ -6,10 +6,10 @@ import { readNeonGatewayRuns } from "../gateway/runStore.js";
 import type { INeonGatewayShadowRun } from "../gateway/types.js";
 import { redactSnapshotText } from "../harness/redaction.js";
 import {
-  writeNeonMemoryDbEntry,
-  type INeonMemoryDbWriteGate,
-  type INeonMemoryDbWriteResult
-} from "../memory/neonMemoryDbWriter.js";
+  executeNeonMemoryWriteback,
+  type INeonMemoryWritebackGate,
+  type INeonMemoryWritebackResult
+} from "../memory/neonMemoryWriteback.js";
 import type { INeonEmbeddingProvider } from "../memory/neonEmbeddingProvider.js";
 import {
   defaultTranscriptsDir,
@@ -30,7 +30,7 @@ const PREVIEW_LIMIT = 500;
 const COLLECT_IMPORTANCE_PLACEHOLDER = 72;
 
 export type TNeonLiveIndexSource = "discord" | "claude" | "codex";
-export type TNeonLiveIndexSyncState = "planned" | "written" | "blocked";
+export type TNeonLiveIndexSyncState = "planned" | "written" | "blocked" | "failed";
 
 export interface INeonLiveIndexRecord {
   readonly source: TNeonLiveIndexSource;
@@ -70,17 +70,25 @@ export interface INeonLiveIndexMemorySyncResult {
   readonly state: TNeonLiveIndexSyncState;
   readonly collection: INeonLiveIndexCollection;
   readonly quality: INeonLiveIndexQualitySummary;
-  readonly dbPath?: string;
-  readonly writes: readonly INeonMemoryDbWriteResult[];
-  readonly safety: { readonly targetedRealMemoryDb: boolean };
+  readonly writeback: INeonMemoryWritebackResult;
   readonly diagnostics: readonly string[];
 }
 
 export interface IRunNeonLiveIndexMemorySyncOptions extends ICollectNeonLiveIndexOptions {
   readonly dbPath?: string;
-  readonly gate: INeonMemoryDbWriteGate;
-  readonly allowRealDb?: boolean;
+  readonly primaryDbPath?: string;
+  readonly backupDir?: string;
+  readonly writebackGate: INeonMemoryWritebackGate;
   readonly embedder?: INeonEmbeddingProvider;
+}
+
+export interface INeonLiveIndexMemorySyncPublicSnapshot {
+  readonly state: TNeonLiveIndexSyncState;
+  readonly generatedAt: string;
+  readonly totals: INeonLiveIndexTotals;
+  readonly quality: INeonLiveIndexQualitySummary;
+  readonly writeback: INeonMemoryWritebackResult;
+  readonly diagnostics: readonly string[];
 }
 
 interface ICodexSessionDigest {
@@ -152,77 +160,60 @@ export async function runNeonLiveIndexMemorySync(
 ): Promise<INeonLiveIndexMemorySyncResult> {
   const collection = await collectNeonLiveIndexRecords(options);
   const quality = applyNeonLiveIndexQualityGate(collection.records);
-
-  if (!options.dbPath) {
-    return {
-      state: "planned",
-      collection,
-      quality: quality.summary,
-      writes: [],
-      safety: { targetedRealMemoryDb: false },
-      diagnostics: [
-        "live-index sync planned: no dbPath supplied",
-        renderNeonLiveIndexQualitySummary(quality.summary)
-      ]
-    };
-  }
-
-  const writes: INeonMemoryDbWriteResult[] = [];
-  for (const record of quality.accepted) {
-    writes.push(
-      await writeNeonMemoryDbEntry({
-        dbPath: options.dbPath,
-        gate: options.gate,
-        // Digests are ephemeral state: one row per source, latest state wins.
-        dedupe: "source-file",
-        input: {
+  const writeback = await executeNeonMemoryWriteback({
+    targetDbPath: options.dbPath,
+    primaryDbPath: options.primaryDbPath,
+    backupDir: options.backupDir,
+    gate: options.writebackGate,
+    inputs: options.dbPath
+      ? quality.accepted.map((record) => ({
           sourceFile: record.sourceFile,
           content: record.content,
           agent: record.agent,
           category: record.category,
           entryDate: record.entryDate,
           importanceScore: record.importanceScore
-        },
-        ...(options.allowRealDb !== undefined ? { allowRealDb: options.allowRealDb } : {}),
-        ...(options.embedder ? { embedder: options.embedder } : {}),
-        ...(options.now ? { now: options.now } : {})
-      })
-    );
-  }
-
-  const written = writes.filter((write) => write.state === "written").length;
-  const targetedRealMemoryDb = writes.some((write) => write.safety.targetedRealMemoryDb);
+        }))
+      : [],
+    ...(options.embedder ? { embedder: options.embedder } : {}),
+    ...(options.now ? { now: options.now } : {})
+  });
   return {
-    // No accepted records means there was nothing to write - that is "planned"
-    // (nothing pending), not "blocked" (write gate refused). Mirrors the
-    // daemon's promotion-state semantics.
-    state: written > 0 ? "written" : quality.accepted.length === 0 ? "planned" : "blocked",
+    state: writeback.state,
     collection,
     quality: quality.summary,
-    dbPath: options.dbPath,
-    writes,
-    safety: { targetedRealMemoryDb },
+    writeback,
     diagnostics: [
-      `live-index sync: ${written}/${quality.accepted.length} accepted record(s) written`,
+      `live-index sync: ${writeback.writes.written}/${quality.accepted.length} accepted record(s) written`,
       renderNeonLiveIndexQualitySummary(quality.summary),
+      ...writeback.diagnostics,
       ...collection.diagnostics
     ]
   };
 }
 
-export function renderNeonLiveIndexMemorySyncReport(result: INeonLiveIndexMemorySyncResult): string {
-  const inserted = result.writes.filter((write) => write.inserted).length;
-  const updated = result.writes.filter((write) => write.updated).length;
-  const blocked = result.writes.filter((write) => write.state === "blocked").length;
+export function createNeonLiveIndexMemorySyncPublicSnapshot(
+  result: INeonLiveIndexMemorySyncResult
+): INeonLiveIndexMemorySyncPublicSnapshot {
+  return {
+    state: result.state,
+    generatedAt: result.collection.generatedAt,
+    totals: result.collection.totals,
+    quality: result.quality,
+    writeback: result.writeback,
+    diagnostics: result.diagnostics
+  };
+}
 
+export function renderNeonLiveIndexMemorySyncReport(result: INeonLiveIndexMemorySyncResult): string {
   return [
     `Neonika Live Index Sync: ${result.state}`,
     `Sources: discord=${result.collection.totals.discord} claude=${result.collection.totals.claude} codex=${result.collection.totals.codex}`,
     `Records: ${result.collection.totals.records}`,
     `Quality: accepted=${result.quality.accepted} rejected=${result.quality.rejected}`,
-    `Writes: inserted=${inserted} updated=${updated} blocked=${blocked}`,
-    `DB: ${result.dbPath ?? "none"}`,
-    `Safety: targetedRealMemoryDb=${result.safety.targetedRealMemoryDb}`,
+    `Target: ${result.writeback.target.state} (${result.writeback.target.reason})`,
+    `Backup: ${result.writeback.backup.state}${result.writeback.backup.snapshotId ? ` (${result.writeback.backup.snapshotId})` : ""}`,
+    `Writes: inserted=${result.writeback.writes.inserted} updated=${result.writeback.writes.updated} blocked=${result.writeback.writes.blocked}`,
     ...result.diagnostics.map((diagnostic) => `- ${diagnostic}`)
   ].join("\n");
 }

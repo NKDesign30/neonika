@@ -7,6 +7,10 @@ import { resolveNeonDoctorFixGate } from "../doctor/doctorFixRuntime.js";
 import { resolveNeonDeliveryDrainGate } from "../gateway/deliveryDrainRuntime.js";
 import { resolveNeonInFlightRunGate } from "../gateway/inFlightRunRegistry.js";
 import { resolveNeonMemoryWriteGate } from "../memory/memoryWriteRuntime.js";
+import {
+  resolveNeonMemoryRollbackGate,
+  resolveNeonMemoryWritebackGate
+} from "../memory/neonMemoryWriteback.js";
 import { resolveNeonMirrorRunGate } from "./mirrorRun.js";
 import { resolveNeonNodeFileWriteGate } from "../nodes/neonNodeFileWritePolicy.js";
 import { resolveNeonPluginInstallGate } from "../plugins/installGate.js";
@@ -100,6 +104,20 @@ const GATE_DESCRIPTORS: readonly IGateDescriptor[] = [
     category: "memory",
     sideEffect: "write productive memory entries to an isolated store",
     resolve: (env) => resolveNeonMemoryWriteGate(env)
+  },
+  {
+    key: "live-index-memory-writeback",
+    envKey: "NEON_LIVE_INDEX_WRITEBACK_ENABLED",
+    category: "memory",
+    sideEffect: "commit verified live-index batches after a private pre-write backup",
+    resolve: (env) => resolveNeonMemoryWritebackGate(env)
+  },
+  {
+    key: "memory-writeback-rollback",
+    envKey: "NEON_MEMORY_ROLLBACK_ENABLED",
+    category: "memory",
+    sideEffect: "restore one verified memory snapshot with a bounded recovery attempt",
+    resolve: (env) => resolveNeonMemoryRollbackGate(env)
   },
   {
     key: "workspace-notes",

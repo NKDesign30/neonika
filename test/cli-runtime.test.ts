@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { describe, it } from "node:test";
 import { promisify } from "node:util";
+
+import { bootstrapNeonMemorySchema, createNeonMemoryBackup } from "../src/index.js";
 
 const execFileAsync = promisify(execFile);
 const cliPath = join(process.cwd(), "dist", "src", "cli.js");
@@ -154,6 +157,95 @@ describe("Neonika CLI runtime entry points", () => {
     }
   });
 
+  it("validates the productive live-index target without echoing private paths", async () => {
+    const root = await mkdtemp(join(tmpdir(), "neonika-cli-writeback-check-"));
+    const dbPath = join(root, "semantic-memory.db");
+    const backupDir = join(root, "backups");
+
+    try {
+      seedMemoryDb(dbPath, ["seed"]);
+      await chmod(dbPath, 0o600);
+      const stdout = await runCli(["live-index-production-check"], process.cwd(), {
+        NEON_LIVE_INDEX_DAEMON_ENABLED: "ready",
+        NEON_MEMORY_WRITE_ENABLED: "ready",
+        NEON_LIVE_INDEX_WRITEBACK_ENABLED: "ready",
+        NEON_MEMORY_DB_PATH: dbPath,
+        NEON_LIVE_INDEX_MEMORY_DB_PATH: dbPath,
+        NEON_MEMORY_BACKUP_DIR: backupDir
+      });
+
+      assert.match(stdout, /Neonika Live Index Production: ready/u);
+      assert.match(stdout, /Target: validated \(validated-primary\)/u);
+      assert.match(stdout, /Pre-write backup directory: configured/u);
+      assert.doesNotMatch(stdout, new RegExp(escapeRegExp(root), "u"));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reuses persisted onboarding paths for an upgraded productive install", async () => {
+    const configRoot = await mkdtemp(join(tmpdir(), "neonika-cli-writeback-upgrade-"));
+    await rm(configRoot, { recursive: true, force: true });
+
+    try {
+      await runCli(["onboard", "--yes", "--config-root", configRoot]);
+      const stdout = await runCli(
+        ["live-index-production-check", "--config-root", configRoot],
+        configRoot,
+        {
+          NEON_LIVE_INDEX_DAEMON_ENABLED: "ready",
+          NEON_MEMORY_WRITE_ENABLED: "ready",
+          NEON_LIVE_INDEX_WRITEBACK_ENABLED: "ready"
+        }
+      );
+
+      assert.match(stdout, /Neonika Live Index Production: ready/u);
+      assert.match(stdout, /Target: validated \(validated-primary\)/u);
+      assert.match(stdout, /Pre-write backup directory: configured/u);
+      assert.doesNotMatch(stdout, new RegExp(escapeRegExp(configRoot), "u"));
+    } finally {
+      await rm(configRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("restores a verified memory snapshot through the real CLI command", async () => {
+    const root = await mkdtemp(join(tmpdir(), "neonika-cli-writeback-rollback-"));
+    const dbPath = join(root, "semantic-memory.db");
+    const backupDir = join(root, "backups");
+
+    try {
+      seedMemoryDb(dbPath, ["before"]);
+      await chmod(dbPath, 0o600);
+      const backup = await createNeonMemoryBackup({
+        dbPath,
+        backupDir,
+        stamp: "cli-rollback-source"
+      });
+      assert.ok(backup.snapshotId);
+      insertMemoryRow(dbPath, "after");
+      assert.equal(countMemoryRows(dbPath), 2);
+
+      const stdout = await runCli(
+        ["memory-writeback-rollback", backup.snapshotId],
+        process.cwd(),
+        {
+          NEON_MEMORY_ROLLBACK_ENABLED: "ready",
+          NEON_MEMORY_DB_PATH: dbPath,
+          NEON_LIVE_INDEX_MEMORY_DB_PATH: dbPath,
+          NEON_MEMORY_BACKUP_DIR: backupDir
+        }
+      );
+
+      assert.match(stdout, /Neonika Memory Rollback: restored/u);
+      assert.match(stdout, /Verification: verified/u);
+      assert.match(stdout, /Recovery attempts: 0\/1/u);
+      assert.equal(countMemoryRows(dbPath), 1);
+      assert.doesNotMatch(stdout, new RegExp(escapeRegExp(root), "u"));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("runs run-lifecycle-harness-smoke through the real top-level dispatch", async () => {
     const stdout = await runCli(["run-lifecycle-harness-smoke"]);
 
@@ -197,3 +289,47 @@ describe("Neonika CLI runtime entry points", () => {
   });
 
 });
+
+function seedMemoryDb(dbPath: string, values: readonly string[]): void {
+  const database = new DatabaseSync(dbPath);
+  try {
+    bootstrapNeonMemorySchema(database);
+    const insert = database.prepare(
+      "INSERT INTO memory_entries (source_file, content, agent, category, content_hash) VALUES (?, ?, ?, ?, ?)"
+    );
+    for (const value of values) {
+      insert.run(`${value}.md`, `Memory row ${value}`, "neo", "learnings", `hash-${value}`);
+    }
+  } finally {
+    database.close();
+  }
+}
+
+function insertMemoryRow(dbPath: string, value: string): void {
+  const database = new DatabaseSync(dbPath);
+  try {
+    database
+      .prepare(
+        "INSERT INTO memory_entries (source_file, content, agent, category, content_hash) VALUES (?, ?, ?, ?, ?)"
+      )
+      .run(`${value}.md`, `Memory row ${value}`, "neo", "learnings", `hash-${value}`);
+  } finally {
+    database.close();
+  }
+}
+
+function countMemoryRows(dbPath: string): number {
+  const database = new DatabaseSync(dbPath, { readOnly: true });
+  try {
+    const row = database.prepare("SELECT COUNT(*) AS count FROM memory_entries").get() as {
+      readonly count: number;
+    };
+    return row.count;
+  } finally {
+    database.close();
+  }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}

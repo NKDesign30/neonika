@@ -91,8 +91,12 @@ import {
 import { readNeonGatewayRuns, readNeonGatewayStatus } from "./runStore.js";
 import { createNeonGatewayRouteInspectionSnapshot } from "./routeInspection.js";
 import { createNeonSessionsSnapshot } from "./sessionSnapshot.js";
-import { runNeonLiveIndexMemorySync } from "../indexer/liveIndexSync.js";
 import {
+  createNeonLiveIndexMemorySyncPublicSnapshot,
+  runNeonLiveIndexMemorySync
+} from "../indexer/liveIndexSync.js";
+import {
+  createNeonLiveIndexDaemonPublicSnapshot,
   createNeonLiveIndexDaemon,
   resolveNeonLiveIndexDaemonOptionsFromEnv,
   type INeonLiveIndexDaemonService
@@ -105,6 +109,7 @@ import {
 import { createNeonTranscriptSnapshot } from "../indexer/transcriptSnapshot.js";
 import { createMergedNeonMemoryProvider } from "../memory/mergedMemoryProvider.js";
 import { resolveNeonMemoryDbWriteGate } from "../memory/neonMemoryDbWriter.js";
+import { resolveNeonMemoryWritebackGate } from "../memory/neonMemoryWriteback.js";
 import { createNeonUsageSnapshot } from "./usageSnapshot.js";
 import { createNeonSiteAnalyticsSnapshot, createNeonSitesSnapshot } from "./neonSites.js";
 import { createNeonRunTaskProjection } from "../tasks/runTaskProjection.js";
@@ -231,16 +236,14 @@ type TNodeSessionAuthResult =
 export function createNeonGatewayHttpServer(options: INeonGatewayHttpServerOptions): Server {
   const runtime = createNeonGatewayRuntimeController(options.projectRoot);
   const liveIndexDbPath = process.env["NEON_LIVE_INDEX_MEMORY_DB_PATH"]?.trim();
-  const liveIndexMemoryGate = resolveNeonMemoryDbWriteGate(process.env);
+  const liveIndexWritebackGate = resolveNeonMemoryWritebackGate(process.env);
   const liveIndexDaemon = createNeonLiveIndexDaemon({
     ...resolveNeonLiveIndexDaemonOptionsFromEnv(options.projectRoot),
     ...(options.transcriptProjectsDir ? { transcriptProjectsDir: options.transcriptProjectsDir } : {}),
     ...(options.liveIndexCodexSessionsDir ? { codexSessionsDir: options.liveIndexCodexSessionsDir } : {}),
-    ...(liveIndexDbPath ? { memoryDbPath: liveIndexDbPath, memoryGate: liveIndexMemoryGate } : {}),
     // Canonical 768d embedder - see memoryRecall.ts; local hash vectors would
     // silently break hybrid recall (dimension mismatch with the query).
-    ...(liveIndexDbPath && liveIndexMemoryGate.enabled ? { embedder: createNeonOllamaEmbeddingProvider({ model: "nomic-embed-text" }) } : {}),
-    allowRealMemoryDb: isEnabledEnv(process.env["NEON_LIVE_INDEX_ALLOW_REAL_DB"])
+    ...(liveIndexDbPath && liveIndexWritebackGate.enabled ? { embedder: createNeonOllamaEmbeddingProvider({ model: "nomic-embed-text" }) } : {})
   });
   if (liveIndexDaemon.enabled) {
     void liveIndexDaemon.start();
@@ -1618,20 +1621,24 @@ async function handleNeonLiveIndexSync(
   options: INeonGatewayHttpServerOptions
 ): Promise<void> {
   const dbPath = process.env["NEON_LIVE_INDEX_MEMORY_DB_PATH"]?.trim();
-  const gate = resolveNeonMemoryDbWriteGate(process.env);
+  const primaryDbPath = process.env["NEON_MEMORY_DB_PATH"]?.trim();
+  const backupDir = process.env["NEON_MEMORY_BACKUP_DIR"]?.trim();
+  const writebackGate = resolveNeonMemoryWritebackGate(process.env);
+  const result = await runNeonLiveIndexMemorySync({
+    projectRoot: context.projectRoot,
+    writebackGate,
+    ...(dbPath ? { dbPath } : {}),
+    ...(primaryDbPath ? { primaryDbPath } : {}),
+    ...(backupDir ? { backupDir } : {}),
+    ...(options.transcriptProjectsDir ? { transcriptProjectsDir: options.transcriptProjectsDir } : {}),
+    ...(options.liveIndexCodexSessionsDir ? { codexSessionsDir: options.liveIndexCodexSessionsDir } : {}),
+    ...(dbPath && writebackGate.enabled ? { embedder: createNeonOllamaEmbeddingProvider({ model: "nomic-embed-text" }) } : {})
+  });
 
   writeJson(
     context.response,
     200,
-    await runNeonLiveIndexMemorySync({
-      projectRoot: context.projectRoot,
-      gate,
-      allowRealDb: isEnabledEnv(process.env["NEON_LIVE_INDEX_ALLOW_REAL_DB"]),
-      ...(dbPath ? { dbPath } : {}),
-      ...(options.transcriptProjectsDir ? { transcriptProjectsDir: options.transcriptProjectsDir } : {}),
-      ...(options.liveIndexCodexSessionsDir ? { codexSessionsDir: options.liveIndexCodexSessionsDir } : {}),
-      ...(dbPath && gate.enabled ? { embedder: createNeonOllamaEmbeddingProvider({ model: "nomic-embed-text" }) } : {})
-    })
+    createNeonLiveIndexMemorySyncPublicSnapshot(result)
   );
 }
 
@@ -1643,7 +1650,9 @@ async function handleNeonLiveIndexDaemon(
   writeJson(
     context.response,
     200,
-    scan === "0" ? liveIndexDaemon.getSnapshot() : await liveIndexDaemon.scanNow("api")
+    createNeonLiveIndexDaemonPublicSnapshot(
+      scan === "0" ? liveIndexDaemon.getSnapshot() : await liveIndexDaemon.scanNow("api")
+    )
   );
 }
 

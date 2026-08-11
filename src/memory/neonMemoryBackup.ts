@@ -1,6 +1,10 @@
 import { openNeonMemoryDatabase } from "./neonMemoryDbOpen.js";
-import { access, mkdir, readdir, rm, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { createReadStream } from "node:fs";
+import { access, chmod, lstat, mkdir, readdir, rm, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { basename, join } from "node:path";
+
+import { redactSnapshotText } from "../harness/redaction.js";
 
 /**
  * Read-only memory-DB backup for Neonika (memory autarky).
@@ -25,12 +29,23 @@ export interface INeonMemoryBackupOptions {
 }
 
 export interface INeonMemoryBackupResult {
-  readonly state: "backed-up" | "skipped";
+  readonly state: "backed-up" | "skipped" | "invalid";
   readonly snapshotPath: string | undefined;
+  readonly snapshotId: string | undefined;
+  readonly verification: "verified" | "failed" | "not-run";
+  readonly checksum: string | undefined;
   readonly bytes: number;
   readonly entries: number;
   readonly rotated: readonly string[];
   readonly kept: number;
+  readonly diagnostics: readonly string[];
+}
+
+export interface INeonMemorySnapshotVerification {
+  readonly state: "verified" | "failed";
+  readonly bytes: number;
+  readonly entries: number;
+  readonly checksum: string | undefined;
   readonly diagnostics: readonly string[];
 }
 
@@ -50,7 +65,13 @@ export async function createNeonMemoryBackup(
   const stamp = sanitizeStamp(options.stamp ?? new Date().toISOString().replace(/[:.]/g, "-"));
 
   await mkdir(options.backupDir, { recursive: true });
+  const backupDirectory = await lstat(options.backupDir).catch(() => undefined);
+  if (!backupDirectory?.isDirectory() || backupDirectory.isSymbolicLink()) {
+    return invalidBackupResult(keep, "backup target is not a private regular directory");
+  }
+  await chmod(options.backupDir, 0o700);
   const snapshotPath = join(options.backupDir, `semantic-memory-${stamp}.db`);
+  const snapshotId = basename(snapshotPath);
 
   // VACUUM INTO refuses to overwrite an existing file (throws "output file already
   // exists"). Rather than crash mid-run on a stamp collision, skip cleanly — the
@@ -60,14 +81,33 @@ export async function createNeonMemoryBackup(
     () => false
   );
   if (exists) {
+    const existing = await lstat(snapshotPath).catch(() => undefined);
+    if (
+      !existing ||
+      !existing.isFile() ||
+      existing.isSymbolicLink() ||
+      (existing.mode & 0o077) !== 0
+    ) {
+      return invalidBackupResult(keep, "snapshot collision is not a private regular file");
+    }
+    const verification = await verifyNeonMemorySnapshot(snapshotPath);
+    if (verification.state !== "verified") {
+      return invalidBackupResult(keep, verification.diagnostics);
+    }
     return {
       state: "skipped",
       snapshotPath,
-      bytes: 0,
-      entries: 0,
+      snapshotId,
+      verification: verification.state,
+      checksum: verification.checksum,
+      bytes: verification.bytes,
+      entries: verification.entries,
       rotated: [],
       kept: keep,
-      diagnostics: [`snapshot for stamp ${stamp} already exists, skipped`]
+      diagnostics: [
+        `snapshot for stamp ${stamp} already exists, skipped`,
+        ...verification.diagnostics
+      ]
     };
   }
 
@@ -83,21 +123,111 @@ export async function createNeonMemoryBackup(
     source.close();
   }
 
-  const snapshotStat = await stat(snapshotPath);
+  await chmod(snapshotPath, 0o600);
+  const verification = await verifyNeonMemorySnapshot(snapshotPath, entries);
+  if (verification.state !== "verified") {
+    await rm(snapshotPath, { force: true });
+    return invalidBackupResult(keep, verification.diagnostics);
+  }
+
   const rotated = await rotateNeonMemoryBackups(options.backupDir, keep);
 
   return {
     state: "backed-up",
     snapshotPath,
-    bytes: snapshotStat.size,
-    entries,
+    snapshotId,
+    verification: "verified",
+    checksum: verification.checksum,
+    bytes: verification.bytes,
+    entries: verification.entries,
     rotated,
     kept: keep,
     diagnostics: [
-      `snapshot written (${snapshotStat.size} bytes, ${entries} entries)`,
+      `snapshot written and verified (${verification.bytes} bytes, ${verification.entries} entries)`,
       ...(rotated.length > 0 ? [`rotated ${rotated.length} old snapshot(s)`] : [])
     ]
   };
+}
+
+/** Verifies SQLite integrity, the required memory table, row count and bytes. */
+export async function verifyNeonMemorySnapshot(
+  snapshotPath: string,
+  expectedEntries?: number
+): Promise<INeonMemorySnapshotVerification> {
+  try {
+    const snapshotStat = await stat(snapshotPath);
+    const database = openNeonMemoryDatabase(snapshotPath, { readOnly: true });
+    let entries = 0;
+    try {
+      const quickRows = database.prepare("PRAGMA quick_check").all() as readonly Record<string, unknown>[];
+      const quickCheckOk = quickRows.length === 1 && Object.values(quickRows[0] ?? {}).includes("ok");
+      const table = database
+        .prepare("SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'memory_entries'")
+        .get() as { readonly present?: number } | undefined;
+      if (!quickCheckOk || table?.present !== 1) {
+        return failedVerification("snapshot verification failed: SQLite integrity or schema check failed");
+      }
+      const countRow = database.prepare("SELECT COUNT(*) AS count FROM memory_entries").get() as {
+        readonly count?: number;
+      } | undefined;
+      entries = typeof countRow?.count === "number" ? countRow.count : 0;
+    } finally {
+      database.close();
+    }
+
+    if (expectedEntries !== undefined && entries !== expectedEntries) {
+      return failedVerification("snapshot verification failed: entry count mismatch");
+    }
+
+    return {
+      state: "verified",
+      bytes: snapshotStat.size,
+      entries,
+      checksum: await hashFile(snapshotPath),
+      diagnostics: ["snapshot verification passed"]
+    };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return failedVerification(
+      `snapshot verification failed: ${redactSnapshotText(reason, { previewLimit: 240 })}`
+    );
+  }
+}
+
+function failedVerification(diagnostic: string): INeonMemorySnapshotVerification {
+  return {
+    state: "failed",
+    bytes: 0,
+    entries: 0,
+    checksum: undefined,
+    diagnostics: [diagnostic]
+  };
+}
+
+function invalidBackupResult(
+  keep: number,
+  diagnostic: string | readonly string[]
+): INeonMemoryBackupResult {
+  return {
+    state: "invalid",
+    snapshotPath: undefined,
+    snapshotId: undefined,
+    verification: "failed",
+    checksum: undefined,
+    bytes: 0,
+    entries: 0,
+    rotated: [],
+    kept: keep,
+    diagnostics: typeof diagnostic === "string" ? [diagnostic] : diagnostic
+  };
+}
+
+async function hashFile(path: string): Promise<string> {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(path)) {
+    hash.update(chunk as Buffer);
+  }
+  return hash.digest("hex");
 }
 
 /**
@@ -129,7 +259,8 @@ export async function rotateNeonMemoryBackups(
 export function renderNeonMemoryBackupReport(result: INeonMemoryBackupResult): string {
   return [
     `Neonika Memory Backup: ${result.state}`,
-    `Snapshot: ${result.snapshotPath ?? "none"}`,
+    `Snapshot: ${result.snapshotId ?? "none"}`,
+    `Verification: ${result.verification}`,
     `Size: ${result.bytes} bytes  Entries: ${result.entries}`,
     `Rotation: kept ${result.kept}, removed ${result.rotated.length}`,
     ...result.diagnostics.map((diagnostic) => `- ${diagnostic}`)

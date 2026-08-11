@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -8,6 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 import {
   bootstrapNeonMemorySchema,
   createNeonMemoryBackup,
+  renderNeonMemoryBackupReport,
   rotateNeonMemoryBackups
 } from "../src/index.js";
 
@@ -49,6 +50,9 @@ describe("neon memory backup", () => {
     assert.equal(result.entries, 5);
     assert.ok(result.bytes > 0);
     assert.ok(result.snapshotPath);
+    const report = renderNeonMemoryBackupReport(result);
+    assert.doesNotMatch(report, new RegExp(escapeRegExp(root), "u"));
+    assert.doesNotMatch(report, /Checksum:/u);
 
     // Snapshot is a standalone, readable DB with the same rows.
     const snapshot = new DatabaseSync(result.snapshotPath!, { readOnly: true });
@@ -88,6 +92,41 @@ describe("neon memory backup", () => {
     const second = await createNeonMemoryBackup({ dbPath, backupDir, stamp: "2026-06-04T00-00-00" });
     assert.equal(second.state, "skipped");
     assert.match(second.diagnostics[0] ?? "", /already exists/);
+
+    await writeFile(join(backupDir, "semantic-memory-corrupt.db"), "not sqlite", {
+      mode: 0o600
+    });
+    const corrupt = await createNeonMemoryBackup({ dbPath, backupDir, stamp: "corrupt" });
+    assert.equal(corrupt.state, "invalid");
+    assert.equal(corrupt.verification, "failed");
+  });
+
+  it("rejects a linked snapshot collision instead of trusting the link target", async () => {
+    await mkdir(backupDir, { recursive: true });
+    const snapshotPath = join(backupDir, "semantic-memory-linked.db");
+    await symlink(dbPath, snapshotPath);
+
+    const result = await createNeonMemoryBackup({ dbPath, backupDir, stamp: "linked" });
+
+    assert.equal(result.state, "invalid");
+    assert.equal(result.snapshotPath, undefined);
+    assert.match(result.diagnostics[0] ?? "", /not a private regular file/u);
+  });
+
+  it("rejects a linked backup directory before changing or writing through it", async () => {
+    const realBackupDir = join(root, "real-backups");
+    const linkedBackupDir = join(root, "linked-backups");
+    await mkdir(realBackupDir, { recursive: true });
+    await symlink(realBackupDir, linkedBackupDir);
+
+    const result = await createNeonMemoryBackup({
+      dbPath,
+      backupDir: linkedBackupDir,
+      stamp: "linked-directory"
+    });
+
+    assert.equal(result.state, "invalid");
+    assert.equal((await readdir(realBackupDir)).length, 0);
   });
 
   it("rotateNeonMemoryBackups ignores unrelated files", async () => {
@@ -102,3 +141,7 @@ describe("neon memory backup", () => {
     assert.ok(remaining.includes("readme.txt"));
   });
 });
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}

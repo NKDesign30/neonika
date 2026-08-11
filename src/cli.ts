@@ -4,6 +4,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
+import { DatabaseSync } from "node:sqlite";
 import { text as readStreamText } from "node:stream/consumers";
 import { fileURLToPath } from "node:url";
 
@@ -101,8 +102,14 @@ import {
   resolveNeonMemoryWriteGate,
   renderNeonMemoryWriteRuntimeReport,
   writeNeonMemoryDbEntry,
+  bootstrapNeonMemorySchema,
   resolveNeonMemoryDbWriteGate,
+  resolveNeonMemoryRollbackGate,
+  resolveNeonMemoryWritebackGate,
+  rollbackNeonMemoryWriteback,
+  renderNeonMemoryRollbackReport,
   renderNeonMemoryDbWriteReport,
+  validateNeonMemoryWritebackTarget,
   searchNeonMemoryDb,
   createNeonLocalEmbeddingProvider,
   createNeonOllamaEmbeddingProvider,
@@ -846,6 +853,11 @@ const commands: Record<string, ICommand> = {
       "Exercise the gated SQLite memory writer against an isolated temp DB: bootstrap the real v2 schema, content_hash-dedup upsert + vector BLOB, then FTS roundtrip. Default-off (NEON_MEMORY_WRITE_ENABLED). Hard-refuses the real semantic-memory DB.",
     run: runMemoryDbWriteSmoke
   },
+  "memory-writeback-rollback": {
+    description:
+      "Restore one verified private pre-write memory snapshot by id. Requires NEON_MEMORY_ROLLBACK_ENABLED=ready and an exact configured primary target.",
+    run: runMemoryWritebackRollback
+  },
   "memory-maintain-smoke": {
     description:
       "Run the full memory-maintenance pipeline against an isolated temp DB: Ebbinghaus importance recalc, vector relation discovery, archive-not-delete prune, and a VACUUM-INTO backup. Default-off (NEON_MEMORY_WRITE_ENABLED) — plan-only unless armed. Replaces v2's evolution-engine + nightly-cleanup + backup cronjobs. Never touches the real DB.",
@@ -1332,7 +1344,7 @@ const commands: Record<string, ICommand> = {
   },
   "live-index-sync": {
     description:
-      "Collect Discord/Gateway, Claude transcript and Codex session digests, then sync them through the gated SQLite memory writer. Default plan-only unless NEON_MEMORY_WRITE_ENABLED + NEON_LIVE_INDEX_MEMORY_DB_PATH are set.",
+      "Collect Discord/Gateway, Claude transcript and Codex session digests, then atomically promote them after a verified backup. Default plan-only unless both write gates, the exact primary target, and backup directory are configured.",
     run: runLiveIndexSyncReport
   },
   "live-index-sync-smoke": {
@@ -1352,7 +1364,7 @@ const commands: Record<string, ICommand> = {
   },
   "live-index-production-check": {
     description:
-      "Check whether the live-index daemon is production-armed for interval scans and gated memory promotion.",
+      "Check whether the live-index daemon is production-armed with dual write gates, an exact private primary target, and a pre-write backup directory.",
     run: runLiveIndexProductionCheck
   },
   activity: {
@@ -8087,15 +8099,18 @@ async function runTranscriptScheduleSmoke(): Promise<string> {
 
 async function runLiveIndexSyncReport(): Promise<string> {
   const dbPath = process.env["NEON_LIVE_INDEX_MEMORY_DB_PATH"]?.trim();
-  const gate = resolveNeonMemoryDbWriteGate(process.env);
+  const primaryDbPath = process.env["NEON_MEMORY_DB_PATH"]?.trim();
+  const backupDir = process.env["NEON_MEMORY_BACKUP_DIR"]?.trim();
+  const writebackGate = resolveNeonMemoryWritebackGate(process.env);
   const result = await runNeonLiveIndexMemorySync({
     projectRoot: process.cwd(),
-    gate,
-    allowRealDb: isReadyLike(process.env["NEON_LIVE_INDEX_ALLOW_REAL_DB"]),
+    writebackGate,
     ...(dbPath ? { dbPath } : {}),
+    ...(primaryDbPath ? { primaryDbPath } : {}),
+    ...(backupDir ? { backupDir } : {}),
     // Canonical embedder (768d) - hash-local vectors are dimension-incompatible
     // with the Ollama query embedding and would silently disable hybrid recall.
-    ...(dbPath && gate.enabled ? { embedder: createNeonOllamaEmbeddingProvider({ model: "nomic-embed-text" }) } : {})
+    ...(dbPath && writebackGate.enabled ? { embedder: createNeonOllamaEmbeddingProvider({ model: "nomic-embed-text" }) } : {})
   });
 
   return renderNeonLiveIndexMemorySyncReport(result);
@@ -8109,6 +8124,13 @@ async function runLiveIndexSyncSmoke(): Promise<string> {
   const now = (): Date => new Date("2026-06-08T12:00:00.000Z");
 
   try {
+    const database = new DatabaseSync(dbPath);
+    try {
+      bootstrapNeonMemorySchema(database);
+    } finally {
+      database.close();
+    }
+    await chmod(dbPath, 0o600);
     await writeNeonGatewayRun(projectRoot, createChatSmokeRun(projectRoot));
     await writeLiveIndexTranscriptFixture(transcriptProjectsDir);
     await writeLiveIndexCodexFixture(codexSessionsDir);
@@ -8118,11 +8140,16 @@ async function runLiveIndexSyncSmoke(): Promise<string> {
       transcriptProjectsDir,
       codexSessionsDir,
       dbPath,
-      gate: resolveNeonMemoryDbWriteGate({ NEON_MEMORY_WRITE_ENABLED: "ready" }),
+      primaryDbPath: dbPath,
+      backupDir: join(projectRoot, "memory-backups"),
+      writebackGate: resolveNeonMemoryWritebackGate({
+        NEON_MEMORY_WRITE_ENABLED: "ready",
+        NEON_LIVE_INDEX_WRITEBACK_ENABLED: "ready"
+      }),
       embedder: createNeonLocalEmbeddingProvider(),
       now
     });
-    const written = result.writes.filter((write) => write.state === "written").length;
+    const written = result.writeback.writes.written;
     const roundtrip = searchNeonMemoryDb("Codex", { dbPath, category: "live-index", limit: 5 });
 
     if (
@@ -8131,7 +8158,7 @@ async function runLiveIndexSyncSmoke(): Promise<string> {
       result.collection.totals.codex !== 1 ||
       written !== 3 ||
       roundtrip.length === 0 ||
-      result.safety.targetedRealMemoryDb
+      result.writeback.backup.state !== "verified"
     ) {
       throw new Error("Live-index sync smoke failed");
     }
@@ -8149,13 +8176,12 @@ async function runLiveIndexSyncSmoke(): Promise<string> {
 }
 
 async function runLiveIndexDaemonReport(): Promise<string> {
-  const dbPath = process.env["NEON_LIVE_INDEX_MEMORY_DB_PATH"]?.trim();
-  const gate = resolveNeonMemoryDbWriteGate(process.env);
+  const daemonOptions = resolveNeonLiveIndexDaemonOptionsFromEnv(process.cwd());
   const snapshot = await scanNeonLiveIndexDaemon({
-    ...resolveNeonLiveIndexDaemonOptionsFromEnv(process.cwd()),
-    ...(dbPath ? { memoryDbPath: dbPath, memoryGate: gate } : {}),
-    ...(dbPath && gate.enabled ? { embedder: createNeonOllamaEmbeddingProvider({ model: "nomic-embed-text" }) } : {}),
-    allowRealMemoryDb: isReadyLike(process.env["NEON_LIVE_INDEX_ALLOW_REAL_DB"]),
+    ...daemonOptions,
+    ...(daemonOptions.memoryDbPath && daemonOptions.memoryWritebackGate?.enabled
+      ? { embedder: createNeonOllamaEmbeddingProvider({ model: "nomic-embed-text" }) }
+      : {}),
     reason: "cli"
   });
 
@@ -8163,24 +8189,48 @@ async function runLiveIndexDaemonReport(): Promise<string> {
 }
 
 async function runLiveIndexProductionCheck(): Promise<string> {
-  const dbPath = process.env["NEON_LIVE_INDEX_MEMORY_DB_PATH"]?.trim();
-  const daemonEnabled = isReadyLike(process.env["NEON_LIVE_INDEX_DAEMON_ENABLED"]);
-  const memoryGate = resolveNeonMemoryDbWriteGate(process.env);
-  const allowRealDb = isReadyLike(process.env["NEON_LIVE_INDEX_ALLOW_REAL_DB"]);
-  const ready = daemonEnabled && Boolean(dbPath) && memoryGate.enabled;
+  const daemonOptions = resolveNeonLiveIndexDaemonOptionsFromEnv(process.cwd());
+  const writebackGate = daemonOptions.memoryWritebackGate ?? resolveNeonMemoryWritebackGate();
+  const rollbackGate = resolveNeonMemoryRollbackGate();
+  const target = await validateNeonMemoryWritebackTarget({
+    targetDbPath: daemonOptions.memoryDbPath,
+    primaryDbPath: daemonOptions.primaryMemoryDbPath,
+    backupDir: daemonOptions.memoryBackupDir
+  });
+  const ready = daemonOptions.enabled === true && writebackGate.enabled && target.state === "validated";
 
   return [
     `Neonika Live Index Production: ${ready ? "ready" : "blocked"}`,
-    `Daemon interval: ${daemonEnabled ? "enabled" : "disabled"}`,
-    `Memory DB path: ${dbPath ? "configured" : "missing"}`,
-    `Memory write gate: ${memoryGate.enabled ? "enabled" : "disabled"} (${memoryGate.reason})`,
-    `Real memory DB allowed: ${allowRealDb}`,
+    `Daemon interval: ${daemonOptions.enabled ? "enabled" : "disabled"}`,
+    `Memory write gate: ${writebackGate.memoryGate.enabled ? "enabled" : "disabled"} (${writebackGate.memoryGate.reason})`,
+    `Live-index writeback gate: ${writebackGate.enabled ? "enabled" : "disabled"} (${writebackGate.reason})`,
+    `Target: ${target.state} (${target.reason})`,
+    `Pre-write backup directory: ${daemonOptions.memoryBackupDir ? "configured" : "missing"}`,
+    `Restore gate: ${rollbackGate.enabled ? "enabled" : "disabled"} (${rollbackGate.reason}; separate from writeback)`,
     "Required env:",
     "- NEON_LIVE_INDEX_DAEMON_ENABLED=ready",
     "- NEON_MEMORY_WRITE_ENABLED=ready",
-    "- NEON_LIVE_INDEX_MEMORY_DB_PATH=/path/to/semantic-memory.db",
-    "- NEON_LIVE_INDEX_ALLOW_REAL_DB=ready only when the target is the real semantic-memory.db"
+    "- NEON_LIVE_INDEX_WRITEBACK_ENABLED=ready",
+    "- NEON_MEMORY_DB_PATH and NEON_LIVE_INDEX_MEMORY_DB_PATH must identify the same primary DB",
+    "- NEON_MEMORY_BACKUP_DIR must identify a private backup directory"
   ].join("\n");
+}
+
+async function runMemoryWritebackRollback(): Promise<string> {
+  const snapshotId = process.argv.slice(3)[0]?.trim();
+  if (!snapshotId) {
+    throw new Error("memory-writeback-rollback requires <snapshot-id>");
+  }
+
+  const daemonOptions = resolveNeonLiveIndexDaemonOptionsFromEnv(process.cwd());
+  const result = await rollbackNeonMemoryWriteback({
+    targetDbPath: daemonOptions.memoryDbPath,
+    primaryDbPath: daemonOptions.primaryMemoryDbPath,
+    backupDir: daemonOptions.memoryBackupDir,
+    snapshotId,
+    gate: resolveNeonMemoryRollbackGate()
+  });
+  return renderNeonMemoryRollbackReport(result);
 }
 
 async function runLiveIndexDaemonSmoke(): Promise<string> {
@@ -8228,8 +8278,8 @@ async function runLiveIndexDaemonSmoke(): Promise<string> {
       `Sources: discord=${first.collection.totals.discord} claude=${first.collection.totals.claude} codex=${first.collection.totals.codex}`,
       `First scan changed: ${first.state.sources.discord.changed + first.state.sources.claude.changed + first.state.sources.codex.changed}`,
       `Second scan unchanged: ${second.state.sources.discord.unchanged + second.state.sources.claude.unchanged + second.state.sources.codex.unchanged}`,
-      `State: ${first.statePath}`,
-      `Metrics: ${first.metricsPath}`
+      "State persistence: private",
+      "Metrics persistence: private"
     ].join("\n");
   } finally {
     await rm(projectRoot, { force: true, recursive: true });

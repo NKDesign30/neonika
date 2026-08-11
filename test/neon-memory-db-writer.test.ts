@@ -11,6 +11,7 @@ import {
   computeNeonContentHash,
   createNeonLocalEmbeddingProvider,
   hybridSearchNeonMemoryDb,
+  renderNeonMemoryDbWriteReport,
   resolveNeonMemoryDbWriteGate,
   searchNeonMemoryDb,
   writeNeonMemoryDbEntry,
@@ -119,6 +120,9 @@ describe("neon memory db writer (gated, isolated)", () => {
     assert.equal(result.inserted, true);
     assert.equal(result.safety.targetedRealMemoryDb, false);
     assert.ok(typeof result.entryId === "number");
+    const report = renderNeonMemoryDbWriteReport(result);
+    assert.doesNotMatch(report, new RegExp(escapeRegExp(root), "u"));
+    assert.doesNotMatch(report, /Content hash:/u);
 
     const hits = searchNeonMemoryDb("memory autarky writer roundtrip", { dbPath });
     assert.ok(hits.length >= 1);
@@ -194,6 +198,10 @@ describe("neon memory db writer (gated, isolated)", () => {
     assert.notEqual(hash, computeNeonContentHash("other.md", "hello"));
   });
 });
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
 
 describe("neon memory db write gate (unified env parsing)", () => {
   it("accepts the shared ready|true|1|yes value set", () => {

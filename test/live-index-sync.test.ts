@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { describe, it } from "node:test";
 
 import {
+  bootstrapNeonMemorySchema,
   collectNeonLiveIndexRecords,
+  createNeonLiveIndexMemorySyncPublicSnapshot,
   createNeonLocalEmbeddingProvider,
-  resolveNeonMemoryDbWriteGate,
+  resolveNeonMemoryWritebackGate,
   runNeonLiveIndexMemorySync,
   searchNeonMemoryDb,
   writeNeonGatewayRun,
@@ -50,11 +53,14 @@ describe("Neon live-index memory sync", () => {
         projectRoot: fixture.projectRoot,
         transcriptProjectsDir: fixture.transcriptProjectsDir,
         codexSessionsDir: fixture.codexSessionsDir,
-        gate: resolveNeonMemoryDbWriteGate({ NEON_MEMORY_WRITE_ENABLED: "ready" })
+        writebackGate: resolveNeonMemoryWritebackGate({
+          NEON_MEMORY_WRITE_ENABLED: "ready",
+          NEON_LIVE_INDEX_WRITEBACK_ENABLED: "ready"
+        })
       });
 
       assert.equal(result.state, "planned");
-      assert.equal(result.writes.length, 0);
+      assert.equal(result.writeback.writes.written, 0);
       assert.equal(result.collection.totals.records, 3);
     } finally {
       await cleanup(fixture.projectRoot);
@@ -64,22 +70,36 @@ describe("Neon live-index memory sync", () => {
   it("writes all collected records to an isolated semantic-memory DB when armed", async () => {
     const fixture = await createLiveIndexFixture();
     const dbPath = join(fixture.projectRoot, "isolated-semantic-memory.db");
+    const backupDir = join(fixture.projectRoot, "memory-backups");
 
     try {
+      await createPrivateMemoryDb(dbPath);
       const result = await runNeonLiveIndexMemorySync({
         projectRoot: fixture.projectRoot,
         transcriptProjectsDir: fixture.transcriptProjectsDir,
         codexSessionsDir: fixture.codexSessionsDir,
         dbPath,
-        gate: resolveNeonMemoryDbWriteGate({ NEON_MEMORY_WRITE_ENABLED: "ready" }),
+        primaryDbPath: dbPath,
+        backupDir,
+        writebackGate: resolveNeonMemoryWritebackGate({
+          NEON_MEMORY_WRITE_ENABLED: "ready",
+          NEON_LIVE_INDEX_WRITEBACK_ENABLED: "ready"
+        }),
         embedder: createNeonLocalEmbeddingProvider()
       });
       const hits = searchNeonMemoryDb("Codex", { dbPath, category: "live-index", limit: 5 });
 
       assert.equal(result.state, "written");
-      assert.equal(result.writes.filter((write) => write.state === "written").length, 3);
-      assert.equal(result.safety.targetedRealMemoryDb, false);
+      assert.equal(result.writeback.writes.written, 3);
+      assert.equal(result.writeback.backup.state, "verified");
       assert.ok(hits.length > 0);
+
+      const publicSnapshot = createNeonLiveIndexMemorySyncPublicSnapshot(result);
+      const serialized = JSON.stringify(publicSnapshot);
+      assert.equal(publicSnapshot.totals.records, 3);
+      assert.doesNotMatch(serialized, new RegExp(escapeRegExp(fixture.projectRoot), "u"));
+      assert.doesNotMatch(serialized, /"content"/u);
+      assert.doesNotMatch(serialized, /"records":\[/u);
     } finally {
       await cleanup(fixture.projectRoot);
     }
@@ -90,6 +110,20 @@ interface ILiveIndexFixture {
   readonly projectRoot: string;
   readonly transcriptProjectsDir: string;
   readonly codexSessionsDir: string;
+}
+
+async function createPrivateMemoryDb(dbPath: string): Promise<void> {
+  const database = new DatabaseSync(dbPath);
+  try {
+    bootstrapNeonMemorySchema(database);
+  } finally {
+    database.close();
+  }
+  await chmod(dbPath, 0o600);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
 async function createLiveIndexFixture(): Promise<ILiveIndexFixture> {
