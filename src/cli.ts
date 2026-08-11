@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { homedir, platform, tmpdir, userInfo } from "node:os";
+import { createServer as createNetServer } from "node:net";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { DatabaseSync } from "node:sqlite";
@@ -445,6 +446,7 @@ import {
   isNeonDiscordCapacityActionType,
   markNeonGatewayRunDelivered,
   neonDiscordCapacityRuntimes,
+  redactSnapshotText,
   redactText,
   resolveNeonDiscordCapacityDecision,
   resolveNeonDiscordVoiceReplyOptionsFromEnv,
@@ -583,6 +585,21 @@ import {
   renderProductManifest
 } from "./index.js";
 import { createNeonPeekabooAppServerRequestHandler } from "./tools/peekabooDynamicTool.js";
+import {
+  createNeonRuntimeServiceExecutor,
+  createNeonRuntimeServicePlan,
+  createNeonRuntimeServiceSnapshot,
+  executeNeonRuntimeServiceOperation,
+  loadNeonRuntimeServiceEnvironmentFile,
+  probeNeonRuntimeServiceHealth,
+  renderNeonRuntimeServiceOperationReport,
+  renderNeonRuntimeServiceReport,
+  resolveNeonRuntimePredecessorCommands,
+  resolveNeonRuntimeServiceMutationGate,
+  waitForNeonRuntimeServiceHealthUnavailable,
+  type INeonRuntimeServicePlan,
+  type TNeonRuntimeServiceOperation
+} from "./runtime/neonRuntimeService.js";
 
 interface ICommand {
   readonly description: string;
@@ -1673,6 +1690,23 @@ const commands: Record<string, ICommand> = {
     description: "Serve the local Mission Control Gateway UI until stopped.",
     run: runMissionControlServe
   },
+  "runtime-service": {
+    description:
+      "Install, inspect, restart, rollback or uninstall the supervised Gateway and Mission Control runtime.",
+    run: runRuntimeServiceCommand
+  },
+  "runtime-service-run": {
+    description: "Internal supervised Gateway and Mission Control entry point.",
+    run: runRuntimeServiceServe
+  },
+  "runtime-service-smoke": {
+    description: "Exercise the portable runtime-service lifecycle against isolated temporary state.",
+    run: runRuntimeServiceSmoke
+  },
+  "runtime-service-live-smoke": {
+    description: "Exercise a uniquely labelled real user-service lifecycle and remove it afterwards.",
+    run: runRuntimeServiceLiveSmoke
+  },
   tui: {
     description: "Open the read-only Neonika Operator Shell (interactive terminal dashboard).",
     run: runOperatorShell
@@ -1721,6 +1755,13 @@ if (cliArgs.includes("-h") || cliArgs.includes("--help")) {
     console.error(renderHelp());
     process.exitCode = 1;
   } else {
+    if (commandName === "runtime-service-run") {
+      const envFilePath = readFlagValue(cliArgs, "--env-file");
+      if (!envFilePath) {
+        throw new Error("runtime-service-run requires --env-file <path>");
+      }
+      await loadNeonRuntimeServiceEnvironmentFile(envFilePath);
+    }
     await loadNeonSetupEnvironment(readFlagValue(cliArgs, "--config-root"));
     const output = await command.run();
 
@@ -12832,7 +12873,15 @@ async function runMissionControlUiSmoke(): Promise<string> {
 }
 
 async function runMissionControlServe(): Promise<undefined> {
-  const handle = await listenMissionControlServer();
+  return await serveMissionControl(true);
+}
+
+async function runRuntimeServiceServe(): Promise<undefined> {
+  return await serveMissionControl(false);
+}
+
+async function serveMissionControl(allowPortFallback: boolean): Promise<undefined> {
+  const handle = await listenMissionControlServer({ allowPortFallback });
 
   console.log(
     [
@@ -12846,6 +12895,262 @@ async function runMissionControlServe(): Promise<undefined> {
   await waitForShutdownSignal(handle);
 
   return undefined;
+}
+
+async function runRuntimeServiceCommand(): Promise<string> {
+  try {
+    return await executeRuntimeServiceCommand();
+  } catch (error) {
+    process.exitCode = 1;
+    const message = error instanceof Error ? error.message : String(error);
+    return [
+      "Neonika Runtime Service Operation: failed",
+      `Diagnostics: ${redactSnapshotText(message, { previewLimit: 512 })}`
+    ].join("\n");
+  }
+}
+
+async function executeRuntimeServiceCommand(): Promise<string> {
+  const args = process.argv.slice(3);
+  const action = parseRuntimeServiceOperation(args[0] ?? "status");
+  const configRoot = resolveNeonSetupPaths(readFlagValue(args, "--config-root")).configRoot;
+  const envFilePath = readFlagValue(args, "--env-file") ?? join(configRoot, "runtime.env");
+  await loadRuntimeServiceControlEnvironment(action, envFilePath);
+  const plan = createRuntimeServiceCliPlan(configRoot, envFilePath);
+  const executor = createNeonRuntimeServiceExecutor();
+  const healthUrl = resolveRuntimeServiceHealthUrl();
+  const healthProbe = () => probeNeonRuntimeServiceHealth(healthUrl);
+  const healthAbsenceProbe = () => waitForNeonRuntimeServiceHealthUnavailable(healthUrl);
+
+  if (action === "status") {
+    const snapshot = await createNeonRuntimeServiceSnapshot(plan, { executor, healthProbe });
+    if (snapshot.state !== "ready") {
+      process.exitCode = 1;
+    }
+    return renderNeonRuntimeServiceReport(snapshot);
+  }
+
+  const predecessor = resolveNeonRuntimePredecessorCommands(process.env);
+  let retireGateReady = false;
+  if (action === "stand-down") {
+    const cutover = await createNeonCutoverGateSnapshot(process.cwd());
+    retireGateReady = cutover.currentStage === "retire" &&
+      cutover.gates.find((gate) => gate.id === "retire")?.state === "pass";
+  }
+  const result = await executeNeonRuntimeServiceOperation(plan, action, {
+    executor,
+    gate: resolveNeonRuntimeServiceMutationGate(process.env),
+    ...(action === "install" ? { healthAbsenceProbe } : {}),
+    healthProbe,
+    predecessor: {
+      retireGateReady,
+      ...(predecessor.rollbackCommand ? { rollbackCommand: predecessor.rollbackCommand } : {}),
+      ...(predecessor.standDownCommand ? { standDownCommand: predecessor.standDownCommand } : {})
+    }
+  });
+  if (result.state !== "executed") {
+    process.exitCode = 1;
+  }
+  return renderNeonRuntimeServiceOperationReport(result);
+}
+
+function parseRuntimeServiceOperation(value: string): TNeonRuntimeServiceOperation | "status" {
+  const operations = [
+    "status",
+    "install",
+    "restart",
+    "rollback",
+    "uninstall",
+    "stand-down",
+    "predecessor-restore"
+  ] as const;
+  if (!operations.includes(value as (typeof operations)[number])) {
+    throw new Error(
+      `Unknown runtime-service operation: ${value}. Expected ${operations.join("|")}.`
+    );
+  }
+  return value as (typeof operations)[number];
+}
+
+async function loadRuntimeServiceControlEnvironment(
+  action: TNeonRuntimeServiceOperation | "status",
+  envFilePath: string
+): Promise<void> {
+  try {
+    await loadNeonRuntimeServiceEnvironmentFile(envFilePath);
+  } catch (error) {
+    if (action !== "status" && action !== "uninstall") {
+      throw error;
+    }
+  }
+}
+
+function createRuntimeServiceCliPlan(
+  configRoot: string,
+  envFilePath: string,
+  label?: string,
+  homeDir = homedir()
+): INeonRuntimeServicePlan {
+  return createNeonRuntimeServicePlan({
+    cliPath: fileURLToPath(import.meta.url),
+    configRoot,
+    envFilePath,
+    homeDir,
+    ...(label ? { label } : {}),
+    nodePath: process.execPath,
+    platform: platform(),
+    userId: userInfo().uid
+  });
+}
+
+function resolveRuntimeServiceHealthUrl(): string {
+  const port = readOptionalPort(process.env["NEONIKA_PORT"]) ?? 8798;
+  return `http://127.0.0.1:${port}/api/neon-mission-control/gateway`;
+}
+
+async function runRuntimeServiceSmoke(): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), "neonika-runtime-service-smoke-"));
+  const configRoot = join(root, "config");
+  const homeDir = join(root, "home");
+  const firstEnvFilePath = join(root, "first.env");
+  const secondEnvFilePath = join(root, "second.env");
+  const commands: string[] = [];
+  const executor = {
+    run: async (command: { readonly command: string; readonly args: readonly string[] }) => {
+      commands.push(`${command.command}:${command.args[0] ?? "none"}`);
+      return { exitCode: 0, stderr: "", stdout: "" };
+    }
+  };
+  const healthProbe = async () => ({ state: "ready" as const, statusCode: 200 });
+  const gate = resolveNeonRuntimeServiceMutationGate({
+    NEON_RUNTIME_SERVICE_MUTATIONS_ENABLED: "ready"
+  });
+
+  try {
+    await mkdir(configRoot, { mode: 0o700, recursive: true });
+    await writeFile(firstEnvFilePath, "NEONIKA_PORT=8798\n", { mode: 0o600 });
+    await writeFile(secondEnvFilePath, "NEONIKA_PORT=8798\nNEON_RUNTIME_GENERATION=two\n", { mode: 0o600 });
+    const firstPlan = createRuntimeServiceCliPlan(configRoot, firstEnvFilePath, undefined, homeDir);
+    const secondPlan = createRuntimeServiceCliPlan(configRoot, secondEnvFilePath, undefined, homeDir);
+    const options = { executor, gate, healthProbe };
+    const install = await executeNeonRuntimeServiceOperation(firstPlan, "install", options);
+    const update = await executeNeonRuntimeServiceOperation(secondPlan, "install", options);
+    const status = await createNeonRuntimeServiceSnapshot(secondPlan, { executor, healthProbe });
+    const restart = await executeNeonRuntimeServiceOperation(secondPlan, "restart", options);
+    const rollback = await executeNeonRuntimeServiceOperation(secondPlan, "rollback", options);
+    const restored = await createNeonRuntimeServiceSnapshot(firstPlan, { executor, healthProbe });
+    const uninstall = await executeNeonRuntimeServiceOperation(firstPlan, "uninstall", options);
+    if (
+      install.state !== "executed" ||
+      update.state !== "executed" ||
+      status.state !== "ready" ||
+      restart.state !== "executed" ||
+      rollback.state !== "executed" ||
+      restored.state !== "ready" ||
+      uninstall.state !== "executed"
+    ) {
+      throw new Error("runtime service lifecycle smoke did not reach every expected state");
+    }
+    return [
+      "Neonika Runtime Service Smoke: ok",
+      `Manager: ${firstPlan.manager}`,
+      "Lifecycle: install -> update -> status -> restart -> rollback -> uninstall",
+      `Supervisor commands: ${commands.length}`,
+      "Secrets persisted: false",
+      "Shell used: false"
+    ].join("\n");
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+}
+
+async function runRuntimeServiceLiveSmoke(): Promise<string> {
+  const currentPlatform = platform();
+  if (currentPlatform !== "darwin" && currentPlatform !== "linux") {
+    throw new Error(`runtime service live smoke is unsupported on ${currentPlatform}`);
+  }
+  const root = await mkdtemp(join(tmpdir(), "neonika-runtime-service-live-"));
+  const configRoot = join(root, "config");
+  const firstEnvFilePath = join(root, "first.env");
+  const secondEnvFilePath = join(root, "second.env");
+  const label = currentPlatform === "darwin"
+    ? `com.neonika.runtime.smoke.${process.pid}`
+    : `neonika-runtime-smoke-${process.pid}.service`;
+  const gate = resolveNeonRuntimeServiceMutationGate({
+    NEON_RUNTIME_SERVICE_MUTATIONS_ENABLED: "ready"
+  });
+  const executor = createNeonRuntimeServiceExecutor();
+  let cleanupPlan: INeonRuntimeServicePlan | undefined;
+
+  try {
+    const port = await reserveLoopbackPort();
+    await mkdir(configRoot, { mode: 0o700, recursive: true });
+    const environment = `NEONIKA_HOST=127.0.0.1\nNEONIKA_PORT=${port}\n`;
+    await writeFile(firstEnvFilePath, environment, { mode: 0o600 });
+    await writeFile(secondEnvFilePath, `${environment}NEON_RUNTIME_GENERATION=two\n`, { mode: 0o600 });
+    const firstPlan = createRuntimeServiceCliPlan(configRoot, firstEnvFilePath, label);
+    const secondPlan = createRuntimeServiceCliPlan(configRoot, secondEnvFilePath, label);
+    cleanupPlan = firstPlan;
+    const healthProbe = () => probeNeonRuntimeServiceHealth(
+      `http://127.0.0.1:${port}/api/neon-mission-control/gateway`,
+      { attempts: 30, retryDelayMs: 250 }
+    );
+    const healthAbsenceProbe = () => waitForNeonRuntimeServiceHealthUnavailable(
+      `http://127.0.0.1:${port}/api/neon-mission-control/gateway`,
+      { attempts: 30, retryDelayMs: 250 }
+    );
+    const options = { executor, gate, healthAbsenceProbe, healthProbe };
+    const install = await executeNeonRuntimeServiceOperation(firstPlan, "install", options);
+    const update = await executeNeonRuntimeServiceOperation(secondPlan, "install", options);
+    const restart = await executeNeonRuntimeServiceOperation(secondPlan, "restart", options);
+    const rollback = await executeNeonRuntimeServiceOperation(secondPlan, "rollback", options);
+    const status = await createNeonRuntimeServiceSnapshot(firstPlan, { executor, healthProbe });
+    if (
+      install.state !== "executed" ||
+      update.state !== "executed" ||
+      restart.state !== "executed" ||
+      rollback.state !== "executed" ||
+      status.state !== "ready"
+    ) {
+      throw new Error(
+        `runtime service live smoke states: install=${install.state}, update=${update.state}, ` +
+        `restart=${restart.state}, rollback=${rollback.state}, status=${status.state}`
+      );
+    }
+    return [
+      "Neonika Runtime Service Live Smoke: ok",
+      `Manager: ${firstPlan.manager}`,
+      "Lifecycle: install -> update -> restart -> rollback -> status -> uninstall",
+      "Health: ready",
+      "Cleanup: supervisor definition removed"
+    ].join("\n");
+  } finally {
+    if (cleanupPlan) {
+      await executeNeonRuntimeServiceOperation(cleanupPlan, "uninstall", {
+        executor,
+        gate,
+        healthProbe: async () => ({ state: "unavailable" })
+      });
+    }
+    await rm(root, { force: true, recursive: true });
+  }
+}
+
+async function reserveLoopbackPort(): Promise<number> {
+  const server = createNetServer();
+  await new Promise<void>((resolveListen, rejectListen) => {
+    server.once("error", rejectListen);
+    server.listen(0, "127.0.0.1", resolveListen);
+  });
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    server.close();
+    throw new Error("failed to reserve a loopback TCP port");
+  }
+  await new Promise<void>((resolveClose, rejectClose) => {
+    server.close((error) => error ? rejectClose(error) : resolveClose());
+  });
+  return address.port;
 }
 
 async function runOperatorShell(): Promise<undefined> {
@@ -12886,7 +13191,9 @@ function verifyOperatorShellDashboard(dashboard: INeonTuiDashboard): void {
   }
 }
 
-async function listenMissionControlServer(): Promise<INeonGatewayHttpServerHandle> {
+async function listenMissionControlServer(
+  options: { readonly allowPortFallback?: boolean } = {}
+): Promise<INeonGatewayHttpServerHandle> {
   const host = process.env["NEONIKA_HOST"] ?? "127.0.0.1";
   const preferredPort = readOptionalPort(process.env["NEONIKA_PORT"]) ?? 8798;
 
@@ -12902,7 +13209,7 @@ async function listenMissionControlServer(): Promise<INeonGatewayHttpServerHandl
       }
     );
   } catch (error) {
-    if (preferredPort === 0) {
+    if (preferredPort === 0 || options.allowPortFallback === false) {
       throw error;
     }
 

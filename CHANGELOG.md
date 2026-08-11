@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Added a portable launchd/systemd user service for Gateway and Mission Control
+  with private external environment files, leak-safe status, health-verified
+  install/restart/update/rollback/uninstall, and Retire-gated predecessor
+  stand-down with automatic recovery.
 - Added default-off Cron and Heartbeat agent execution with roster-selected
   harnesses, agent-scoped memory, persisted running-to-terminal evidence,
   bounded transient retries, and Canary-gated Discord delivery.
