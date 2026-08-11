@@ -28,6 +28,7 @@ import {
 import { loadNeonCutoverEnv } from "../core/cutoverPromotion.js";
 import { createNeonMirrorEvidenceSnapshot } from "../core/mirrorEvidence.js";
 import { evaluateNeonCanaryLivePreconditions } from "../gateway/outboundSender.js";
+import { readNeonCanaryStabilityEvidence } from "../gateway/canaryStabilityEvidence.js";
 import {
   assessNeonNodeRuntime,
   type INeonNodeRuntimeAssessment
@@ -173,14 +174,15 @@ export async function createNeonDoctorSnapshot(
   const routeInspectionOptions = options.env
     ? { env: options.env, now: () => generatedAt }
     : { now: () => generatedAt };
-  const [status, runs, rawRuns, routeInspection, mirrorEvidence] = await Promise.all([
+  const [status, runs, rawRuns, routeInspection, mirrorEvidence, canaryEvidence] = await Promise.all([
     readNeonGatewayStatus(projectRoot),
     readNeonGatewayRuns(projectRoot, {
       maxRuns: options.maxRuns ?? 50
     }),
     readRawRuns(paths.runsPath),
     createNeonGatewayRouteInspectionSnapshot(projectRoot, routeInspectionOptions),
-    createNeonMirrorEvidenceSnapshot(projectRoot, { now: () => generatedAt })
+    createNeonMirrorEvidenceSnapshot(projectRoot, { now: () => generatedAt }),
+    readNeonCanaryStabilityEvidence(projectRoot, { limit: options.maxRuns ?? 50 })
   ]);
   // Ordinary live cutover values override persisted configuration. The persisted
   // outbound arm is authoritative and fails closed when absent, so every cutover-aware
@@ -273,6 +275,7 @@ export async function createNeonDoctorSnapshot(
     primaryApproved: readReadyCutoverEnv(cutoverEnv, "NEON_CUTOVER_PRIMARY_APPROVED"),
     doctorHasNoFailures: !checksBeforeCutover.some((check) => check.state === "fail"),
     completedCount: status.completedCount,
+    acknowledgedCanaryDeliveryCount: canaryEvidence.totals.acknowledged,
     retireEvidenceReady: readReadyCutoverEnv(cutoverEnv, "NEON_CUTOVER_RETIRE_EVIDENCE")
   });
   const checks = [

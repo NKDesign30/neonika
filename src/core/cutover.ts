@@ -243,7 +243,9 @@ export function evaluateCanaryExitGate(
 export interface IPrimaryExitGateFacts {
   readonly primaryApproved: boolean;
   readonly doctorHasNoFailures: boolean;
+  /** @deprecated Generic completed runs no longer satisfy the Primary gate. */
   readonly completedCount: number;
+  readonly acknowledgedCanaryDeliveryCount?: number;
   readonly failedCount: number;
 }
 
@@ -256,19 +258,19 @@ export interface IPrimaryExitGateEvidence {
  * Evaluates the Primary stage exit gate ("Mission Control and logs prove
  * stability.") against facts that already exist in the cutover pipeline. The
  * gate is met only when the preceding Canary gate has passed, the operator has approved
- * primary routing, Doctor reports no failing checks, and the runtime has reached
- * the existing stability bar (at least five completed runs with zero failures).
- * This mirrors the existing inline condition used by the Primary gate and
- * introduces no new threshold: the completedCount>=5 / failedCount===0 stability
- * bar is the pre-existing one, not a freshly chosen number. The evaluation is
- * read-only and never mutates the cutover stage.
+ * primary routing, Doctor reports no failing checks, and persisted evidence has
+ * reached the existing stability bar: at least five genuine Canary deliveries
+ * acknowledged after completion, with zero unresolved failures. Generic
+ * completed runs are deliberately ignored. The evaluation is read-only and
+ * never mutates the cutover stage.
  */
 export function evaluatePrimaryExitGate(
   facts: IPrimaryExitGateFacts,
   canaryState: TCutoverGateState
 ): IPrimaryExitGateEvidence {
   const canaryPassed = canaryState === "pass";
-  const stableRuns = facts.completedCount >= 5 && facts.failedCount === 0;
+  const acknowledgedCanaryDeliveryCount = facts.acknowledgedCanaryDeliveryCount ?? 0;
+  const stableRuns = acknowledgedCanaryDeliveryCount >= 5 && facts.failedCount === 0;
   const met = canaryPassed && facts.primaryApproved && facts.doctorHasNoFailures && stableRuns;
 
   const reasons: string[] = [
@@ -282,8 +284,8 @@ export function evaluatePrimaryExitGate(
       ? "doctor reports no failures"
       : "doctor reports failures",
     stableRuns
-      ? `stable runs present (completed=${facts.completedCount}, failed=${facts.failedCount})`
-      : `not enough stable runs (completed=${facts.completedCount}, failed=${facts.failedCount})`
+      ? `acknowledged Canary deliveries present (acknowledged=${acknowledgedCanaryDeliveryCount}, unresolved-failures=${facts.failedCount})`
+      : `not enough acknowledged Canary deliveries (acknowledged=${acknowledgedCanaryDeliveryCount}, unresolved-failures=${facts.failedCount})`
   ];
 
   return { met, reasons };
@@ -344,7 +346,9 @@ export interface ICutoverGateStateFacts {
   readonly canaryApproved: boolean;
   readonly primaryApproved: boolean;
   readonly doctorHasNoFailures: boolean;
+  /** @deprecated Generic completed runs no longer satisfy the Primary gate. */
   readonly completedCount: number;
+  readonly acknowledgedCanaryDeliveryCount?: number;
   readonly retireEvidenceReady: boolean;
 }
 
@@ -409,6 +413,9 @@ export function deriveCutoverGateStates(
               primaryApproved: facts.primaryApproved,
               doctorHasNoFailures: facts.doctorHasNoFailures,
               completedCount: facts.completedCount,
+              ...(facts.acknowledgedCanaryDeliveryCount !== undefined
+                ? { acknowledgedCanaryDeliveryCount: facts.acknowledgedCanaryDeliveryCount }
+                : {}),
               failedCount: facts.failedCount
             },
             canaryState

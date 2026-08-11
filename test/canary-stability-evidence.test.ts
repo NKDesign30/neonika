@@ -4,132 +4,164 @@ import { describe, it } from "node:test";
 import {
   renderNeonCanaryStabilityReport,
   summarizeNeonCanaryStability,
-  type INeonDeliveryApprovalRecord,
-  type INeonDeliveryQueueCandidate
+  type INeonGatewayShadowRun,
+  type INeonOperatorAck
 } from "../src/index.js";
 
-function candidate(
-  overrides: Partial<INeonDeliveryQueueCandidate> & { readonly id: string; readonly createdAt: string }
-): INeonDeliveryQueueCandidate {
+function run(
+  runId: string,
+  overrides: Partial<INeonGatewayShadowRun> = {}
+): INeonGatewayShadowRun {
   return {
-    runId: `run-${overrides.id}`,
-    state: "queued-dry-run",
-    reason: "primary-dry-run",
-    target: { channel: "discord", accountId: "acct-1", channelId: "channel-123" },
-    agentId: "main",
-    sourceRunStatus: "completed",
-    finalTextPreview: "leak-safe-preview",
-    safety: { outboundSent: false, requiresApproval: true, cutoverStage: "shadow" },
-    ackState: "queued",
-    recoveryState: "none",
+    runId,
+    mode: "live",
+    status: "completed",
+    request: {
+      channel: "discord",
+      accountId: "default",
+      channelId: "canary-channel",
+      userId: "operator",
+      agentId: "chaty",
+      workspaceRoot: "/tmp/neonika",
+      mode: "read-only",
+      contentPreview: "Canary evidence request",
+      receivedAt: "2026-08-11T12:00:00.000Z"
+    },
+    harnessId: "codex-app-server",
+    harnessSessionKey: `neon:canary:${runId}`,
+    memoryState: "attached",
+    events: [{ kind: "final", text: "Canary evidence response" }],
+    finalText: "Canary evidence response",
+    delivery: {
+      state: "delivered",
+      targetChannel: "discord",
+      targetChannelId: "canary-channel",
+      reason: "canary-reply",
+      finalText: "Canary evidence response",
+      messageId: `message-${runId}`,
+      cutoverStage: "canary"
+    },
+    startedAt: "2026-08-11T12:00:00.000Z",
+    completedAt: "2026-08-11T12:01:00.000Z",
     ...overrides
   };
 }
 
-function approval(
-  candidateId: string,
-  decision: INeonDeliveryApprovalRecord["decision"]
-): INeonDeliveryApprovalRecord {
-  return {
-    id: `approval-${candidateId}-${decision}`,
-    candidateId,
-    runId: `run-${candidateId}`,
-    decision,
-    operatorId: "operator-1",
-    safety: { outboundSent: false, requiresCanaryGate: true, cutoverStage: "shadow" },
-    createdAt: "2026-06-02T12:00:00.000Z"
-  };
+function ack(runId: string, ackedAt = "2026-08-11T12:02:00.000Z"): INeonOperatorAck {
+  return { runId, ackedBy: "operator", ackedAt };
 }
 
 describe("Neon canary stability evidence", () => {
-  it("returns an explicit empty-state with no candidates and primary blocked", () => {
+  it("returns an explicit empty-state and keeps primary blocked", () => {
     const snapshot = summarizeNeonCanaryStability([], []);
+
     assert.equal(snapshot.verdict, "no-evidence");
-    assert.equal(snapshot.totals.total, 0);
+    assert.equal(snapshot.totals.delivered, 0);
+    assert.equal(snapshot.totals.acknowledged, 0);
     assert.equal(snapshot.primaryReadiness.ready, false);
-    assert.equal(snapshot.primaryReadiness.reason, "primary-blocked-needs-operator");
-    assert.match(renderNeonCanaryStabilityReport(snapshot), /empty evidence/);
+    assert.equal(snapshot.primaryReadiness.reason, "needs-five-acknowledged-canary-deliveries");
+    assert.match(renderNeonCanaryStabilityReport(snapshot), /empty evidence/u);
   });
 
-  it("reports dry-run-stable for clean candidates and tracks approval + ack", () => {
+  it("counts only genuine canary deliveries and excludes unrelated completed runs", () => {
+    const unrelatedShadow = run("shadow", {
+      mode: "shadow",
+      delivery: {
+        state: "suppressed",
+        targetChannel: "discord",
+        targetChannelId: "canary-channel",
+        reason: "shadow-mode",
+        finalText: "suppressed"
+      }
+    });
+    const primaryDelivery = run("primary", {
+      delivery: { ...run("base").delivery, cutoverStage: "primary" }
+    });
+    const canaryDelivery = run("canary");
+
     const snapshot = summarizeNeonCanaryStability(
-      [
-        candidate({ id: "a", createdAt: "2026-06-02T10:00:00.000Z", ackState: "done" }),
-        candidate({ id: "b", createdAt: "2026-06-02T11:00:00.000Z" })
-      ],
-      [approval("a", "approve-canary")]
+      [unrelatedShadow, primaryDelivery, canaryDelivery],
+      [ack("shadow"), ack("primary"), ack("canary")]
     );
-    assert.equal(snapshot.verdict, "dry-run-stable");
-    assert.equal(snapshot.totals.total, 2);
-    assert.equal(snapshot.totals.approved, 1);
-    assert.equal(snapshot.totals.ackedDone, 1);
-    assert.equal(snapshot.totals.suppressed, 2);
-    const a = snapshot.records.find((r) => r.candidateId === "a");
-    assert.ok(a && a.disposition === "acked-done" && a.approved);
-    assert.ok(snapshot.records.every((r) => r.outboundSent === false));
+
+    assert.equal(snapshot.totals.inspected, 3);
+    assert.equal(snapshot.totals.delivered, 1);
+    assert.equal(snapshot.totals.acknowledged, 1);
+    assert.deepEqual(snapshot.records.map((record) => record.runId), ["canary"]);
   });
 
-  it("reports unstable when any candidate is pending recovery", () => {
+  it("becomes stable after five delivered canary runs are acknowledged afterwards", () => {
+    const runs = Array.from({ length: 5 }, (_, index) => run(`canary-${index + 1}`));
+    const acks = runs.map((entry) => ack(entry.runId));
+
+    const snapshot = summarizeNeonCanaryStability(runs, acks);
+
+    assert.equal(snapshot.verdict, "stable");
+    assert.equal(snapshot.totals.delivered, 5);
+    assert.equal(snapshot.totals.acknowledged, 5);
+    assert.equal(snapshot.totals.unresolvedFailures, 0);
+    assert.equal(snapshot.primaryReadiness.ready, true);
+    assert.equal(snapshot.primaryReadiness.reason, "ready");
+    assert.ok(snapshot.records.every((record) => record.disposition === "acknowledged"));
+  });
+
+  it("does not count an acknowledgement recorded before delivery completed", () => {
     const snapshot = summarizeNeonCanaryStability(
-      [
-        candidate({ id: "a", createdAt: "2026-06-02T10:00:00.000Z" }),
-        candidate({ id: "b", createdAt: "2026-06-02T11:00:00.000Z", recoveryState: "pending-drain" })
-      ],
-      []
+      [run("pre-acked")],
+      [ack("pre-acked", "2026-08-11T11:59:00.000Z")]
     );
+
+    assert.equal(snapshot.verdict, "collecting");
+    assert.equal(snapshot.totals.delivered, 1);
+    assert.equal(snapshot.totals.acknowledged, 0);
+    assert.equal(snapshot.records[0]?.disposition, "awaiting-acknowledgement");
+  });
+
+  it("reports unstable while any active gateway failure is unresolved", () => {
+    const failed = run("failed", {
+      mode: "shadow",
+      status: "failed",
+      delivery: {
+        state: "suppressed",
+        targetChannel: "discord",
+        targetChannelId: "canary-channel",
+        reason: "shadow-mode",
+        finalText: ""
+      }
+    });
+    const snapshot = summarizeNeonCanaryStability([run("delivered"), failed], [ack("delivered")]);
+
     assert.equal(snapshot.verdict, "unstable");
-    assert.equal(snapshot.totals.pendingRecovery, 1);
-    const b = snapshot.records.find((r) => r.candidateId === "b");
-    assert.ok(b && b.disposition === "pending-recovery");
+    assert.equal(snapshot.totals.unresolvedFailures, 1);
+    assert.equal(snapshot.primaryReadiness.ready, false);
+    assert.equal(snapshot.primaryReadiness.reason, "unresolved-failures");
+    assert.equal(snapshot.records.find((record) => record.runId === "failed")?.disposition, "failed");
   });
 
-  it("marks a rejected candidate unless a later approval supersedes it", () => {
-    const rejected = summarizeNeonCanaryStability(
-      [candidate({ id: "a", createdAt: "2026-06-02T10:00:00.000Z" })],
-      [approval("a", "reject")]
-    );
-    assert.equal(rejected.records[0]?.disposition, "rejected");
+  it("never projects message text, message ids, channel ids, or ack notes", () => {
+    const secret = "private-canary-payload-SHOULD-NOT-LEAK";
+    const delivery = run("leak-safe", {
+      request: { ...run("base").request, contentPreview: secret },
+      finalText: secret,
+      delivery: {
+        ...run("base").delivery,
+        targetChannelId: "private-channel-id",
+        finalText: secret,
+        messageId: "private-message-id"
+      }
+    });
+    const acknowledgement: INeonOperatorAck = {
+      ...ack("leak-safe"),
+      note: "private operator note"
+    };
 
-    const superseded = summarizeNeonCanaryStability(
-      [candidate({ id: "a", createdAt: "2026-06-02T10:00:00.000Z" })],
-      [approval("a", "reject"), approval("a", "approve-canary")]
-    );
-    assert.equal(superseded.records[0]?.disposition, "approved-pending");
-    assert.equal(superseded.records[0]?.approved, true);
-  });
-
-  it("takes the newest N candidates by createdAt", () => {
-    const snapshot = summarizeNeonCanaryStability(
-      [
-        candidate({ id: "old", createdAt: "2026-06-01T09:00:00.000Z" }),
-        candidate({ id: "new", createdAt: "2026-06-02T09:00:00.000Z" }),
-        candidate({ id: "mid", createdAt: "2026-06-01T18:00:00.000Z" })
-      ],
-      [],
-      { limit: 2 }
-    );
-    assert.deepEqual(
-      snapshot.records.map((r) => r.candidateId),
-      ["new", "mid"]
-    );
-  });
-
-  it("is leak-safe: channel label is an id, never the message preview", () => {
-    const snapshot = summarizeNeonCanaryStability(
-      [
-        candidate({
-          id: "a",
-          createdAt: "2026-06-02T10:00:00.000Z",
-          finalTextPreview: "super-secret-message-body"
-        })
-      ],
-      []
-    );
-    const record = snapshot.records[0];
-    assert.ok(record);
-    assert.equal(record.channelLabel, "channel:channel-123");
+    const snapshot = summarizeNeonCanaryStability([delivery], [acknowledgement]);
     const serialized = JSON.stringify(snapshot);
-    assert.doesNotMatch(serialized, /super-secret-message-body/);
-    assert.doesNotMatch(renderNeonCanaryStabilityReport(snapshot), /super-secret-message-body/);
+    const report = renderNeonCanaryStabilityReport(snapshot);
+
+    for (const privateValue of [secret, "private-channel-id", "private-message-id", "private operator note"]) {
+      assert.doesNotMatch(serialized, new RegExp(privateValue, "u"));
+      assert.doesNotMatch(report, new RegExp(privateValue, "u"));
+    }
   });
 });

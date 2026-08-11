@@ -11,6 +11,7 @@ import {
   evaluatePrimaryExitGate,
   evaluateRetireExitGate,
   evaluateShadowExitGate,
+  recordNeonOperatorAck,
   renderNeonCutoverGateReport,
   writeNeonGatewayRun,
   writeNeonMirrorEvidence,
@@ -63,13 +64,13 @@ describe("Neonika Cutover gates", () => {
     }
   });
 
-  it("passes primary only with approvals, rollback, clean Doctor, and stable runs", async () => {
+  it("excludes unrelated completed runs and passes primary only after five acknowledged Canary deliveries", async () => {
     const projectRoot = await createTempProjectRoot();
     const secretToken = "discord-secret-cutover-value";
 
     try {
       for (let index = 1; index <= 5; index += 1) {
-        await writeNeonGatewayRun(projectRoot, createCutoverRun(`run-cutover-${index}`));
+        await writeNeonGatewayRun(projectRoot, createCutoverRun(`run-shadow-${index}`));
       }
       await writeNeonMirrorEvidence(projectRoot, {
         evidenceId: "mirror-primary-pass",
@@ -83,7 +84,7 @@ describe("Neonika Cutover gates", () => {
         now: () => new Date("2026-05-31T20:09:00.000Z")
       });
 
-      const snapshot = await createNeonCutoverGateSnapshot(projectRoot, {
+      const options = {
         currentStage: "primary",
         env: {
           ...createRouteReadyEnv(),
@@ -93,13 +94,24 @@ describe("Neonika Cutover gates", () => {
           NEON_DISCORD_BOT_TOKEN: secretToken
         },
         now: () => new Date("2026-05-31T20:10:00.000Z")
-      });
+      } as const;
+      const blocked = await createNeonCutoverGateSnapshot(projectRoot, options);
+
+      assert.equal(blocked.state, "needs-evidence");
+      assert.equal(blocked.source.canaryDeliveries, 0);
+      assert.equal(blocked.source.acknowledgedCanaryDeliveries, 0);
+      assert.equal(blocked.gates.find((gate) => gate.id === "primary")?.state, "warn");
+
+      await persistAcknowledgedCanaryRuns(projectRoot, "run-canary", 5);
+      const snapshot = await createNeonCutoverGateSnapshot(projectRoot, options);
       const report = renderNeonCutoverGateReport(snapshot);
       const serialized = JSON.stringify(snapshot);
 
       assert.equal(snapshot.state, "ready");
       assert.equal(snapshot.currentStage, "primary");
       assert.equal(snapshot.source.rollbackConfigured, true);
+      assert.equal(snapshot.source.canaryDeliveries, 5);
+      assert.equal(snapshot.source.acknowledgedCanaryDeliveries, 5);
       assert.equal(snapshot.gates.find((gate) => gate.id === "mirror")?.state, "pass");
       assert.equal(snapshot.gates.find((gate) => gate.id === "canary")?.state, "pass");
       assert.equal(snapshot.gates.find((gate) => gate.id === "primary")?.state, "pass");
@@ -116,9 +128,10 @@ describe("Neonika Cutover gates", () => {
 
     try {
       await writeNeonGatewayRun(projectRoot, createFailedCutoverRun("run-cutover-old-failure"));
-      for (let index = 1; index <= 50; index += 1) {
+      for (let index = 1; index <= 45; index += 1) {
         await writeNeonGatewayRun(projectRoot, createCutoverRun(`run-cutover-recent-${index}`));
       }
+      await persistAcknowledgedCanaryRuns(projectRoot, "run-cutover-recent-canary", 5);
       await writeNeonMirrorEvidence(projectRoot, {
         evidenceId: "mirror-primary-recent-pass",
         prompt: "Can Neonika answer with the same operational context?",
@@ -340,12 +353,13 @@ describe("Canary exit gate evidence", () => {
 });
 
 describe("Primary exit gate evidence", () => {
-  it("is met when canary passed, approval is set, doctor is clean, and runs are stable", () => {
+  it("is met when canary passed, approval is set, doctor is clean, and Canary deliveries are acknowledged", () => {
     const evidence = evaluatePrimaryExitGate(
       {
         primaryApproved: true,
         doctorHasNoFailures: true,
         completedCount: 5,
+        acknowledgedCanaryDeliveryCount: 5,
         failedCount: 0
       },
       "pass"
@@ -355,7 +369,22 @@ describe("Primary exit gate evidence", () => {
     assert.ok(evidence.reasons.some((reason) => reason.includes("canary gate passed")));
     assert.ok(evidence.reasons.some((reason) => reason.includes("primary approved")));
     assert.ok(evidence.reasons.some((reason) => reason.includes("doctor reports no failures")));
-    assert.ok(evidence.reasons.some((reason) => reason.includes("stable runs present")));
+    assert.ok(evidence.reasons.some((reason) => reason.includes("acknowledged Canary deliveries present")));
+  });
+
+  it("ignores generic completed runs when no acknowledged Canary delivery evidence exists", () => {
+    const evidence = evaluatePrimaryExitGate(
+      {
+        primaryApproved: true,
+        doctorHasNoFailures: true,
+        completedCount: 100,
+        failedCount: 0
+      },
+      "pass"
+    );
+
+    assert.equal(evidence.met, false);
+    assert.ok(evidence.reasons.some((reason) => reason.includes("acknowledged=0")));
   });
 
   it("is not met when the canary gate has not passed", () => {
@@ -364,6 +393,7 @@ describe("Primary exit gate evidence", () => {
         primaryApproved: true,
         doctorHasNoFailures: true,
         completedCount: 5,
+        acknowledgedCanaryDeliveryCount: 5,
         failedCount: 0
       },
       "warn"
@@ -374,19 +404,20 @@ describe("Primary exit gate evidence", () => {
     assert.ok(evidence.reasons.some((reason) => reason.includes("state=warn")));
   });
 
-  it("is not met without enough stable runs", () => {
+  it("is not met without enough acknowledged Canary deliveries", () => {
     const evidence = evaluatePrimaryExitGate(
       {
         primaryApproved: true,
         doctorHasNoFailures: true,
         completedCount: 4,
+        acknowledgedCanaryDeliveryCount: 4,
         failedCount: 0
       },
       "pass"
     );
 
     assert.equal(evidence.met, false);
-    assert.ok(evidence.reasons.some((reason) => reason.includes("not enough stable runs")));
+    assert.ok(evidence.reasons.some((reason) => reason.includes("not enough acknowledged Canary deliveries")));
   });
 
   it("is not met when a run failed", () => {
@@ -395,13 +426,14 @@ describe("Primary exit gate evidence", () => {
         primaryApproved: true,
         doctorHasNoFailures: true,
         completedCount: 6,
+        acknowledgedCanaryDeliveryCount: 6,
         failedCount: 1
       },
       "pass"
     );
 
     assert.equal(evidence.met, false);
-    assert.ok(evidence.reasons.some((reason) => reason.includes("not enough stable runs")));
+    assert.ok(evidence.reasons.some((reason) => reason.includes("not enough acknowledged Canary deliveries")));
   });
 
   it("is not met when doctor reports failures", () => {
@@ -410,6 +442,7 @@ describe("Primary exit gate evidence", () => {
         primaryApproved: true,
         doctorHasNoFailures: false,
         completedCount: 5,
+        acknowledgedCanaryDeliveryCount: 5,
         failedCount: 0
       },
       "pass"
@@ -425,6 +458,7 @@ describe("Primary exit gate evidence", () => {
         primaryApproved: false,
         doctorHasNoFailures: true,
         completedCount: 5,
+        acknowledgedCanaryDeliveryCount: 5,
         failedCount: 0
       },
       "pass"
@@ -557,4 +591,36 @@ function createFailedCutoverRun(runId: string): INeonGatewayShadowRun {
       }
     ]
   };
+}
+
+function createCanaryCutoverRun(runId: string): INeonGatewayShadowRun {
+  const run = createCutoverRun(runId);
+
+  return {
+    ...run,
+    mode: "live",
+    delivery: {
+      ...run.delivery,
+      state: "delivered",
+      reason: "canary-reply",
+      messageId: `message-${runId}`,
+      cutoverStage: "canary"
+    }
+  };
+}
+
+async function persistAcknowledgedCanaryRuns(
+  projectRoot: string,
+  prefix: string,
+  count: number
+): Promise<void> {
+  for (let index = 1; index <= count; index += 1) {
+    const runId = `${prefix}-${index}`;
+    await writeNeonGatewayRun(projectRoot, createCanaryCutoverRun(runId));
+    await recordNeonOperatorAck(
+      projectRoot,
+      { runId, ackedBy: "operator" },
+      { now: () => new Date("2026-05-31T20:02:00.000Z") }
+    );
+  }
 }

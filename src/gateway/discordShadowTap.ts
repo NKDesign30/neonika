@@ -1352,7 +1352,8 @@ async function processTapMessage<TMessage, TInteraction>(
         options.projectRoot,
         markNeonGatewayRunDelivered(result.result.run, {
           messageId: reply.messageId,
-          ...(reply.reason ? { reason: reply.reason } : {})
+          ...(reply.reason ? { reason: reply.reason } : {}),
+          ...(reply.cutoverStage ? { cutoverStage: reply.cutoverStage } : {})
         })
       );
     }

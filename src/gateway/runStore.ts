@@ -487,6 +487,10 @@ function parseGatewayDelivery(value: unknown): INeonGatewayDeliveryResult | unde
   }
 
   const messageId = typeof value["messageId"] === "string" ? value["messageId"] : undefined;
+  const cutoverStage =
+    value["cutoverStage"] === "canary" || value["cutoverStage"] === "primary"
+      ? value["cutoverStage"]
+      : undefined;
 
   return {
     state: value["state"],
@@ -494,7 +498,8 @@ function parseGatewayDelivery(value: unknown): INeonGatewayDeliveryResult | unde
     targetChannelId: value["targetChannelId"],
     reason: value["reason"],
     finalText: value["finalText"],
-    ...(messageId ? { messageId } : {})
+    ...(messageId ? { messageId } : {}),
+    ...(cutoverStage ? { cutoverStage } : {})
   };
 }
 
