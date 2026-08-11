@@ -1,31 +1,32 @@
-import { writeNeonGatewayRun } from "../gateway/runStore.js";
+import type { INeonChannelRouteRef } from "../channels/routeProjection.js";
+import { writeNeonGatewayRunLatest } from "../gateway/runStore.js";
 import type { INeonGatewayShadowRun } from "../gateway/types.js";
 import type { INeonHeartbeatWakeEmission } from "./heartbeatTimerRuntime.js";
+import {
+  executeNeonScheduledAgentRun,
+  type INeonScheduledAgentRuntime
+} from "./scheduledAgentExecution.js";
 
 /**
- * Heartbeat run executor (shadow).
+ * Heartbeat run executor.
  *
- * Translates the read-only `INeonHeartbeatWakeEmission`s a daemon tick produced
- * into real, terminal run-store records so an autonomous heartbeat becomes
- * visible in Mission Control (chat/replay/activity/run projections) WITHOUT
- * breaking the shadow contract:
- *  - every record is `mode: "shadow"`, `status: "completed"` (terminal-only),
- *  - `delivery.state` is hard-coded `"suppressed"` — nothing is ever sent,
- *  - no harness is invoked, no LLM call, no outbound; the record documents that
- *    the heartbeat WOULD wake the agent at that phase window.
- *
- * The literal-typed safety flags (`outboundSent: false`, `sentDiscord: false`)
- * make it a compile-time guarantee that this executor never delivers. Flipping
- * to a real agent run + real send stays a canary-cutover decision (DP-4),
- * unchanged by this slice.
+ * Default behavior remains a terminal shadow marker with suppressed delivery.
+ * An explicitly armed scheduled-agent runtime invokes the selected harness,
+ * attaches memory, persists running -> terminal through the latest writer, and
+ * may ask the existing Canary sender to deliver to an explicit Discord target.
  */
 export interface INeonHeartbeatExecutionResult {
   readonly createdRunIds: readonly string[];
   readonly createdRunCount: number;
+  readonly executedRunCount: number;
+  readonly failedRunCount: number;
+  readonly retryCount: number;
+  readonly deliveredRunCount: number;
   readonly safety: {
-    readonly outboundSent: false;
-    readonly sentDiscord: false;
+    readonly outboundSent: boolean;
+    readonly sentDiscord: boolean;
     readonly wroteRunStore: boolean;
+    readonly executed: boolean;
   };
   readonly diagnostics: readonly string[];
 }
@@ -34,6 +35,8 @@ export interface IExecuteNeonHeartbeatWakeIntentsOptions {
   readonly projectRoot: string;
   readonly emissions: readonly INeonHeartbeatWakeEmission[];
   readonly tickAt: string;
+  readonly agentRuntime?: INeonScheduledAgentRuntime;
+  readonly deliveryTarget?: INeonChannelRouteRef;
   /** Injectable writer for tests; defaults to the real gateway run store. */
   readonly writeRun?: (projectRoot: string, run: INeonGatewayShadowRun) => Promise<void>;
 }
@@ -90,35 +93,86 @@ export function buildNeonHeartbeatWakeRun(params: {
 }
 
 /**
- * Write one terminal shadow run-record per wake emission to the gateway run
- * store. No emissions => no write (honest, gate-closed ticks produce none).
- * Outbound stays suppressed on every record.
+ * Process one record per deduplicated wake emission. No emissions => no write.
  */
 export async function executeNeonHeartbeatWakeIntents(
   options: IExecuteNeonHeartbeatWakeIntentsOptions
 ): Promise<INeonHeartbeatExecutionResult> {
-  const writeRun = options.writeRun ?? writeNeonGatewayRun;
+  const writeRun = options.writeRun ?? writeNeonGatewayRunLatest;
   const createdRunIds: string[] = [];
+  let executedRunCount = 0;
+  let failedRunCount = 0;
+  let retryCount = 0;
+  let deliveredRunCount = 0;
 
   for (const emission of options.emissions) {
-    const run = buildNeonHeartbeatWakeRun({
+    const shadowRun = buildNeonHeartbeatWakeRun({
       projectRoot: options.projectRoot,
       emission,
       tickAt: options.tickAt
     });
-    await writeRun(options.projectRoot, run);
+    const scheduled = options.agentRuntime?.gate.enabled
+      ? await executeNeonScheduledAgentRun({
+          projectRoot: options.projectRoot,
+          specification: {
+            runId: shadowRun.runId,
+            source: "heartbeat",
+            sourceId: emission.cursorKey ?? emission.agentId,
+            agentId: emission.agentId,
+            goal: "heartbeat wake",
+            content: buildHeartbeatAgentPrompt(emission),
+            receivedAt: options.tickAt,
+            ...(options.deliveryTarget ? { deliveryTarget: options.deliveryTarget } : {})
+          },
+          runtime: options.agentRuntime,
+          writeRun
+        })
+      : undefined;
+    const run = scheduled?.run ?? shadowRun;
+    if (!scheduled) {
+      await writeRun(options.projectRoot, run);
+    } else {
+      executedRunCount += scheduled.attempts > 0 ? 1 : 0;
+      failedRunCount += scheduled.state === "failed" ? 1 : 0;
+      retryCount += scheduled.retryCount;
+      deliveredRunCount += scheduled.outboundSent ? 1 : 0;
+    }
     createdRunIds.push(run.runId);
   }
 
   const wroteRunStore = createdRunIds.length > 0;
+  const outboundSent = deliveredRunCount > 0;
+  const executed = executedRunCount > 0;
+  const scheduledAgentEnabled = options.agentRuntime?.gate.enabled === true;
   return {
     createdRunIds,
     createdRunCount: createdRunIds.length,
-    safety: { outboundSent: false, sentDiscord: false, wroteRunStore },
+    executedRunCount,
+    failedRunCount,
+    retryCount,
+    deliveredRunCount,
+    safety: { outboundSent, sentDiscord: outboundSent, wroteRunStore, executed },
     diagnostics: [
-      wroteRunStore
-        ? `Wrote ${createdRunIds.length} terminal shadow heartbeat run-record(s); delivery suppressed on every record.`
+      scheduledAgentEnabled && wroteRunStore
+        ? `Processed ${createdRunIds.length} scheduled heartbeat run(s); ${executedRunCount} invoked a harness, ${failedRunCount} failed, ${retryCount} retry attempt(s), ${deliveredRunCount} delivered.`
+        : wroteRunStore
+          ? `Wrote ${createdRunIds.length} terminal shadow heartbeat run-record(s); delivery suppressed on every record.`
         : "No wake emissions to execute; no run-store write."
     ]
   };
+}
+
+function buildHeartbeatAgentPrompt(emission: INeonHeartbeatWakeEmission): string {
+  const commitmentLine = emission.commitmentIds?.length
+    ? `Due commitment ids: ${emission.commitmentIds.join(", ")}.`
+    : undefined;
+  return [
+    `Perform the scheduled heartbeat review for agent ${emission.agentId}.`,
+    `Wake source: ${emission.source}; intent: ${emission.intent}; reason: ${emission.reason}.`,
+    `Window: ${emission.windowKey}.`,
+    ...(commitmentLine ? [commitmentLine] : []),
+    emission.source === "commitment"
+      ? "Inspect the due commitment records and attached memory, then report the next safe action."
+      : "Review current runtime health and open work, then report only actionable findings."
+  ].join("\n");
 }

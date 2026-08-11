@@ -23,7 +23,7 @@ import {
  * in-flight job-id Set that prevents duplicate timers) and rearmed via
  * `computeNextRunAtMs` (`src/cron/schedule.ts`).
  *
- * Neonika stops short of execution. This driver wraps the pure
+ * This pure driver stops short of execution. It wraps
  * `evaluateNeonCronTick` with three things upstream's runtime needs but Neon
  * keeps shadow-safe:
  *  1. A PERSISTED dedup cursor (`jobId -> last emitted due-window`) in an
@@ -37,11 +37,10 @@ import {
  *  3. DEFAULT-OFF: without a ready `NEON_CRON_TIMER_ENABLED` gate the tick does
  *     nothing — no emission, no catch-up, and (critically) no cursor write.
  *
- * intentionally-different vs upstream: nothing is executed, no run record /
- * delivery / workspace side effect is produced, no real wall-clock timer is
- * armed here (the clock is injected so the driver is deterministic). Wiring the
- * emitted intents into the run store / activity stream is a separate slice and
- * stays a primary-cutover decision behind the run-lifecycle gate (DP-4).
+ * Nothing is executed inside this module and no real wall-clock timer is armed
+ * here. The daemon service may pass emitted intents to the separately gated
+ * scheduled-agent executor; keeping that seam outside this pure cursor driver
+ * preserves deterministic dedup and catch-up tests.
  */
 export interface INeonCronDaemonCursor {
   readonly version: 1;
@@ -154,7 +153,7 @@ export async function runNeonCronDaemonTick(
       safety: { executed: false, outboundSent: false, wroteRunStore: false, cursorOnlyWrite: false },
       diagnostics: [
         "Cron daemon tick is disabled (default). No intent emitted, no catch-up, no cursor write.",
-        "Set NEON_CRON_TIMER_ENABLED to arm read-only run-intent evaluation; execution stays gated (DP-4)."
+        "Set NEON_CRON_TIMER_ENABLED to arm run-intent evaluation; agent execution has a separate default-off gate."
       ]
     };
   }
@@ -195,7 +194,7 @@ export async function runNeonCronDaemonTick(
 
   const diagnostics = [
     `Cron daemon tick armed: ${tick.emitted.length} current window(s), ${catchup.length} catch-up window(s) back-filled, ${tick.deduped.length} deduped.`,
-    "Run intents only; nothing executed, no run store / activity / outbound write. Cursor persisted to isolated state file."
+    "This tick produced intents only; the caller decides whether to persist shadow evidence or invoke the separately gated agent runtime."
   ];
   if (catchupTruncated > 0) {
     diagnostics.push(

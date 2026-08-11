@@ -28,6 +28,7 @@ import {
   createNeonAutomationSnapshot,
   evaluateNeonCronTick,
   resolveNeonCronTimerGate,
+  resolveNeonScheduledAgentExecutionGate,
   renderNeonCronTickReport,
   runNeonCronDaemonTick,
   renderNeonCronDaemonTickReport,
@@ -52,6 +53,7 @@ import {
   renderNeonCronDaemonStatusReport,
   type INeonAutomationJob,
   type INeonCronTimerGate,
+  type INeonScheduledAgentRuntime,
   evaluateNeonHeartbeatTick,
   resolveNeonHeartbeatTimerGate,
   renderNeonHeartbeatTickReport,
@@ -241,6 +243,7 @@ import {
   normalizeNeonChannelRoute,
   type INeonChannelInboundIdentity,
   type INeonChannelRouteInput,
+  type INeonChannelRouteRef,
   captureNeonCommitmentsFromRun,
   resolveNeonCommitmentCaptureGate,
   createNeonGatewayRouteInspectionSnapshot,
@@ -671,7 +674,7 @@ const commands: Record<string, ICommand> = {
   },
   "cron-daemon-run": {
     description:
-      "Run the autonomous cron daemon (real setInterval loop). Each tick reads store-backed cron jobs and writes terminal SHADOW run-records (delivery suppressed, stage unchanged). Flags: --interval <ms> (default NEON_CRON_DAEMON_INTERVAL_MS or 60000), --ticks <n> (stop after n ticks; default runs until Ctrl+C). Emission needs NEON_CRON_TIMER_ENABLED.",
+      "Run the autonomous cron daemon. Default is terminal shadow evidence only; NEON_SCHEDULED_AGENT_EXECUTION_ENABLED=ready invokes the selected agent harness with memory. Delivery targets still pass through the existing Canary outbound gate. Flags: --interval <ms>, --ticks <n>. Emission needs NEON_CRON_TIMER_ENABLED.",
     run: runCronDaemonRun
   },
   "cron-daemon-service-smoke": {
@@ -752,7 +755,7 @@ const commands: Record<string, ICommand> = {
   },
   "heartbeat-daemon-run": {
     description:
-      "Run the autonomous heartbeat daemon (real setInterval loop). Each tick evaluates env-configured agents and writes terminal SHADOW run-records (delivery suppressed, stage unchanged). Flags: --interval <ms> (default NEON_HEARTBEAT_DAEMON_INTERVAL_MS or 60000), --ticks <n> (stop after n ticks; default runs until Ctrl+C). Emission needs NEON_HEARTBEAT_TIMER_ENABLED; never sends, never changes the cutover stage.",
+      "Run the autonomous heartbeat daemon. Default is terminal shadow evidence only; NEON_SCHEDULED_AGENT_EXECUTION_ENABLED=ready invokes each selected agent harness with memory. Any configured Discord delivery still passes through the existing Canary outbound gate. Flags: --interval <ms>, --ticks <n>. Emission needs NEON_HEARTBEAT_TIMER_ENABLED.",
     run: runHeartbeatDaemonRun
   },
   "heartbeat-daemon-service-smoke": {
@@ -5274,6 +5277,24 @@ async function runDiscordShadowTap(): Promise<undefined> {
         channelAllowlist: canaryReplyAllowlist
       })
     : undefined;
+  const scheduledAgentExecutionGate = resolveNeonScheduledAgentExecutionGate(process.env);
+  const scheduledAgentRuntime = scheduledAgentExecutionGate.enabled
+    ? createScheduledAgentRuntime({
+        gate: scheduledAgentExecutionGate,
+        profiles: tapRoster.profiles,
+        harnessRegistry,
+        resolveMemory,
+        sender:
+          canaryReplySender ??
+          createNeonCanaryOutboundSender({
+            env: process.env,
+            channelAllowlist: canaryReplyAllowlist
+          })
+      })
+    : undefined;
+  const scheduledHeartbeatDeliveryTarget = scheduledAgentRuntime
+    ? resolveSingleScheduledDiscordTarget(canaryReplyAllowlist, accountId)
+    : undefined;
   const adapter = createDiscordJsShadowTapAdapter();
   let pdfReviewRuntime: INeonPdfReviewRuntime | undefined;
   let runtimePicker: INeonDiscordSessionRuntimePicker | undefined;
@@ -6027,6 +6048,7 @@ async function runDiscordShadowTap(): Promise<undefined> {
         intervalMs: cronDaemonIntervalMs,
         gate: cronDaemonGate,
         agentId: process.env["NEON_DISCORD_AGENT_ID"] ?? "chaty",
+        ...(scheduledAgentRuntime ? { agentRuntime: scheduledAgentRuntime } : {}),
         unrefTimer: false
       })
     : undefined;
@@ -6037,6 +6059,10 @@ async function runDiscordShadowTap(): Promise<undefined> {
         agents: heartbeatDaemonAgents,
         intervalMs: heartbeatDaemonIntervalMs,
         gate: heartbeatDaemonGate,
+        ...(scheduledAgentRuntime ? { agentRuntime: scheduledAgentRuntime } : {}),
+        ...(scheduledHeartbeatDeliveryTarget
+          ? { deliveryTarget: scheduledHeartbeatDeliveryTarget }
+          : {}),
         unrefTimer: false
       })
     : undefined;
@@ -6072,11 +6098,13 @@ async function runDiscordShadowTap(): Promise<undefined> {
         }`,
         `Workboard autopilot: ${workboardAutopilot ? "enabled" : "off"}`,
         `Cron daemon: ${
-          cronDaemon ? `enabled (interval=${cronDaemonIntervalMs}ms, gate=${cronDaemonGate.reason})` : "off"
+          cronDaemon
+            ? `enabled (interval=${cronDaemonIntervalMs}ms, timer=${cronDaemonGate.reason}, agent=${scheduledAgentExecutionGate.reason})`
+            : "off"
         }`,
         `Heartbeat daemon: ${
           heartbeatDaemon
-            ? `enabled (${heartbeatDaemonAgents.length} agent(s), interval=${heartbeatDaemonIntervalMs}ms, gate=${heartbeatDaemonGate.reason})`
+            ? `enabled (${heartbeatDaemonAgents.length} agent(s), interval=${heartbeatDaemonIntervalMs}ms, timer=${heartbeatDaemonGate.reason}, agent=${scheduledAgentExecutionGate.reason})`
             : "off"
         }`,
         `Canary reply ready: ${canaryReplyPreconditions.ready}`,
@@ -6701,6 +6729,72 @@ async function runDiscordIngressControlLiveSmoke(): Promise<string> {
     await tapHandle.close();
     await httpHandle.close();
   }
+}
+
+function createScheduledAgentRuntime(input: {
+  readonly gate: ReturnType<typeof resolveNeonScheduledAgentExecutionGate>;
+  readonly profiles: readonly INeonAgentProfile[];
+  readonly harnessRegistry: {
+    readonly codex: ICodexHarness;
+    readonly claude: ICodexHarness;
+  };
+  readonly resolveMemory: ReturnType<typeof createDiscordMemoryResolver>;
+  readonly sender?: INeonScheduledAgentRuntime["sender"];
+}): INeonScheduledAgentRuntime {
+  return {
+    gate: input.gate,
+    resolveAgent: (agentId) => resolveNeonAgentAttachment(agentId, input.profiles),
+    resolveHarness: (agent) => selectNeonHarness(agent.runtime, input.harnessRegistry).harness,
+    resolveMemory: input.resolveMemory,
+    ...(input.sender ? { sender: input.sender } : {}),
+    maxAttempts: readPositiveIntegerEnv("NEON_SCHEDULED_AGENT_MAX_ATTEMPTS", 2)
+  };
+}
+
+async function createCliScheduledAgentRuntime(
+  projectRoot: string
+): Promise<INeonScheduledAgentRuntime | undefined> {
+  const gate = resolveNeonScheduledAgentExecutionGate(process.env);
+  if (!gate.enabled) {
+    return undefined;
+  }
+
+  const roster = await loadNeonAgentProfiles(projectRoot);
+  const lifecycleGate = resolveNeonInFlightRunGate();
+  const inFlightRuns = createNeonInFlightRunRegistry({ gate: lifecycleGate });
+  const harnessRegistry = await createDiscordTapHarnessRegistry(
+    createDryRunHarness(),
+    lifecycleGate,
+    inFlightRuns
+  );
+  const allowlist = resolveNeonCanaryChannelAllowlist(process.env);
+  return createScheduledAgentRuntime({
+    gate,
+    profiles: roster.profiles,
+    harnessRegistry,
+    resolveMemory: createDiscordMemoryResolver(roster.profiles),
+    sender: createNeonCanaryOutboundSender({
+      env: process.env,
+      channelAllowlist: allowlist
+    })
+  });
+}
+
+function resolveSingleScheduledDiscordTarget(
+  allowlist: ReturnType<typeof resolveNeonCanaryChannelAllowlist>,
+  accountId: string
+): INeonChannelRouteRef | undefined {
+  const channels = [...allowlist.channels];
+  const channelId = channels.length === 1 ? channels[0] : undefined;
+  if (!channelId) {
+    return undefined;
+  }
+  return {
+    channel: "discord",
+    accountId,
+    to: channelId,
+    chatType: "channel"
+  };
 }
 
 // `profiles` is resolved once at construction, never per message: the roster is
@@ -9497,18 +9591,22 @@ async function runCronDaemonRun(): Promise<string> {
   const maxTicks = ticksIdx >= 0 ? Math.max(1, Number.parseInt(args[ticksIdx + 1] ?? "", 10) || 1) : undefined;
   const projectRoot = process.cwd();
   const gate = resolveNeonCronTimerGate(process.env);
+  const agentRuntime = await createCliScheduledAgentRuntime(projectRoot);
   const service = createNeonCronDaemonService({
     projectRoot,
     intervalMs,
     gate,
     agentId: process.env["NEON_DISCORD_AGENT_ID"] ?? "chaty",
+    ...(agentRuntime ? { agentRuntime } : {}),
     unrefTimer: maxTicks !== undefined
   });
 
   process.stdout.write(
     `Neonika Cron Daemon: starting (interval ${intervalMs}ms, gate ${gate.reason})\n` +
       (gate.enabled
-        ? "Gate armed: ticks read cron-store jobs and write terminal shadow run-records (delivery suppressed, stage unchanged).\n"
+        ? agentRuntime
+          ? "Timer + agent execution armed: ticks invoke the selected harness with memory; outbound remains Canary-gated.\n"
+          : "Timer armed: ticks write terminal shadow run-records; agent execution and outbound remain off.\n"
         : "Gate closed: daemon ticks but emits/writes nothing. Set NEON_CRON_TIMER_ENABLED to arm.\n") +
       (maxTicks ? `Will stop after ${maxTicks} tick(s).\n` : "Press Ctrl+C to stop.\n")
   );
@@ -9521,7 +9619,7 @@ async function runCronDaemonRun(): Promise<string> {
       const outcome = await service.tickOnce();
       created += outcome.execution.createdRunCount;
       process.stdout.write(
-        `tick ${outcome.state.tickCount}: due=${outcome.tick.tick.emitted.length} catchup=${outcome.tick.catchup.length} created=${outcome.execution.createdRunCount} (total ${outcome.state.createdRunsTotal})\n`
+        `tick ${outcome.state.tickCount}: due=${outcome.tick.tick.emitted.length} catchup=${outcome.tick.catchup.length} created=${outcome.execution.createdRunCount} executed=${outcome.execution.executedRunCount} failed=${outcome.execution.failedRunCount} retries=${outcome.execution.retryCount} delivered=${outcome.execution.deliveredRunCount} (total ${outcome.state.createdRunsTotal})\n`
       );
     }
     await service.stop();
@@ -9865,19 +9963,23 @@ async function runHeartbeatDaemonRun(): Promise<string> {
   const projectRoot = process.cwd();
   const gate = resolveNeonHeartbeatTimerGate(process.env);
   const agents = resolveNeonHeartbeatAgentsFromEnv(process.env);
+  const agentRuntime = await createCliScheduledAgentRuntime(projectRoot);
   const service = createNeonHeartbeatDaemonService({
     projectRoot,
     schedulerSeed: "neonika",
     agents,
     intervalMs,
     gate,
+    ...(agentRuntime ? { agentRuntime } : {}),
     unrefTimer: maxTicks !== undefined
   });
 
   process.stdout.write(
     `Neonika Heartbeat Daemon: starting (interval ${intervalMs}ms, agents ${agents.length}, gate ${gate.reason})\n` +
       (gate.enabled
-        ? "Gate armed: ticks will write terminal shadow run-records (delivery suppressed, stage unchanged).\n"
+        ? agentRuntime
+          ? "Timer + agent execution armed: ticks invoke the selected harness with memory; outbound remains Canary-gated.\n"
+          : "Timer armed: ticks write terminal shadow run-records; agent execution and outbound remain off.\n"
         : "Gate closed: daemon ticks but emits/writes nothing. Set NEON_HEARTBEAT_TIMER_ENABLED to arm.\n") +
       (maxTicks ? `Will stop after ${maxTicks} tick(s).\n` : "Press Ctrl+C to stop.\n")
   );
@@ -9891,7 +9993,7 @@ async function runHeartbeatDaemonRun(): Promise<string> {
       const outcome = await service.tickOnce();
       created += outcome.execution.createdRunCount;
       process.stdout.write(
-        `tick ${outcome.state.tickCount}: due=${outcome.tick.tick.emitted.length} commitments=${outcome.state.dueCommitmentsLastTick} lifecycle=${outcome.state.lifecycleCommitmentsLastTick} created=${outcome.execution.createdRunCount} (total ${outcome.state.createdRunsTotal})\n`
+        `tick ${outcome.state.tickCount}: due=${outcome.tick.tick.emitted.length} commitments=${outcome.state.dueCommitmentsLastTick} lifecycle=${outcome.state.lifecycleCommitmentsLastTick} created=${outcome.execution.createdRunCount} executed=${outcome.execution.executedRunCount} failed=${outcome.execution.failedRunCount} retries=${outcome.execution.retryCount} delivered=${outcome.execution.deliveredRunCount} (total ${outcome.state.createdRunsTotal})\n`
       );
     }
     await service.stop();

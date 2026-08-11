@@ -13,6 +13,10 @@ import {
 } from "./cronRunExecutor.js";
 import { createNeonCronStoreAutomationSnapshot } from "./cronStoreSnapshot.js";
 import {
+  projectNeonCronStoreJobs,
+  readNeonCronStoreEvents
+} from "./cronStore.js";
+import {
   resolveNeonCronTimerGate,
   type INeonCronTimerGate
 } from "./cronTimerRuntime.js";
@@ -21,6 +25,7 @@ import {
   resolveNeonWorkspaceNotesGate,
   type INeonWorkspaceNotesGate
 } from "../workspace/workspaceNotes.js";
+import type { INeonScheduledAgentRuntime } from "./scheduledAgentExecution.js";
 
 export interface INeonCronDaemonLiveState {
   readonly version: 1;
@@ -36,6 +41,10 @@ export interface INeonCronDaemonLiveState {
   readonly catchupIntentsLastTick: number;
   readonly createdRunsTotal: number;
   readonly createdWorkspaceNotesTotal: number;
+  readonly executedRunsTotal: number;
+  readonly failedRunsTotal: number;
+  readonly retryAttemptsTotal: number;
+  readonly deliveredRunsTotal: number;
   readonly stoppedAt?: string;
 }
 
@@ -64,6 +73,7 @@ export interface ICreateNeonCronDaemonServiceOptions {
   readonly unrefTimer?: boolean;
   readonly agentId?: string;
   readonly workspaceNotesGate?: INeonWorkspaceNotesGate;
+  readonly agentRuntime?: INeonScheduledAgentRuntime;
   readonly snapshot?: INeonAutomationSnapshot;
   readonly writeRun?: (projectRoot: string, run: INeonGatewayShadowRun) => Promise<void>;
 }
@@ -129,7 +139,11 @@ export function createNeonCronDaemonService(
     dueIntentsLastTick: 0,
     catchupIntentsLastTick: 0,
     createdRunsTotal: 0,
-    createdWorkspaceNotesTotal: 0
+    createdWorkspaceNotesTotal: 0,
+    executedRunsTotal: 0,
+    failedRunsTotal: 0,
+    retryAttemptsTotal: 0,
+    deliveredRunsTotal: 0
   };
   let timer: ReturnType<typeof setInterval> | undefined;
   let ticking = false;
@@ -151,11 +165,16 @@ export function createNeonCronDaemonService(
           }),
       ...(options.maxCatchupPerJob !== undefined ? { maxCatchupPerJob: options.maxCatchupPerJob } : {})
     });
+    const jobs = options.agentRuntime?.gate.enabled
+      ? projectNeonCronStoreJobs(await readNeonCronStoreEvents(options.projectRoot))
+      : undefined;
     const execution = await executeNeonCronRunIntents({
       projectRoot: options.projectRoot,
       tick,
       ...(options.agentId ? { agentId: options.agentId } : {}),
       workspaceNotesGate,
+      ...(options.agentRuntime ? { agentRuntime: options.agentRuntime } : {}),
+      ...(jobs ? { jobs } : {}),
       ...(options.writeRun ? { writeRun: options.writeRun } : {})
     });
 
@@ -167,7 +186,11 @@ export function createNeonCronDaemonService(
       dueIntentsLastTick: tick.tick.emitted.length,
       catchupIntentsLastTick: tick.catchup.length,
       createdRunsTotal: state.createdRunsTotal + execution.createdRunCount,
-      createdWorkspaceNotesTotal: state.createdWorkspaceNotesTotal + execution.createdWorkspaceNoteCount
+      createdWorkspaceNotesTotal: state.createdWorkspaceNotesTotal + execution.createdWorkspaceNoteCount,
+      executedRunsTotal: state.executedRunsTotal + execution.executedRunCount,
+      failedRunsTotal: state.failedRunsTotal + execution.failedRunCount,
+      retryAttemptsTotal: state.retryAttemptsTotal + execution.retryCount,
+      deliveredRunsTotal: state.deliveredRunsTotal + execution.deliveredRunCount
     };
     await writeNeonCronDaemonLiveState(livePath, state);
     return { tick, execution, state };
@@ -245,6 +268,10 @@ function normalizeCronLiveState(value: unknown): INeonCronDaemonLiveState | unde
     catchupIntentsLastTick: toCount(record["catchupIntentsLastTick"]),
     createdRunsTotal: toCount(record["createdRunsTotal"]),
     createdWorkspaceNotesTotal: toCount(record["createdWorkspaceNotesTotal"]),
+    executedRunsTotal: toCount(record["executedRunsTotal"]),
+    failedRunsTotal: toCount(record["failedRunsTotal"]),
+    retryAttemptsTotal: toCount(record["retryAttemptsTotal"]),
+    deliveredRunsTotal: toCount(record["deliveredRunsTotal"]),
     ...(stoppedAt ? { stoppedAt } : {})
   };
 }

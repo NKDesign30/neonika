@@ -549,7 +549,7 @@ describe("Neonika Mission Control Gateway HTML", () => {
     assert.match(html, /id="canaryChannel">900000000000000005</);
     assert.match(html, /id="gatePosturePanel"/);
     assert.match(html, /id="gatePostureState">FULLY SHADOWED/);
-    assert.match(html, /id="gatePostureTotals">16 · armed 0 · shadowed 16/);
+    assert.match(html, /id="gatePostureTotals">17 · armed 0 · shadowed 17/);
     assert.doesNotMatch(html, /bot-token-secret-should-not-render/);
   });
 

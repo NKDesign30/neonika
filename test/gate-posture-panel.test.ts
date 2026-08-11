@@ -14,9 +14,9 @@ describe("Neonika Mission-Control gate posture panel", () => {
 
     assert.match(html, /FULLY SHADOWED/);
     assert.match(html, /class="tag ok" id="gatePostureState"/);
-    assert.match(html, /armed 0 · shadowed 16/);
+    assert.match(html, /armed 0 · shadowed 17/);
     // One shadow tag per gate, no armed rows.
-    assert.equal((html.match(/class="tag shadow">shadow/g) ?? []).length, 16);
+    assert.equal((html.match(/class="tag shadow">shadow/g) ?? []).length, 17);
     assert.doesNotMatch(html, /class="tag warn">ARMED/);
   });
 

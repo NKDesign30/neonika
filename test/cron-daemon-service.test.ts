@@ -16,10 +16,49 @@ import {
   resolveNeonCronMutation,
   resolveNeonCronStoreGate,
   resolveNeonCronTimerGate,
-  resolveNeonWorkspaceNotesGate
+  resolveNeonAgentAttachment,
+  resolveNeonScheduledAgentExecutionGate,
+  resolveNeonWorkspaceNotesGate,
+  type INeonScheduledAgentRuntime
 } from "../src/index.js";
 
 describe("Neonika Cron daemon service", () => {
+  it("invokes the selected harness once per persisted due window when agent execution is armed", async () => {
+    const projectRoot = await tempProjectRoot();
+    const now = (): Date => new Date("2026-06-02T12:00:00.000Z");
+    let harnessCalls = 0;
+
+    try {
+      await addDemoCronJob(projectRoot, now().getTime());
+      const service = createNeonCronDaemonService({
+        projectRoot,
+        intervalMs: 900_000,
+        gate: resolveNeonCronTimerGate({ NEON_CRON_TIMER_ENABLED: "ready" }),
+        agentId: "chaty",
+        agentRuntime: scheduledRuntime(() => {
+          harnessCalls += 1;
+        }),
+        now
+      });
+
+      const first = await service.tickOnce();
+      const duplicate = await service.tickOnce();
+      const runs = await readNeonGatewayRuns(projectRoot);
+
+      assert.equal(first.execution.executedRunCount, 1);
+      assert.equal(first.execution.failedRunCount, 0);
+      assert.equal(first.state.executedRunsTotal, 1);
+      assert.equal(duplicate.execution.createdRunCount, 0);
+      assert.equal(harnessCalls, 1);
+      assert.equal(runs.length, 1);
+      assert.equal(runs[0]?.status, "completed");
+      assert.equal(runs[0]?.memoryState, "attached");
+      assert.match(runs[0]?.finalText ?? "", /cron complete/u);
+    } finally {
+      await rm(projectRoot, { force: true, recursive: true });
+    }
+  });
+
   it("reads store-backed jobs, dedups same windows, and writes terminal shadow run records", async () => {
     const projectRoot = await tempProjectRoot();
     let clockMs = Date.parse("2026-06-02T12:00:00.000Z");
@@ -151,4 +190,31 @@ async function addDemoCronJob(projectRoot: string, atMs: number): Promise<void> 
 
 async function tempProjectRoot(): Promise<string> {
   return await mkdtemp(join(tmpdir(), "neonika-cron-service-"));
+}
+
+function scheduledRuntime(onRun: () => void): INeonScheduledAgentRuntime {
+  return {
+    gate: resolveNeonScheduledAgentExecutionGate({
+      NEON_SCHEDULED_AGENT_EXECUTION_ENABLED: "ready"
+    }),
+    resolveAgent: (agentId) => resolveNeonAgentAttachment(agentId),
+    resolveHarness: () => ({
+      id: "codex-app-server",
+      async run(input) {
+        onRun();
+        return {
+          sessionKey: "cron:chaty",
+          memoryState: input.memory.state,
+          events: [{ kind: "final", text: "cron complete" }],
+          finalText: "cron complete"
+        };
+      }
+    }),
+    resolveMemory: async () => ({
+      state: "attached",
+      hitCount: 1,
+      note: "cron memory"
+    }),
+    maxAttempts: 1
+  };
 }

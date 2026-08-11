@@ -43,6 +43,7 @@ import {
   resolveNeonHeartbeatDaemonLivePath
 } from "../automation/heartbeatDaemonService.js";
 import { resolveNeonHeartbeatTimerGate } from "../automation/heartbeatTimerRuntime.js";
+import { resolveNeonScheduledAgentExecutionGate } from "../automation/scheduledAgentExecution.js";
 import { projectNeonIndexer } from "../indexer/indexerSnapshot.js";
 import { scanNeonTranscripts } from "../indexer/transcriptScan.js";
 import {
@@ -550,10 +551,12 @@ async function buildHeartbeatDaemonCheck(
   options: { readonly env: Readonly<Record<string, string | undefined>>; readonly nowMs: number }
 ): Promise<INeonDoctorCheck> {
   const gate = resolveNeonHeartbeatTimerGate(options.env);
+  const executionGate = resolveNeonScheduledAgentExecutionGate(options.env);
   const daemon = await readNeonHeartbeatDaemonLiveState(resolveNeonHeartbeatDaemonLivePath(projectRoot));
-  // Static shadow-safety invariant: the heartbeat loop only ever writes terminal
-  // shadow run-records; outbound is suppressed and no real channel send happens.
-  const safetyDetail = "outbound=suppressed (shadow heartbeat never sends)";
+  const executionDetail = `agentExecution=${executionGate.enabled ? "armed" : "disabled"} (${executionGate.envKey})`;
+  const safetyDetail = daemon?.deliveredRunsTotal
+    ? `outbound=delivered (${daemon.deliveredRunsTotal} gated run(s))`
+    : "outbound=suppressed (no gated heartbeat delivery recorded)";
   const gateDetail = `gate=${gate.enabled ? "armed" : "disabled"} (${gate.envKey})`;
 
   if (!daemon) {
@@ -562,7 +565,7 @@ async function buildHeartbeatDaemonCheck(
       label: "Heartbeat Daemon",
       state: "pass",
       summary: `Not running (optional gated shadow loop; gate ${gate.enabled ? "armed" : "disabled"}).`,
-      details: [gateDetail, safetyDetail]
+      details: [gateDetail, executionDetail, safetyDetail]
     };
   }
 
@@ -581,6 +584,11 @@ async function buildHeartbeatDaemonCheck(
         `dueCommitmentsLastTick=${daemon.dueCommitmentsLastTick}`,
         `lifecycleCommitmentsLastTick=${daemon.lifecycleCommitmentsLastTick}`,
         `createdRuns=${daemon.createdRunsTotal}`,
+        `executedRuns=${daemon.executedRunsTotal}`,
+        `failedRuns=${daemon.failedRunsTotal}`,
+        `retryAttempts=${daemon.retryAttemptsTotal}`,
+        `deliveredRuns=${daemon.deliveredRunsTotal}`,
+        executionDetail,
         safetyDetail
       ]
     };
@@ -591,7 +599,7 @@ async function buildHeartbeatDaemonCheck(
     label: "Heartbeat Daemon",
     state: "pass",
     summary: daemon.alive
-      ? `Alive: ${daemon.tickCount} tick(s), ${daemon.createdRunsTotal} shadow run(s) created.`
+      ? `Alive: ${daemon.tickCount} tick(s), ${daemon.createdRunsTotal} run(s), ${daemon.executedRunsTotal} agent execution(s).`
       : `Stopped cleanly after ${daemon.tickCount} tick(s).`,
     details: [
       gateDetail,
@@ -602,6 +610,11 @@ async function buildHeartbeatDaemonCheck(
       `dueCommitmentsLastTick=${daemon.dueCommitmentsLastTick}`,
       `lifecycleCommitmentsLastTick=${daemon.lifecycleCommitmentsLastTick}`,
       `createdRuns=${daemon.createdRunsTotal}`,
+      `executedRuns=${daemon.executedRunsTotal}`,
+      `failedRuns=${daemon.failedRunsTotal}`,
+      `retryAttempts=${daemon.retryAttemptsTotal}`,
+      `deliveredRuns=${daemon.deliveredRunsTotal}`,
+      executionDetail,
       safetyDetail
     ]
   };
@@ -889,9 +902,9 @@ async function buildMemoryFilesCheck(projectRoot: string): Promise<INeonDoctorCh
 /**
  * Heartbeat and cron daemons persist runs with `request.userId === "system"`
  * (see automation/heartbeatRunExecutor.ts, automation/cronRunExecutor.ts).
- * Those runs never recall user memory by design, so the Memory doctor check
- * must exclude them; otherwise a window full of daemon ticks reads as
- * "Memory never attached" even though real user-ingress recall is healthy.
+ * Default-off runs are terminal markers while armed runs may attach agent
+ * memory. The Memory doctor still excludes system runs so a window full of
+ * daemon ticks cannot mask whether real user-ingress recall is healthy.
  */
 function isNeonSystemOriginatedRun(run: INeonGatewayShadowRun): boolean {
   return run.request.userId === "system";
@@ -918,9 +931,8 @@ function buildMemoryCheck(
 
   const failed = queryGatewayRuns(runs, { memoryState: "failed" }).length;
 
-  // Daemon-originated runs (heartbeat/cron) never recall user memory, so judge
-  // the attachment state on real user-ingress runs only. A memory failure
-  // anywhere still counts as a hard failure below.
+  // Judge attachment health on real user-ingress runs only. A memory failure
+  // anywhere, including an armed scheduled run, still counts as a hard failure.
   const userRuns = runs.filter((run) => !isNeonSystemOriginatedRun(run));
   const systemRunCount = runs.length - userRuns.length;
   const attached = userRuns.filter((run) => run.memoryState === "attached").length;

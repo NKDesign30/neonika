@@ -26,12 +26,12 @@ import {
  * (`requestHeartbeat` + a `pendingWakes` queue) and gated by the cooldown
  * (`heartbeat-cooldown.ts`) and active-hours (`heartbeat-active-hours.ts`) policy.
  *
- * Neonika deliberately stops short of execution — mirroring `cronTimerRuntime`.
+ * This pure module deliberately stops short of execution — mirroring `cronTimerRuntime`.
  * The wake lane is the autonomous side effect, so it is **default-off**: a tick
  * evaluates anything only when `NEON_HEARTBEAT_TIMER_ENABLED` is explicitly
  * ready. When armed it emits read-only `INeonHeartbeatWakeEmission`s — it never
- * starts a run, builds a prompt, sends, or persists. Wiring an emission into a
- * real agent run stays a primary-cutover decision behind DP-4.
+ * starts a run, builds a prompt, sends, or persists. The daemon service may
+ * execute an emission only behind the independent scheduled-agent gate.
  *
  * intentionally-different vs upstream: there is no recursive `setTimeout` (the
  * clock is injected so the tick is deterministic). Due-ness is owned by a
@@ -138,7 +138,7 @@ export function evaluateNeonHeartbeatTick(
       safety: { executed: false, outboundSent: false },
       diagnostics: [
         "Heartbeat timer is disabled (default). No tick ran; set NEON_HEARTBEAT_TIMER_ENABLED to arm read-only wake-intent evaluation.",
-        "Even when armed the timer only emits shadow wake intents; starting a run stays gated by the run-lifecycle gate (DP-4)."
+        "Even when armed the timer only emits wake intents; scheduled-agent execution stays separately gated."
       ]
     };
   }

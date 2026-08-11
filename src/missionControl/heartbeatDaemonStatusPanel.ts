@@ -16,14 +16,18 @@ import {
   resolveNeonHeartbeatDaemonLivePath,
   type INeonHeartbeatDaemonLiveState
 } from "../automation/heartbeatDaemonService.js";
+import {
+  resolveNeonScheduledAgentExecutionGate,
+  type INeonScheduledAgentExecutionGate
+} from "../automation/scheduledAgentExecution.js";
 
 /**
  * Read-only Mission-Control panel for the heartbeat daemon tick driver
  * (`automation/heartbeatDaemonRuntime.ts`). Surfaces the POSTURE an operator
  * needs to trust it: the `NEON_HEARTBEAT_TIMER_ENABLED` gate, the persisted
  * dedup cursor (ticks / last tick / per-agent last emitted window) read from
- * its isolated state file, the known agents, and the static shadow-safety
- * invariants (never executes, never sends, never writes the run store).
+ * its isolated state file, the known agents, and persisted execution/retry/
+ * delivery counters.
  *
  * No fabricated state: heartbeat agents come from runtime config, not a static
  * catalog, so the panel derives its agent rows from the supplied agent list or,
@@ -39,6 +43,7 @@ export interface INeonHeartbeatDaemonStatusAgent {
 export interface INeonHeartbeatDaemonStatusSnapshot {
   readonly generatedAt: string;
   readonly gate: INeonHeartbeatTimerGate;
+  readonly executionGate: INeonScheduledAgentExecutionGate;
   readonly cursorPath: string;
   readonly cursorPresent: boolean;
   readonly cursor: INeonHeartbeatDaemonCursor;
@@ -47,17 +52,11 @@ export interface INeonHeartbeatDaemonStatusSnapshot {
   readonly daemon?: INeonHeartbeatDaemonLiveState;
   /** True when the daemon claims alive but its next tick is overdue (crashed). */
   readonly daemonStale: boolean;
-  /**
-   * Daemon-level shadow invariants (always literal false). The autonomous
-   * heartbeat daemon DOES write terminal shadow run-records (see `createdRuns`),
-   * so a `wroteRunStore` claim would be misleading. What actually holds is: no
-   * agent harness turn runs (records are terminal wake markers), outbound is
-   * suppressed, and a live/in-flight run is never written.
-   */
+  /** Derived evidence from the persisted daemon counters. */
   readonly safety: {
-    readonly agentExecuted: false;
-    readonly outboundSent: false;
-    readonly wroteLiveRun: false;
+    readonly agentExecuted: boolean;
+    readonly outboundSent: boolean;
+    readonly wroteLiveRun: boolean;
   };
 }
 
@@ -73,6 +72,7 @@ export async function createNeonHeartbeatDaemonStatusSnapshot(
 ): Promise<INeonHeartbeatDaemonStatusSnapshot> {
   const now = (options.now ?? (() => new Date()))();
   const gate = resolveNeonHeartbeatTimerGate(options.env ?? process.env);
+  const executionGate = resolveNeonScheduledAgentExecutionGate(options.env ?? process.env);
   const cursorPath = resolveNeonHeartbeatDaemonCursorPath(projectRoot);
   const livePath = resolveNeonHeartbeatDaemonLivePath(projectRoot);
   const [cursorPresent, cursor, daemon] = await Promise.all([
@@ -101,13 +101,18 @@ export async function createNeonHeartbeatDaemonStatusSnapshot(
   return {
     generatedAt: now.toISOString(),
     gate,
+    executionGate,
     cursorPath,
     cursorPresent,
     cursor,
     agents,
     ...(daemon ? { daemon } : {}),
     daemonStale,
-    safety: { agentExecuted: false, outboundSent: false, wroteLiveRun: false }
+    safety: {
+      agentExecuted: (daemon?.executedRunsTotal ?? 0) > 0,
+      outboundSent: (daemon?.deliveredRunsTotal ?? 0) > 0,
+      wroteLiveRun: (daemon?.executedRunsTotal ?? 0) > 0
+    }
   };
 }
 
@@ -116,13 +121,14 @@ export function renderNeonHeartbeatDaemonStatusReport(
 ): string {
   const daemon = snapshot.daemon;
   const daemonLine = daemon
-    ? `Daemon: ${daemon.alive ? (snapshot.daemonStale ? "alive (STALE — next tick overdue)" : "alive") : "stopped"} · daemonGate=${daemon.gateEnabled ? "armed" : "disabled"} · pid ${daemon.pid} · ticks ${daemon.tickCount} · lastTick ${daemon.lastTickAt ?? "none"} · nextTick ${daemon.nextTickAt ?? "none"} · dueIntents(lastTick) ${daemon.dueIntentsLastTick} · dueCommitments(lastTick) ${daemon.dueCommitmentsLastTick} · lifecycleCommitments(lastTick) ${daemon.lifecycleCommitmentsLastTick} · createdRuns ${daemon.createdRunsTotal}`
+    ? `Daemon: ${daemon.alive ? (snapshot.daemonStale ? "alive (STALE — next tick overdue)" : "alive") : "stopped"} · daemonGate=${daemon.gateEnabled ? "armed" : "disabled"} · pid ${daemon.pid} · ticks ${daemon.tickCount} · lastTick ${daemon.lastTickAt ?? "none"} · nextTick ${daemon.nextTickAt ?? "none"} · dueIntents(lastTick) ${daemon.dueIntentsLastTick} · dueCommitments(lastTick) ${daemon.dueCommitmentsLastTick} · lifecycleCommitments(lastTick) ${daemon.lifecycleCommitmentsLastTick} · createdRuns ${daemon.createdRunsTotal} · executed ${daemon.executedRunsTotal} · failed ${daemon.failedRunsTotal} · retries ${daemon.retryAttemptsTotal} · delivered ${daemon.deliveredRunsTotal}`
     : "Daemon: not running (no liveness state)";
   const lines = [
     `Neonika Heartbeat Daemon Status: view gate ${snapshot.gate.enabled ? "armed" : "disabled"} (${snapshot.gate.reason}, env ${snapshot.gate.envKey})`,
+    `Agent execution: ${snapshot.executionGate.enabled ? "armed" : "disabled"} (${snapshot.executionGate.reason}, env ${snapshot.executionGate.envKey})`,
     daemonLine,
     `Cursor: ${snapshot.cursorPresent ? `present @ ${snapshot.cursorPath} (tick #${snapshot.cursor.ticks}${snapshot.cursor.lastTickAt ? `, last ${snapshot.cursor.lastTickAt}` : ""})` : `absent @ ${snapshot.cursorPath} (never ticked)`}`,
-    `Safety: agentExecuted=${snapshot.safety.agentExecuted} outboundSent=${snapshot.safety.outboundSent} wroteLiveRun=${snapshot.safety.wroteLiveRun} (run-records are terminal shadow)`,
+    `Evidence: agentExecuted=${snapshot.safety.agentExecuted} outboundSent=${snapshot.safety.outboundSent} wroteLiveRun=${snapshot.safety.wroteLiveRun} (latest store keeps one terminal record per window)`,
     "Agents:"
   ];
 
@@ -174,7 +180,7 @@ export function renderNeonMissionControlHeartbeatDaemonStatusPanel(
       ? '<span class="tag warn" id="heartbeatDaemonAlive">stale</span>'
       : '<span class="tag muted" id="heartbeatDaemonAlive">stopped</span>';
   const daemonLine = daemon
-    ? `${daemonStateLabel} · daemonGate ${daemon.gateEnabled ? "armed" : "disabled"} · pid ${daemon.pid} · ticks ${daemon.tickCount} · lastTick ${escapeHeartbeatDaemonHtml(daemon.lastTickAt ?? "none")} · nextTick ${escapeHeartbeatDaemonHtml(daemon.nextTickAt ?? "none")} · due(lastTick) ${daemon.dueIntentsLastTick} · commitments(lastTick) ${daemon.dueCommitmentsLastTick} · lifecycleCommitments(lastTick) ${daemon.lifecycleCommitmentsLastTick} · createdRuns ${daemon.createdRunsTotal}`
+    ? `${daemonStateLabel} · daemonGate ${daemon.gateEnabled ? "armed" : "disabled"} · pid ${daemon.pid} · ticks ${daemon.tickCount} · lastTick ${escapeHeartbeatDaemonHtml(daemon.lastTickAt ?? "none")} · nextTick ${escapeHeartbeatDaemonHtml(daemon.nextTickAt ?? "none")} · due(lastTick) ${daemon.dueIntentsLastTick} · commitments(lastTick) ${daemon.dueCommitmentsLastTick} · lifecycleCommitments(lastTick) ${daemon.lifecycleCommitmentsLastTick} · createdRuns ${daemon.createdRunsTotal} · executed ${daemon.executedRunsTotal} · failed ${daemon.failedRunsTotal} · retries ${daemon.retryAttemptsTotal} · delivered ${daemon.deliveredRunsTotal}`
     : "not running (no liveness state)";
   const agentRows =
     snapshot.agents.length > 0
@@ -199,9 +205,10 @@ export function renderNeonMissionControlHeartbeatDaemonStatusPanel(
           </div>
           <div class="panel-body stack">
             <div class="line"><strong>view gate</strong> <span class="muted">${escapeHeartbeatDaemonHtml(snapshot.gate.envKey)} · ${escapeHeartbeatDaemonHtml(snapshot.gate.reason)}</span></div>
+            <div class="line"><strong>agent execution</strong> <span class="muted">${escapeHeartbeatDaemonHtml(snapshot.executionGate.envKey)} · ${escapeHeartbeatDaemonHtml(snapshot.executionGate.reason)}</span></div>
             <div class="line"><strong>daemon</strong> <span id="heartbeatDaemonLive">${daemonLine}</span></div>
             <div class="line"><strong>cursor</strong> <span id="heartbeatDaemonCursor">${cursorLine}</span></div>
-            <div class="line"><strong>safety</strong> <span class="muted">agentExecuted=${snapshot.safety.agentExecuted} · outboundSent=${snapshot.safety.outboundSent} · wroteLiveRun=${snapshot.safety.wroteLiveRun} · run-records terminal shadow</span></div>
+            <div class="line"><strong>evidence</strong> <span class="muted">agentExecuted=${snapshot.safety.agentExecuted} · outboundSent=${snapshot.safety.outboundSent} · wroteLiveRun=${snapshot.safety.wroteLiveRun} · latest store terminal per window</span></div>
             ${agentRows}
           </div>
         </article>`;

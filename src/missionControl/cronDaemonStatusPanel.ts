@@ -17,6 +17,10 @@ import {
   resolveNeonCronDaemonLivePath,
   type INeonCronDaemonLiveState
 } from "../automation/cronDaemonService.js";
+import {
+  resolveNeonScheduledAgentExecutionGate,
+  type INeonScheduledAgentExecutionGate
+} from "../automation/scheduledAgentExecution.js";
 
 /**
  * Read-only Mission-Control panel for the cron daemon tick driver
@@ -24,8 +28,8 @@ import {
  * needs to trust it: the `NEON_CRON_TIMER_ENABLED` gate, the persisted dedup
  * cursor (ticks / last tick / per-job last emitted window) read from its
  * isolated state file, the cron-job catalog with its scheduler state, and the
- * static shadow-safety invariants (never executes, never sends, never writes a
- * live run; autonomous ticks may write terminal shadow run-record markers).
+ * persisted execution/retry/delivery counters. Default-off installs show zeros;
+ * armed installs expose actual running-to-terminal agent evidence.
  *
  * The snapshot builder is read-only: it reads the gate from env, the cursor
  * from disk (honest empty state when absent), and the automation catalog — it
@@ -45,6 +49,7 @@ export interface INeonCronDaemonStatusJob {
 export interface INeonCronDaemonStatusSnapshot {
   readonly generatedAt: string;
   readonly gate: INeonCronTimerGate;
+  readonly executionGate: INeonScheduledAgentExecutionGate;
   readonly cursorPath: string;
   readonly cursorPresent: boolean;
   readonly cursor: INeonCronDaemonCursor;
@@ -52,9 +57,9 @@ export interface INeonCronDaemonStatusSnapshot {
   readonly daemon?: INeonCronDaemonLiveState;
   readonly daemonStale: boolean;
   readonly safety: {
-    readonly agentExecuted: false;
-    readonly outboundSent: false;
-    readonly wroteLiveRun: false;
+    readonly agentExecuted: boolean;
+    readonly outboundSent: boolean;
+    readonly wroteLiveRun: boolean;
   };
 }
 
@@ -69,6 +74,7 @@ export async function createNeonCronDaemonStatusSnapshot(
 ): Promise<INeonCronDaemonStatusSnapshot> {
   const now = (options.now ?? (() => new Date()))();
   const gate = resolveNeonCronTimerGate(options.env ?? process.env);
+  const executionGate = resolveNeonScheduledAgentExecutionGate(options.env ?? process.env);
   const cursorPath = resolveNeonCronDaemonCursorPath(projectRoot);
   const livePath = resolveNeonCronDaemonLivePath(projectRoot);
   const [cursorPresent, cursor, daemon] = await Promise.all([
@@ -95,26 +101,32 @@ export async function createNeonCronDaemonStatusSnapshot(
   return {
     generatedAt: now.toISOString(),
     gate,
+    executionGate,
     cursorPath,
     cursorPresent,
     cursor,
     jobs,
     ...(daemon ? { daemon } : {}),
     daemonStale,
-    safety: { agentExecuted: false, outboundSent: false, wroteLiveRun: false }
+    safety: {
+      agentExecuted: (daemon?.executedRunsTotal ?? 0) > 0,
+      outboundSent: (daemon?.deliveredRunsTotal ?? 0) > 0,
+      wroteLiveRun: (daemon?.executedRunsTotal ?? 0) > 0
+    }
   };
 }
 
 export function renderNeonCronDaemonStatusReport(snapshot: INeonCronDaemonStatusSnapshot): string {
   const daemon = snapshot.daemon;
   const daemonLine = daemon
-    ? `Daemon: ${daemon.alive ? (snapshot.daemonStale ? "alive (STALE — next tick overdue)" : "alive") : "stopped"} · daemonGate=${daemon.gateEnabled ? "armed" : "disabled"} · pid ${daemon.pid} · ticks ${daemon.tickCount} · lastTick ${daemon.lastTickAt ?? "none"} · nextTick ${daemon.nextTickAt ?? "none"} · dueIntents(lastTick) ${daemon.dueIntentsLastTick} · catchup(lastTick) ${daemon.catchupIntentsLastTick} · createdRuns ${daemon.createdRunsTotal} · workspaceNotes ${daemon.createdWorkspaceNotesTotal}`
+    ? `Daemon: ${daemon.alive ? (snapshot.daemonStale ? "alive (STALE — next tick overdue)" : "alive") : "stopped"} · daemonGate=${daemon.gateEnabled ? "armed" : "disabled"} · pid ${daemon.pid} · ticks ${daemon.tickCount} · lastTick ${daemon.lastTickAt ?? "none"} · nextTick ${daemon.nextTickAt ?? "none"} · dueIntents(lastTick) ${daemon.dueIntentsLastTick} · catchup(lastTick) ${daemon.catchupIntentsLastTick} · createdRuns ${daemon.createdRunsTotal} · executed ${daemon.executedRunsTotal} · failed ${daemon.failedRunsTotal} · retries ${daemon.retryAttemptsTotal} · delivered ${daemon.deliveredRunsTotal} · workspaceNotes ${daemon.createdWorkspaceNotesTotal}`
     : "Daemon: not running (no liveness state)";
   const lines = [
     `Neonika Cron Daemon Status: view gate ${snapshot.gate.enabled ? "armed" : "disabled"} (${snapshot.gate.reason}, env ${snapshot.gate.envKey})`,
+    `Agent execution: ${snapshot.executionGate.enabled ? "armed" : "disabled"} (${snapshot.executionGate.reason}, env ${snapshot.executionGate.envKey})`,
     daemonLine,
     `Cursor: ${snapshot.cursorPresent ? `present @ ${snapshot.cursorPath} (tick #${snapshot.cursor.ticks}${snapshot.cursor.lastTickAt ? `, last ${snapshot.cursor.lastTickAt}` : ""})` : `absent @ ${snapshot.cursorPath} (never ticked)`}`,
-    `Safety: agentExecuted=${snapshot.safety.agentExecuted} outboundSent=${snapshot.safety.outboundSent} wroteLiveRun=${snapshot.safety.wroteLiveRun} (run-records are terminal shadow)`,
+    `Evidence: agentExecuted=${snapshot.safety.agentExecuted} outboundSent=${snapshot.safety.outboundSent} wroteLiveRun=${snapshot.safety.wroteLiveRun} (latest store keeps one terminal record per window)`,
     "Cron jobs:"
   ];
 
@@ -166,7 +178,7 @@ export function renderNeonMissionControlCronDaemonStatusPanel(
       ? '<span class="tag warn" id="cronDaemonAlive">stale</span>'
       : '<span class="tag muted" id="cronDaemonAlive">stopped</span>';
   const daemonLine = daemon
-    ? `${daemonStateLabel} · daemonGate ${daemon.gateEnabled ? "armed" : "disabled"} · pid ${daemon.pid} · ticks ${daemon.tickCount} · lastTick ${escapeCronDaemonHtml(daemon.lastTickAt ?? "none")} · nextTick ${escapeCronDaemonHtml(daemon.nextTickAt ?? "none")} · due(lastTick) ${daemon.dueIntentsLastTick} · catchup(lastTick) ${daemon.catchupIntentsLastTick} · createdRuns ${daemon.createdRunsTotal} · workspaceNotes ${daemon.createdWorkspaceNotesTotal}`
+    ? `${daemonStateLabel} · daemonGate ${daemon.gateEnabled ? "armed" : "disabled"} · pid ${daemon.pid} · ticks ${daemon.tickCount} · lastTick ${escapeCronDaemonHtml(daemon.lastTickAt ?? "none")} · nextTick ${escapeCronDaemonHtml(daemon.nextTickAt ?? "none")} · due(lastTick) ${daemon.dueIntentsLastTick} · catchup(lastTick) ${daemon.catchupIntentsLastTick} · createdRuns ${daemon.createdRunsTotal} · executed ${daemon.executedRunsTotal} · failed ${daemon.failedRunsTotal} · retries ${daemon.retryAttemptsTotal} · delivered ${daemon.deliveredRunsTotal} · workspaceNotes ${daemon.createdWorkspaceNotesTotal}`
     : "not running (no liveness state)";
   const jobRows =
     snapshot.jobs.length > 0
@@ -193,9 +205,10 @@ export function renderNeonMissionControlCronDaemonStatusPanel(
           </div>
           <div class="panel-body stack">
             <div class="line"><strong>view gate</strong> <span class="muted">${escapeCronDaemonHtml(snapshot.gate.envKey)} · ${escapeCronDaemonHtml(snapshot.gate.reason)}</span></div>
+            <div class="line"><strong>agent execution</strong> <span class="muted">${escapeCronDaemonHtml(snapshot.executionGate.envKey)} · ${escapeCronDaemonHtml(snapshot.executionGate.reason)}</span></div>
             <div class="line"><strong>daemon</strong> <span id="cronDaemonLive">${daemonLine}</span></div>
             <div class="line"><strong>cursor</strong> <span id="cronDaemonCursor">${cursorLine}</span></div>
-            <div class="line"><strong>safety</strong> <span class="muted">agentExecuted=${snapshot.safety.agentExecuted} · outboundSent=${snapshot.safety.outboundSent} · wroteLiveRun=${snapshot.safety.wroteLiveRun} · run-records terminal shadow</span></div>
+            <div class="line"><strong>evidence</strong> <span class="muted">agentExecuted=${snapshot.safety.agentExecuted} · outboundSent=${snapshot.safety.outboundSent} · wroteLiveRun=${snapshot.safety.wroteLiveRun} · latest store terminal per window</span></div>
             ${jobRows}
           </div>
         </article>`;
