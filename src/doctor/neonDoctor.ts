@@ -27,6 +27,7 @@ import {
 } from "../core/cutover.js";
 import { loadNeonCutoverEnv } from "../core/cutoverPromotion.js";
 import { createNeonMirrorEvidenceSnapshot } from "../core/mirrorEvidence.js";
+import { createNeonRetireEvidenceSnapshot } from "../core/retireExport.js";
 import { evaluateNeonCanaryLivePreconditions } from "../gateway/outboundSender.js";
 import { readNeonCanaryStabilityEvidence } from "../gateway/canaryStabilityEvidence.js";
 import {
@@ -180,7 +181,7 @@ export async function createNeonDoctorSnapshot(
   const routeInspectionOptions = options.env
     ? { env: options.env, now: () => generatedAt }
     : { now: () => generatedAt };
-  const [status, runs, rawRuns, routeInspection, mirrorEvidence, canaryEvidence, supersessionEvidence] = await Promise.all([
+  const [status, runs, rawRuns, routeInspection, mirrorEvidence, retireEvidence, canaryEvidence, supersessionEvidence] = await Promise.all([
     readNeonGatewayStatus(projectRoot),
     readNeonGatewayRuns(projectRoot, {
       maxRuns: options.maxRuns ?? 50
@@ -188,6 +189,7 @@ export async function createNeonDoctorSnapshot(
     readRawRuns(paths.runsPath),
     createNeonGatewayRouteInspectionSnapshot(projectRoot, routeInspectionOptions),
     createNeonMirrorEvidenceSnapshot(projectRoot, { now: () => generatedAt }),
+    createNeonRetireEvidenceSnapshot(projectRoot),
     readNeonCanaryStabilityEvidence(projectRoot, { limit: options.maxRuns ?? 50 }),
     readNeonRunStoreSupersessionEvidence(projectRoot)
   ]);
@@ -284,7 +286,7 @@ export async function createNeonDoctorSnapshot(
     doctorHasNoFailures: !checksBeforeCutover.some((check) => check.state === "fail"),
     completedCount: status.completedCount,
     acknowledgedCanaryDeliveryCount: canaryEvidence.totals.acknowledged,
-    retireEvidenceReady: readReadyCutoverEnv(cutoverEnv, "NEON_CUTOVER_RETIRE_EVIDENCE")
+    retireEvidenceReady: retireEvidence.state === "ready"
   });
   const checks = [
     ...checksBeforeCutover,

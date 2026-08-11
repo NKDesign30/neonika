@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,6 +13,7 @@ import {
   executeNeonRuntimeServiceOperation,
   loadNeonRuntimeServiceEnvironmentFile,
   probeNeonRuntimeServiceHealth,
+  renderNeonRuntimeServiceOperationReport,
   renderNeonRuntimeServiceReport,
   resolveNeonRuntimePredecessorCommands,
   resolveNeonRuntimeServiceMutationGate,
@@ -559,6 +560,7 @@ describe("Neonika runtime service", () => {
       args: ["restore"]
     };
     const commands: INeonRuntimeServiceCommand[] = [];
+    let healthSamples = 0;
 
     try {
       await mkdir(configRoot, { mode: 0o700, recursive: true });
@@ -581,7 +583,15 @@ describe("Neonika runtime service", () => {
             return { exitCode: 0, stderr: "", stdout: "" };
           }
         },
-        healthProbe: async () => ({ state: "ready" as const, statusCode: 200 }),
+        healthProbe: async () => {
+          healthSamples += 1;
+          return { state: "ready" as const, statusCode: 200 };
+        },
+        predecessorObservation: {
+          delay: async () => undefined,
+          intervalMs: 0,
+          sampleCount: 3
+        },
         predecessor: {
           rollbackCommand,
           standDownCommand
@@ -595,6 +605,15 @@ describe("Neonika runtime service", () => {
       assert.equal(blocked.state, "blocked");
       assert.equal(commands.length, 0);
 
+      const invalidObservation = await executeNeonRuntimeServiceOperation(plan, "stand-down", {
+        ...common,
+        predecessor: { ...common.predecessor, retireGateReady: true },
+        predecessorObservation: { sampleCount: 1 }
+      });
+      assert.equal(invalidObservation.state, "failed");
+      assert.match(invalidObservation.diagnostics.join(" "), /sample count must be between 2 and 60/u);
+      assert.equal(commands.length, 0);
+
       const executed = await executeNeonRuntimeServiceOperation(plan, "stand-down", {
         ...common,
         predecessor: { ...common.predecessor, retireGateReady: true }
@@ -603,12 +622,147 @@ describe("Neonika runtime service", () => {
       assert.equal(executed.operation, "stand-down");
       assert.equal(executed.safety.predecessorMutationExecuted, true);
       assert.equal(executed.safety.predecessorRecoveryConfigured, true);
+      assert.deepEqual(executed.observation, {
+        durationMs: 0,
+        samplesPassed: 3,
+        samplesRequired: 3,
+        state: "ready"
+      });
+      assert.equal(healthSamples, 3);
       assert.deepEqual(commands, [standDownCommand]);
 
       const evidence = await readFile(plan.paths.operationsPath, "utf8");
+      assert.match(evidence, /"samplesRequired":3/u);
+      assert.match(evidence, /"samplesPassed":3/u);
+      assert.match(renderNeonRuntimeServiceOperationReport(executed), /Observation: ready \(3\/3 samples, 0 ms\)/u);
       assert.doesNotMatch(evidence, new RegExp(escapeRegExp(root), "u"));
       assert.doesNotMatch(evidence, new RegExp(sensitiveMarker, "u"));
       assert.doesNotMatch(evidence, /legacy-control/u);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("automatically restores the predecessor when a later observation sample degrades", async () => {
+    const root = await mkdtemp(join(tmpdir(), "neonika-runtime-stand-down-recovery-"));
+    const configRoot = join(root, "config");
+    const standDownCommand: INeonRuntimeServiceCommand = {
+      command: join(root, "bin", "legacy-control"),
+      args: ["stand-down"]
+    };
+    const rollbackCommand: INeonRuntimeServiceCommand = {
+      command: join(root, "bin", "legacy-control"),
+      args: ["restore"]
+    };
+    const commands: INeonRuntimeServiceCommand[] = [];
+    let healthSamples = 0;
+
+    try {
+      await mkdir(configRoot, { mode: 0o700, recursive: true });
+      const plan = createNeonRuntimeServicePlan({
+        cliPath: join(root, "unused-cli.js"),
+        configRoot,
+        envFilePath: join(root, "unused.env"),
+        homeDir: join(root, "home"),
+        nodePath: join(root, "unused-node"),
+        platform: "darwin",
+        userId: 501
+      });
+      const result = await executeNeonRuntimeServiceOperation(plan, "stand-down", {
+        gate: resolveNeonRuntimeServiceMutationGate({
+          NEON_RUNTIME_SERVICE_MUTATIONS_ENABLED: "ready"
+        }),
+        executor: {
+          run: async (command) => {
+            commands.push(command);
+            return { exitCode: 0, stderr: "", stdout: "" };
+          }
+        },
+        healthProbe: async () => {
+          healthSamples += 1;
+          return healthSamples === 2
+            ? { state: "unavailable" as const }
+            : { state: "ready" as const, statusCode: 200 };
+        },
+        predecessor: {
+          retireGateReady: true,
+          rollbackCommand,
+          standDownCommand
+        },
+        predecessorObservation: {
+          delay: async () => undefined,
+          intervalMs: 0,
+          sampleCount: 3
+        }
+      });
+
+      assert.equal(result.state, "rolled-back");
+      assert.deepEqual(result.observation, {
+        durationMs: 0,
+        samplesPassed: 1,
+        samplesRequired: 3,
+        state: "degraded"
+      });
+      assert.deepEqual(commands, [standDownCommand, rollbackCommand]);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("restores the predecessor when final operation evidence cannot be persisted", async () => {
+    const root = await mkdtemp(join(tmpdir(), "neonika-runtime-stand-down-evidence-failure-"));
+    const configRoot = join(root, "config");
+    const standDownCommand: INeonRuntimeServiceCommand = {
+      command: join(root, "bin", "legacy-control"),
+      args: ["stand-down"]
+    };
+    const rollbackCommand: INeonRuntimeServiceCommand = {
+      command: join(root, "bin", "legacy-control"),
+      args: ["restore"]
+    };
+    const commands: INeonRuntimeServiceCommand[] = [];
+
+    try {
+      await mkdir(configRoot, { mode: 0o700, recursive: true });
+      const plan = createNeonRuntimeServicePlan({
+        cliPath: join(root, "unused-cli.js"),
+        configRoot,
+        envFilePath: join(root, "unused.env"),
+        homeDir: join(root, "home"),
+        nodePath: join(root, "unused-node"),
+        platform: "darwin",
+        userId: 501
+      });
+      await mkdir(plan.paths.stateRoot, { mode: 0o700, recursive: true });
+      await writeFile(plan.paths.operationsPath, "", { mode: 0o600 });
+      await chmod(plan.paths.operationsPath, 0o644);
+
+      const result = await executeNeonRuntimeServiceOperation(plan, "stand-down", {
+        gate: resolveNeonRuntimeServiceMutationGate({
+          NEON_RUNTIME_SERVICE_MUTATIONS_ENABLED: "ready"
+        }),
+        executor: {
+          run: async (command) => {
+            commands.push(command);
+            return { exitCode: 0, stderr: "", stdout: "" };
+          }
+        },
+        healthProbe: async () => ({ state: "ready", statusCode: 200 }),
+        predecessor: {
+          retireGateReady: true,
+          rollbackCommand,
+          standDownCommand
+        },
+        predecessorObservation: {
+          delay: async () => undefined,
+          intervalMs: 0,
+          sampleCount: 3
+        }
+      });
+
+      assert.equal(result.state, "rolled-back");
+      assert.deepEqual(commands, [standDownCommand, rollbackCommand]);
+      assert.match(result.diagnostics.join(" "), /operation evidence could not be persisted/u);
     } finally {
       await rm(root, { force: true, recursive: true });
     }

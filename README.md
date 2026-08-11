@@ -112,6 +112,23 @@ definition but preserves private logs, audit evidence, and rollback state. On
 macOS this uses a LaunchAgent; on Linux it uses a systemd user service. Neither
 requires a root daemon or invokes a shell.
 
+Retiring a predecessor is a separate, observed operation. Keep Neonika on the
+live `primary` rung, persist a verified non-empty export/import proof, and only
+then run the structured stand-down command configured in the private runtime
+environment:
+
+```bash
+neonika cutover-retire-smoke --config-root ~/.neonika
+NEON_RUNTIME_SERVICE_MUTATIONS_ENABLED=ready neonika runtime-service stand-down --config-root ~/.neonika
+```
+
+The Retire gate ignores manual evidence flags. `cutover-retire-smoke` writes a
+private 0600 record containing only counts, timestamp, and a SHA-256 bundle
+digest. Stand-down samples Neonika health three times across a bounded window;
+any degraded sample immediately executes the configured predecessor restore.
+`neonika runtime-service predecessor-restore` remains available independently
+of Retire readiness.
+
 ## Quickstart
 
 Requires Node.js 22.19+ (or 23.11+). No database, no services, no API key.

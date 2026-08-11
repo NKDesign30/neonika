@@ -505,6 +505,7 @@ export {
 } from "./core/cutover.js";
 export {
   createNeonCutoverGateSnapshot,
+  isNeonRetireStandDownReady,
   renderNeonCutoverGateReport,
   type ICreateNeonCutoverGateSnapshotOptions,
   type INeonCutoverGate,
@@ -559,12 +560,19 @@ export {
   type TNeonGatedSideEffectPostureState
 } from "./core/gatedSideEffectsPosture.js";
 export {
+  createNeonRetireEvidenceSnapshot,
   createNeonRetireExportBundle,
   parseNeonRetireBundle,
   renderNeonRetireRoundTripReport,
+  resolveNeonRetireEvidencePath,
   serializeNeonRetireBundle,
   verifyNeonRetireRoundTrip,
+  writeNeonRetireRoundTripEvidence,
   NEON_RETIRE_BUNDLE_VERSION,
+  NEON_RETIRE_EVIDENCE_VERSION,
+  type INeonRetireEvidenceRecord,
+  type INeonRetireEvidenceSnapshot,
+  type INeonRetireEvidenceWriteResult,
   type INeonRetireExportBundle,
   type INeonRetireParseResult,
   type INeonRetireRoundTripResult
@@ -2571,6 +2579,7 @@ export {
   type INeonRuntimeServiceEnvironmentLoadResult,
   type IProbeNeonRuntimeServiceHealthOptions,
   type INeonRuntimeServiceHealth,
+  type INeonRuntimeServiceObservation,
   type INeonRuntimeServiceOperationResult,
   type INeonRuntimeServiceMutationGate,
   type INeonRuntimeServiceOperationSafety,

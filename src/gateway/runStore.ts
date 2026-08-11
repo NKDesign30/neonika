@@ -1,5 +1,5 @@
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { appendFile, chmod, lstat, mkdir, readFile, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 
 import { redactHarnessEvent, redactText } from "../harness/redaction.js";
 import { isNeonHarnessId } from "../harness/types.js";
@@ -86,8 +86,9 @@ export async function writeNeonGatewayRun(
   const paths = resolveGatewayStatePaths(projectRoot);
   const safeRun = redactGatewayRun(run);
 
-  await mkdir(dirname(paths.runsPath), { recursive: true });
-  await appendFile(paths.runsPath, `${JSON.stringify(safeRun)}\n`, "utf8");
+  await ensurePrivateGatewayRunStore(paths);
+  await appendFile(paths.runsPath, `${JSON.stringify(safeRun)}\n`, { encoding: "utf8", mode: 0o600 });
+  await chmod(paths.runsPath, 0o600);
 }
 
 export async function writeNeonGatewayRunLatest(
@@ -98,7 +99,7 @@ export async function writeNeonGatewayRunLatest(
   const safeRun = redactGatewayRun(run);
   const safeLine = JSON.stringify(safeRun);
 
-  await mkdir(dirname(paths.runsPath), { recursive: true });
+  await ensurePrivateGatewayRunStore(paths);
 
   let existingLines: readonly string[] = [];
   try {
@@ -117,7 +118,11 @@ export async function writeNeonGatewayRunLatest(
     const parsed = parseGatewayRunLine(line);
     return parsed === undefined || parsed.runId !== safeRun.runId;
   });
-  await writeFile(paths.runsPath, `${[...keptLines, safeLine].join("\n")}\n`, "utf8");
+  await writeFile(paths.runsPath, `${[...keptLines, safeLine].join("\n")}\n`, {
+    encoding: "utf8",
+    mode: 0o600
+  });
+  await chmod(paths.runsPath, 0o600);
 }
 
 export async function readNeonGatewayRuns(
@@ -277,6 +282,37 @@ function redactGatewayRun(run: INeonGatewayShadowRun): INeonGatewayShadowRun {
       finalText: redactText(run.delivery.finalText)
     }
   };
+}
+
+async function ensurePrivateGatewayRunStore(paths: INeonGatewayStatePaths): Promise<void> {
+  await mkdir(paths.projectRoot, { mode: 0o700, recursive: true });
+  await assertRealDirectory(paths.projectRoot, "gateway project root");
+  await ensurePrivateDirectory(paths.stateRoot, "gateway state root");
+  await ensurePrivateDirectory(paths.gatewayRoot, "gateway state directory");
+  try {
+    const stats = await lstat(paths.runsPath);
+    if (!stats.isFile() || stats.isSymbolicLink()) {
+      throw new Error("gateway run store must be a regular file");
+    }
+    await chmod(paths.runsPath, 0o600);
+  } catch (error) {
+    if (!isNodeErrorWithCode(error, "ENOENT")) {
+      throw error;
+    }
+  }
+}
+
+async function ensurePrivateDirectory(path: string, label: string): Promise<void> {
+  await mkdir(path, { mode: 0o700, recursive: true });
+  await assertRealDirectory(path, label);
+  await chmod(path, 0o700);
+}
+
+async function assertRealDirectory(path: string, label: string): Promise<void> {
+  const stats = await lstat(path);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) {
+    throw new Error(`${label} must be a real directory`);
+  }
 }
 
 export function parseGatewayRunLine(line: string): INeonGatewayShadowRun | undefined {

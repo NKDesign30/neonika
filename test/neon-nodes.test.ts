@@ -17,6 +17,7 @@ describe("Neonika Nodes", () => {
       const snapshot = await createNeonNodesSnapshot(projectRoot, {
         arch: "arm64",
         gatewayUrl: "http://127.0.0.1:8797",
+        homeDir: join(projectRoot, "home"),
         hostName: "operator-mac",
         now: () => new Date("2026-06-01T00:00:00.000Z"),
         pid: 4242,

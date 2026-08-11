@@ -17,6 +17,10 @@ import {
   type TNeonMirrorEvidenceState
 } from "./mirrorEvidence.js";
 import {
+  createNeonRetireEvidenceSnapshot,
+  type INeonRetireEvidenceSnapshot
+} from "./retireExport.js";
+import {
   createNeonDoctorSnapshot,
   type INeonDoctorCheck,
   type INeonDoctorSnapshot,
@@ -68,6 +72,7 @@ export interface INeonCutoverGateSource {
   readonly supersededFailedRuns?: number;
   readonly latestRunId: string | null;
   readonly rollbackConfigured: boolean;
+  readonly retireEvidenceState?: INeonRetireEvidenceSnapshot["state"];
 }
 
 export interface INeonCutoverGateSnapshot {
@@ -110,7 +115,7 @@ export async function createNeonCutoverGateSnapshot(
   const env = options.env ?? (await loadNeonCutoverEnv(projectRoot));
   const currentStage = options.currentStage ?? readCutoverStage(env) ?? neonDefaultCutoverStage;
   const now = options.now ?? (() => new Date());
-  const [doctor, routes, status, activeRuns, mirrorEvidence, canaryEvidence, supersessionEvidence] = await Promise.all([
+  const [doctor, routes, status, activeRuns, mirrorEvidence, retireEvidence, canaryEvidence, supersessionEvidence] = await Promise.all([
     createNeonDoctorSnapshot(projectRoot, {
       currentStage,
       now
@@ -124,6 +129,7 @@ export async function createNeonCutoverGateSnapshot(
     createNeonMirrorEvidenceSnapshot(projectRoot, {
       now
     }),
+    createNeonRetireEvidenceSnapshot(projectRoot),
     readNeonCanaryStabilityEvidence(projectRoot, { limit: activeCutoverEvidenceRunLimit }),
     readNeonRunStoreSupersessionEvidence(projectRoot)
   ]);
@@ -146,7 +152,7 @@ export async function createNeonCutoverGateSnapshot(
     rollbackConfigured: Boolean(readOptionalCutoverEnv(env, "NEON_CUTOVER_ROLLBACK_COMMAND")),
     canaryApproved: readReadyCutoverEnv(env, "NEON_CUTOVER_CANARY_APPROVED"),
     primaryApproved: readReadyCutoverEnv(env, "NEON_CUTOVER_PRIMARY_APPROVED"),
-    retireEvidenceReady: readReadyCutoverEnv(env, "NEON_CUTOVER_RETIRE_EVIDENCE")
+    retireEvidenceReady: retireEvidence.state === "ready"
   };
   const gates = buildCutoverGates(facts);
   const currentGate = gates.find((gate) => gate.id === currentStage);
@@ -172,7 +178,8 @@ export async function createNeonCutoverGateSnapshot(
       supersessionRecords: supersessionEvidence.totals.records,
       supersededFailedRuns: supersessionEvidence.totals.archivedFailedRuns,
       latestRunId: status.latestRun?.runId ?? null,
-      rollbackConfigured: facts.rollbackConfigured
+      rollbackConfigured: facts.rollbackConfigured,
+      retireEvidenceState: retireEvidence.state
     }
   };
 }
@@ -190,11 +197,22 @@ export function renderNeonCutoverGateReport(snapshot: INeonCutoverGateSnapshot):
     `Runs: ${snapshot.source.gatewayRuns} (active evidence=${activeEvidenceRuns})`,
     `Canary Evidence: delivered=${snapshot.source.canaryDeliveries ?? 0} acknowledged=${snapshot.source.acknowledgedCanaryDeliveries ?? 0} unresolved-failures=${snapshot.source.unresolvedFailures ?? 0}`,
     `Run Supersession: ${snapshot.source.runStoreSupersessionState ?? "empty"} records=${snapshot.source.supersessionRecords ?? 0} archived-failures=${snapshot.source.supersededFailedRuns ?? 0}`,
+    `Retire Evidence: ${snapshot.source.retireEvidenceState ?? "needs-evidence"}`,
     ...snapshot.gates.map((gate) => {
       const recovery = gate.recovery.length > 0 ? ` recovery=${gate.recovery.join(" | ")}` : "";
       return `${gate.state.toUpperCase()} ${gate.label}: ${gate.summary}${recovery}`;
     })
   ].join("\n");
+}
+
+/**
+ * The predecessor is retired while Neonika remains on the live Primary rung.
+ * Moving to the terminal Retire rung first would suppress outbound by design
+ * and create the outage the stand-down gate is meant to prevent.
+ */
+export function isNeonRetireStandDownReady(snapshot: INeonCutoverGateSnapshot): boolean {
+  return snapshot.currentStage === "primary" &&
+    snapshot.gates.find((gate) => gate.id === "retire")?.state === "pass";
 }
 
 function buildCutoverGates(facts: ICutoverFacts): readonly INeonCutoverGate[] {
@@ -440,7 +458,7 @@ function buildRetireGate(facts: ICutoverFacts, state: TNeonCutoverGateState): IN
       ...exitGate.reasons.map((reason) => `retireExitGate: ${reason}`)
     ],
     recovery: [
-      ...missingRecovery(facts.retireEvidenceReady, "Set NEON_CUTOVER_RETIRE_EVIDENCE=ready after export/import proof."),
+      ...missingRecovery(facts.retireEvidenceReady, "Run cutover-retire-smoke to persist verified export/import proof."),
       ...missingRecovery(facts.rollbackConfigured, "Keep NEON_CUTOVER_ROLLBACK_COMMAND configured.")
     ],
     rollback: "Keep the previous runtime as legacy fallback until retire evidence is complete."

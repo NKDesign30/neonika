@@ -96,6 +96,13 @@ export interface INeonRuntimeServiceOperationSafety {
   readonly shellUsed: false;
 }
 
+export interface INeonRuntimeServiceObservation {
+  readonly durationMs: number;
+  readonly samplesPassed: number;
+  readonly samplesRequired: number;
+  readonly state: "degraded" | "ready";
+}
+
 export type TNeonRuntimeServiceOperation =
   | "install"
   | "restart"
@@ -110,6 +117,7 @@ export interface INeonRuntimeServiceOperationResult {
   readonly health: INeonRuntimeServiceHealth;
   readonly manager: TNeonRuntimeServiceManager;
   readonly operation: TNeonRuntimeServiceOperation;
+  readonly observation?: INeonRuntimeServiceObservation;
   readonly safety: INeonRuntimeServiceOperationSafety;
   readonly state: TNeonRuntimeServiceOperationState;
 }
@@ -120,6 +128,11 @@ export interface IExecuteNeonRuntimeServiceOperationOptions {
   readonly healthAbsenceProbe?: () => Promise<INeonRuntimeServiceHealth>;
   readonly healthProbe: () => Promise<INeonRuntimeServiceHealth>;
   readonly now?: () => Date;
+  readonly predecessorObservation?: {
+    readonly delay?: (milliseconds: number) => Promise<void>;
+    readonly intervalMs?: number;
+    readonly sampleCount?: number;
+  };
   readonly predecessor?: {
     readonly retireGateReady: boolean;
     readonly rollbackCommand?: INeonRuntimeServiceCommand;
@@ -789,6 +802,9 @@ export function renderNeonRuntimeServiceOperationReport(result: INeonRuntimeServ
     `Operation: ${result.operation}`,
     `Manager: ${result.manager}`,
     `Health: ${result.health.state}${result.health.statusCode ? ` (${result.health.statusCode})` : ""}`,
+    ...(result.observation
+      ? [`Observation: ${result.observation.state} (${result.observation.samplesPassed}/${result.observation.samplesRequired} samples, ${result.observation.durationMs} ms)`]
+      : []),
     `Definition written: ${result.safety.definitionWritten}`,
     `Definition removed: ${result.safety.definitionRemoved}`,
     `Backup created: ${result.safety.backupCreated}`,
@@ -1436,7 +1452,7 @@ async function standDownPredecessor(
 
   validateStructuredCommand(standDownCommand);
   validateStructuredCommand(rollbackCommand);
-  const standDownResult = await options.executor.run(standDownCommand);
+  const observationOptions = resolvePredecessorObservationOptions(options);
   const baseSafety: INeonRuntimeServiceOperationSafety = {
     backupCreated: false,
     definitionRemoved: false,
@@ -1447,63 +1463,198 @@ async function standDownPredecessor(
     serviceMutationExecuted: false,
     shellUsed: false
   };
+  let standDownResult: INeonRuntimeServiceCommandResult;
+  try {
+    standDownResult = await options.executor.run(standDownCommand);
+  } catch {
+    return await recoverPredecessorAfterStandDown(
+      plan,
+      options.executor,
+      rollbackCommand,
+      at,
+      baseSafety,
+      { state: "unavailable" },
+      undefined,
+      "predecessor stand-down command did not complete cleanly"
+    );
+  }
   if (standDownResult.exitCode !== 0) {
-    await appendOperationEvidence(plan, {
+    return await recoverPredecessorAfterStandDown(
+      plan,
+      options.executor,
+      rollbackCommand,
       at,
-      health: { state: "unavailable" },
-      operation: "stand-down",
-      safety: baseSafety,
-      state: "failed"
-    });
-    return {
-      diagnostics: ["predecessor stand-down command failed"],
-      health: { state: "unavailable" },
-      manager: plan.manager,
-      operation: "stand-down",
-      safety: baseSafety,
-      state: "failed"
-    };
+      baseSafety,
+      { state: "unavailable" },
+      undefined,
+      "predecessor stand-down command failed"
+    );
   }
 
-  const health = await probeHealthSafely(options.healthProbe);
-  if (health.state !== "ready") {
-    const recoveryResult = await options.executor.run(rollbackCommand);
-    const recovered = recoveryResult.exitCode === 0;
-    await appendOperationEvidence(plan, {
+  const observed = await observeNeonRuntimeServiceHealth(options.healthProbe, observationOptions);
+  if (observed.health.state !== "ready") {
+    return await recoverPredecessorAfterStandDown(
+      plan,
+      options.executor,
+      rollbackCommand,
       at,
-      health,
-      operation: "stand-down",
-      safety: baseSafety,
-      state: recovered ? "rolled-back" : "failed"
-    });
-    return {
-      diagnostics: [
-        recovered
-          ? "predecessor stand-down was reversed because Neonika health was unavailable"
-          : "predecessor stand-down and automatic recovery both failed"
-      ],
-      health,
-      manager: plan.manager,
-      operation: "stand-down",
-      safety: baseSafety,
-      state: recovered ? "rolled-back" : "failed"
-    };
+      baseSafety,
+      observed.health,
+      observed.observation,
+      "Neonika health degraded during observation"
+    );
   }
 
-  await appendOperationEvidence(plan, {
+  const evidencePersisted = await appendOperationEvidenceSafely(plan, {
     at,
-    health,
+    health: observed.health,
+    observation: observed.observation,
     operation: "stand-down",
     safety: baseSafety,
     state: "executed"
   });
+  if (!evidencePersisted) {
+    return await recoverPredecessorAfterStandDown(
+      plan,
+      options.executor,
+      rollbackCommand,
+      at,
+      baseSafety,
+      observed.health,
+      observed.observation,
+      "operation evidence could not be persisted"
+    );
+  }
   return {
-    diagnostics: ["predecessor stood down after Retire readiness and Neonika health verification"],
-    health,
+    diagnostics: ["predecessor stood down after Retire readiness and bounded Neonika health observation"],
+    health: observed.health,
     manager: plan.manager,
+    observation: observed.observation,
     operation: "stand-down",
     safety: baseSafety,
     state: "executed"
+  };
+}
+
+async function recoverPredecessorAfterStandDown(
+  plan: INeonRuntimeServicePlan,
+  executor: INeonRuntimeServiceExecutor,
+  rollbackCommand: INeonRuntimeServiceCommand,
+  at: string,
+  safety: INeonRuntimeServiceOperationSafety,
+  health: INeonRuntimeServiceHealth,
+  observation: INeonRuntimeServiceObservation | undefined,
+  reason: string
+): Promise<INeonRuntimeServiceOperationResult> {
+  let recovered = false;
+  try {
+    recovered = (await executor.run(rollbackCommand)).exitCode === 0;
+  } catch {
+    recovered = false;
+  }
+  const state: TNeonRuntimeServiceOperationState = recovered ? "rolled-back" : "failed";
+  const evidencePersisted = await appendOperationEvidenceSafely(plan, {
+    at,
+    health,
+    ...(observation ? { observation } : {}),
+    operation: "stand-down",
+    safety,
+    state
+  });
+  const diagnostics = [
+    recovered
+      ? `predecessor stand-down was reversed because ${reason}`
+      : `predecessor stand-down recovery failed after ${reason}`,
+    ...(!evidencePersisted ? ["operation evidence could not be persisted"] : [])
+  ];
+
+  return {
+    diagnostics,
+    health,
+    manager: plan.manager,
+    ...(observation ? { observation } : {}),
+    operation: "stand-down",
+    safety,
+    state
+  };
+}
+
+async function observeNeonRuntimeServiceHealth(
+  healthProbe: () => Promise<INeonRuntimeServiceHealth>,
+  options: {
+    readonly delay: (milliseconds: number) => Promise<void>;
+    readonly intervalMs: number;
+    readonly sampleCount: number;
+  }
+): Promise<{
+  readonly health: INeonRuntimeServiceHealth;
+  readonly observation: INeonRuntimeServiceObservation;
+}> {
+  const { intervalMs, sampleCount } = options;
+  const wait = options.delay;
+  let samplesPassed = 0;
+  let lastHealth: INeonRuntimeServiceHealth = { state: "unavailable" };
+  for (let sample = 0; sample < sampleCount; sample += 1) {
+    if (sample > 0) {
+      try {
+        await wait(intervalMs);
+      } catch {
+        return {
+          health: { state: "unavailable" },
+          observation: {
+            durationMs: sample * intervalMs,
+            samplesPassed,
+            samplesRequired: sampleCount,
+            state: "degraded"
+          }
+        };
+      }
+    }
+    lastHealth = await probeHealthSafely(healthProbe);
+    if (lastHealth.state !== "ready") {
+      return {
+        health: lastHealth,
+        observation: {
+          durationMs: sample * intervalMs,
+          samplesPassed,
+          samplesRequired: sampleCount,
+          state: "degraded"
+        }
+      };
+    }
+    samplesPassed += 1;
+  }
+
+  return {
+    health: lastHealth,
+    observation: {
+      durationMs: (sampleCount - 1) * intervalMs,
+      samplesPassed,
+      samplesRequired: sampleCount,
+      state: "ready"
+    }
+  };
+}
+
+function resolvePredecessorObservationOptions(
+  options: IExecuteNeonRuntimeServiceOperationOptions
+): {
+  readonly delay: (milliseconds: number) => Promise<void>;
+  readonly intervalMs: number;
+  readonly sampleCount: number;
+} {
+  const sampleCount = options.predecessorObservation?.sampleCount ?? 3;
+  const intervalMs = options.predecessorObservation?.intervalMs ?? 5_000;
+  if (!Number.isSafeInteger(sampleCount) || sampleCount < 2 || sampleCount > 60) {
+    throw new Error("predecessor observation sample count must be between 2 and 60");
+  }
+  if (!Number.isSafeInteger(intervalMs) || intervalMs < 0 || intervalMs > 60_000) {
+    throw new Error("predecessor observation interval must be between 0 and 60000 ms");
+  }
+  return {
+    delay: options.predecessorObservation?.delay ?? delay,
+    intervalMs,
+    sampleCount
   };
 }
 
@@ -1753,15 +1904,30 @@ async function runInstallCommands(
   }
 }
 
+interface INeonRuntimeServiceOperationEvidenceInput {
+  readonly at: string;
+  readonly health: INeonRuntimeServiceHealth;
+  readonly observation?: INeonRuntimeServiceObservation;
+  readonly operation: TNeonRuntimeServiceOperation;
+  readonly safety: INeonRuntimeServiceOperationSafety;
+  readonly state: TNeonRuntimeServiceOperationState;
+}
+
+async function appendOperationEvidenceSafely(
+  plan: INeonRuntimeServicePlan,
+  input: INeonRuntimeServiceOperationEvidenceInput
+): Promise<boolean> {
+  try {
+    await appendOperationEvidence(plan, input);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function appendOperationEvidence(
   plan: INeonRuntimeServicePlan,
-  input: {
-    readonly at: string;
-    readonly health: INeonRuntimeServiceHealth;
-    readonly operation: TNeonRuntimeServiceOperation;
-    readonly safety: INeonRuntimeServiceOperationSafety;
-    readonly state: TNeonRuntimeServiceOperationState;
-  }
+  input: INeonRuntimeServiceOperationEvidenceInput
 ): Promise<void> {
   await assertPrivateAppendTarget(plan.paths.operationsPath);
   const record = {
@@ -1772,6 +1938,7 @@ async function appendOperationEvidence(
     manager: plan.manager,
     label: plan.label,
     health: input.health,
+    ...(input.observation ? { observation: input.observation } : {}),
     safety: input.safety
   } as const;
   await appendFile(plan.paths.operationsPath, `${JSON.stringify(record)}\n`, { encoding: "utf8", mode: 0o600 });
