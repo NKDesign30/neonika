@@ -111,6 +111,26 @@ node dist/src/cli.js doctor-smoke             # every health check
 node dist/src/cli.js tui                      # read-only terminal dashboard
 ```
 
+### Failed-run supersession
+
+Historical failed runs stay active cutover evidence until an operator explicitly
+supersedes them. The workflow is dry-run first and never requires editing
+`runs.jsonl`:
+
+```bash
+node dist/src/cli.js gateway-run-store-rescue
+NEON_RUN_STORE_RESCUE_ENABLED=ready node dist/src/cli.js gateway-run-store-rescue
+node dist/src/cli.js gateway-run-store-supersessions
+node dist/src/cli.js doctor
+node dist/src/cli.js cutover-gate
+```
+
+Apply preserves every failed run in a private `0600` archive, atomically replaces
+the active store with non-failed runs, and records counts plus SHA-256 evidence.
+Doctor fails closed if a record is incomplete, malformed, missing its archive or
+has a digest mismatch. Stop Gateway listeners before Apply, keep the archive
+private, and do not hand-edit either JSON or JSONL state.
+
 ## Bundled skills
 
 Fresh installations include Neonika's reviewed adaptation of Matt Pocock's

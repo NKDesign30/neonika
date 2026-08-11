@@ -1807,11 +1807,18 @@ export {
   type INeonRunStoreIntegrity
 } from "./gateway/runStore.js";
 export {
+  readNeonRunStoreSupersessionEvidence,
   rescueNeonGatewayRunStore,
   resolveNeonRunStoreRescueEnabled,
   renderNeonRunStoreRescueReport,
+  renderNeonRunStoreSupersessionReport,
   type INeonRunStoreRescueOptions,
-  type INeonRunStoreRescueResult
+  type INeonRunStoreRescueResult,
+  type INeonRunStoreSupersessionEvidence,
+  type INeonRunStoreSupersessionRecord,
+  type INeonRunStoreSupersessionTotals,
+  type TNeonRunStoreSupersessionEvidenceState,
+  type TNeonRunStoreSupersessionRecordState
 } from "./gateway/runStoreRescue.js";
 export {
   createNeonGatewayRouteInspectionSnapshot,

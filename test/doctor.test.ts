@@ -9,6 +9,7 @@ import {
   recordNeonOperatorAck,
   renderNeonDoctorExplainReport,
   renderNeonDoctorReport,
+  rescueNeonGatewayRunStore,
   resolveGatewayStatePaths,
   resolveNeonHeartbeatDaemonLivePath,
   writeNeonGatewayRun,
@@ -224,6 +225,44 @@ describe("Neonika Doctor", () => {
           "gates=shadow=pass mirror=warn canary=locked primary=locked retire=locked"
         )
       );
+    } finally {
+      await rm(projectRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("shows auditable failed-run supersession evidence", async () => {
+    const projectRoot = await createTempProjectRoot();
+
+    try {
+      await writeNeonGatewayRun(projectRoot, {
+        ...createDoctorRun("run-superseded-failure", "attached"),
+        status: "failed"
+      });
+      const rescue = await rescueNeonGatewayRunStore(projectRoot, {
+        enabled: true,
+        now: () => new Date("2026-06-05T11:30:00.000Z")
+      });
+
+      const snapshot = await createNeonDoctorSnapshot(projectRoot, {
+        now: () => new Date("2026-06-05T11:31:00.000Z")
+      });
+      const check = snapshot.checks.find((entry) => entry.id === "run-store-supersession");
+
+      assert.equal(check?.state, "pass");
+      assert.match(check?.summary ?? "", /1 failed run/);
+      assert.ok(check?.details.includes("records=1"));
+      assert.ok(check?.details.includes("archivedFailedRuns=1"));
+      assert.doesNotMatch(JSON.stringify(check), /run-superseded-failure|neonika-run-store-rescue/);
+
+      await writeFile(rescue.archivePath ?? "", "tampered\n", "utf8");
+      const invalidSnapshot = await createNeonDoctorSnapshot(projectRoot, {
+        now: () => new Date("2026-06-05T11:32:00.000Z")
+      });
+      const invalidCheck = invalidSnapshot.checks.find(
+        (entry) => entry.id === "run-store-supersession"
+      );
+      assert.equal(invalidCheck?.state, "fail");
+      assert.equal(invalidSnapshot.state, "fail");
     } finally {
       await rm(projectRoot, { force: true, recursive: true });
     }
