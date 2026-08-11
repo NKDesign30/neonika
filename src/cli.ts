@@ -7089,8 +7089,8 @@ async function runDisarmOutbound(): Promise<string> {
     return [
       "Disarm outbound: already disarmed — nothing persisted to clear.",
       "",
-      "Note: a live NEON_CUTOVER_OUTBOUND_ENABLED in the environment still wins over",
-      "persisted state. Unset it in the shell if outbound is armed there."
+      "The persisted outbound arm is authoritative; stale process environment values",
+      "cannot re-enable sending."
     ].join("\n");
   }
 

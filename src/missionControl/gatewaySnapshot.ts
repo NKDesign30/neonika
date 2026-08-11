@@ -1,4 +1,5 @@
 import { isHarnessEventHiddenFromChannelProgress, type TCodexHarnessEvent } from "../harness/types.js";
+import { loadNeonCutoverEnv } from "../core/cutoverPromotion.js";
 import type {
   INeonGatewayRunSummary,
   INeonGatewayStatus
@@ -121,6 +122,21 @@ export function createNeonMissionControlGatewaySnapshot(
     },
     ...(status.latestRun ? { latestRun: status.latestRun } : {})
   };
+}
+
+/**
+ * Builds a live boundary snapshot from the latest persisted outbound state.
+ * Call this for HTTP, SSR and WebSocket responses; keep the synchronous builder
+ * above for already-resolved data and pure projections.
+ */
+export async function createLiveNeonMissionControlGatewaySnapshot(
+  projectRoot: string,
+  status: INeonGatewayStatus,
+  runs: readonly INeonGatewayShadowRun[],
+  options: ICreateGatewaySnapshotOptions = {}
+): Promise<INeonMissionControlGatewaySnapshot> {
+  const env = await loadNeonCutoverEnv(projectRoot, options.env ?? process.env);
+  return createNeonMissionControlGatewaySnapshot(status, runs, { ...options, env });
 }
 
 export async function fetchNeonMissionControlGatewaySnapshot(

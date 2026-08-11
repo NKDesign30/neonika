@@ -182,11 +182,10 @@ export async function createNeonDoctorSnapshot(
     createNeonGatewayRouteInspectionSnapshot(projectRoot, routeInspectionOptions),
     createNeonMirrorEvidenceSnapshot(projectRoot, { now: () => generatedAt })
   ]);
-  // The persisted cutover promotion merged under the live environment (live wins), so
-  // every cutover-aware check reads the same effective state the runtime does. Reading
-  // process.env alone made the doctor blind to anything persisted — it would report an
-  // armed install as disarmed, and default the stage to shadow while the gate said
-  // otherwise.
+  // Ordinary live cutover values override persisted configuration. The persisted
+  // outbound arm is authoritative and fails closed when absent, so every cutover-aware
+  // check reads the same safety state. Reading process.env alone made the doctor blind
+  // to promotion changes and allowed a stale process arm to survive disarming.
   const cutoverEnv = options.env ?? (await loadNeonCutoverEnv(projectRoot));
   const currentStage = options.currentStage ?? resolveCutoverStageFromEnv(cutoverEnv);
   const memoryStatus =

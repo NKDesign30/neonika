@@ -73,7 +73,7 @@ describe("Neon cutover promotion state", () => {
     });
   });
 
-  it("merges persisted env under live env, live wins", async () => {
+  it("lets live env override ordinary persisted cutover configuration", async () => {
     await withTempRoot(async (projectRoot) => {
       await writeNeonCutoverPromotion(projectRoot, {
         NEON_CUTOVER_STAGE: "primary",
@@ -90,7 +90,26 @@ describe("Neon cutover promotion state", () => {
     });
   });
 
-  it("returns the live env unchanged when nothing is persisted", async () => {
+  it("treats the persisted outbound arm as authoritative and fails closed", async () => {
+    await withTempRoot(async (projectRoot) => {
+      await writeNeonCutoverPromotion(projectRoot, {
+        NEON_CUTOVER_OUTBOUND_ENABLED: "ready"
+      });
+
+      const armed = await loadNeonCutoverEnv(projectRoot, {
+        NEON_CUTOVER_OUTBOUND_ENABLED: "disabled"
+      });
+      assert.equal(armed["NEON_CUTOVER_OUTBOUND_ENABLED"], "ready");
+
+      await writeNeonCutoverPromotion(projectRoot, {});
+      const disarmed = await loadNeonCutoverEnv(projectRoot, {
+        NEON_CUTOVER_OUTBOUND_ENABLED: "ready"
+      });
+      assert.equal(disarmed["NEON_CUTOVER_OUTBOUND_ENABLED"], undefined);
+    });
+  });
+
+  it("keeps ordinary live env when nothing is persisted", async () => {
     await withTempRoot(async (projectRoot) => {
       const liveEnv = { NEON_CUTOVER_STAGE: "shadow" } as const;
       const merged = await loadNeonCutoverEnv(projectRoot, liveEnv);

@@ -2288,6 +2288,7 @@ export {
   type INeonAuthRateLimitDecision
 } from "./gateway/authRateLimit.js";
 export {
+  createLiveNeonMissionControlGatewaySnapshot,
   createNeonMissionControlGatewaySnapshot,
   fetchNeonMissionControlGatewaySnapshot,
   parseNeonMissionControlGatewaySnapshot,
