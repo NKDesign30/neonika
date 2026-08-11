@@ -190,6 +190,7 @@ export interface IProbeNeonRuntimeServiceHealthOptions {
 const defaultLaunchdLabel = "com.neonika.runtime";
 const defaultSystemdUnit = "neonika.service";
 const launchctlPath = "/bin/launchctl";
+const operationLockStaleMs = 5 * 60 * 1_000;
 const systemctlPath = "/usr/bin/systemctl";
 
 export function resolveNeonRuntimeServiceMutationGate(
@@ -407,12 +408,20 @@ export async function executeNeonRuntimeServiceOperation(
     };
   }
 
-  await validateConfigRoot(plan.runtime.configRoot);
-  if (operation === "install" || operation === "restart") {
-    await validateRuntimeInputs(plan);
+  let lock: Awaited<ReturnType<typeof open>>;
+  try {
+    await validateConfigRoot(plan.runtime.configRoot);
+    if (operation === "install" || operation === "restart") {
+      await validateRuntimeInputs(plan);
+    }
+    await ensurePrivateStateRoot(plan.paths.stateRoot);
+    lock = await acquireOperationLock(
+      join(plan.paths.stateRoot, "operation.lock"),
+      Date.parse(at)
+    );
+  } catch (error) {
+    return createRuntimeServiceFailureResult(plan, operation, error);
   }
-  await ensurePrivateStateRoot(plan.paths.stateRoot);
-  const lock = await acquireOperationLock(join(plan.paths.stateRoot, "operation.lock"));
 
   try {
     if (operation === "restart") {
@@ -543,9 +552,29 @@ export async function executeNeonRuntimeServiceOperation(
       state: "failed"
     };
   } finally {
-    await lock.close();
-    await rm(join(plan.paths.stateRoot, "operation.lock"), { force: true });
+    try {
+      await lock.close();
+    } finally {
+      await rm(join(plan.paths.stateRoot, "operation.lock"), { force: true });
+    }
   }
+}
+
+function createRuntimeServiceFailureResult(
+  plan: INeonRuntimeServicePlan,
+  operation: TNeonRuntimeServiceOperation,
+  error: unknown
+): INeonRuntimeServiceOperationResult {
+  return {
+    diagnostics: [
+      `runtime service ${operation} failed: ${redactRuntimeServiceDiagnostic(readErrorMessage(error))}`
+    ],
+    health: { state: "unavailable" },
+    manager: plan.manager,
+    operation,
+    safety: operationSafety(),
+    state: "failed"
+  };
 }
 
 async function recoverBlockedRuntimeServiceUpdate(
@@ -912,7 +941,7 @@ function escapeXml(value: string): string {
 
 async function validateRuntimeInputs(plan: INeonRuntimeServicePlan): Promise<void> {
   await assertPrivateRegularFile(plan.runtime.envFilePath, 0o600, "runtime environment file");
-  await assertReadableRegularFile(plan.runtime.nodePath, "Node executable");
+  await assertReadableRegularFile(plan.runtime.nodePath, "Node executable", true);
   await assertReadableRegularFile(plan.runtime.cliPath, "Neonika CLI");
 }
 
@@ -930,12 +959,16 @@ async function assertPrivateRegularFile(path: string, mode: number, label: strin
   }
 }
 
-async function assertReadableRegularFile(path: string, label: string): Promise<void> {
+async function assertReadableRegularFile(
+  path: string,
+  label: string,
+  requireExecutable = false
+): Promise<void> {
   const stats = await lstat(path);
   if (!stats.isFile() || stats.isSymbolicLink()) {
     throw new Error(`${label} must be a real file`);
   }
-  await access(path, constants.R_OK | (label === "Node executable" ? constants.X_OK : 0));
+  await access(path, constants.R_OK | (requireExecutable ? constants.X_OK : 0));
 }
 
 async function ensurePrivateStateRoot(path: string): Promise<void> {
@@ -947,8 +980,72 @@ async function ensurePrivateStateRoot(path: string): Promise<void> {
   await chmod(path, 0o700);
 }
 
-async function acquireOperationLock(path: string): Promise<Awaited<ReturnType<typeof open>>> {
-  return await open(path, "wx", 0o600);
+async function acquireOperationLock(
+  path: string,
+  nowMs: number
+): Promise<Awaited<ReturnType<typeof open>>> {
+  try {
+    return await createOperationLock(path, nowMs);
+  } catch (error) {
+    if (!isNodeErrorWithCode(error, "EEXIST")) {
+      throw error;
+    }
+  }
+
+  const stats = await lstat(path);
+  if (!stats.isFile() || stats.isSymbolicLink() || (stats.mode & 0o777) !== 0o600) {
+    throw new Error("runtime service operation lock is unsafe");
+  }
+  const metadata = parseOperationLockMetadata(await readFile(path, "utf8"));
+  const acquiredAtMs = metadata?.acquiredAtMs ?? stats.mtimeMs;
+  if (!Number.isFinite(nowMs) || nowMs - acquiredAtMs <= operationLockStaleMs) {
+    throw new Error("another runtime service operation is already in progress");
+  }
+  await rm(path);
+  return await createOperationLock(path, nowMs);
+}
+
+async function createOperationLock(
+  path: string,
+  nowMs: number
+): Promise<Awaited<ReturnType<typeof open>>> {
+  const handle = await open(path, "wx", 0o600);
+  try {
+    await handle.writeFile(`${JSON.stringify({ pid: process.pid, acquiredAtMs: nowMs })}\n`, "utf8");
+    await handle.sync();
+    return handle;
+  } catch (error) {
+    try {
+      await handle.close();
+    } finally {
+      await rm(path, { force: true });
+    }
+    throw error;
+  }
+}
+
+function parseOperationLockMetadata(value: string): {
+  readonly acquiredAtMs: number;
+  readonly pid: number;
+} | undefined {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (
+      !isRecord(parsed) ||
+      typeof parsed["acquiredAtMs"] !== "number" ||
+      !Number.isFinite(parsed["acquiredAtMs"]) ||
+      typeof parsed["pid"] !== "number" ||
+      !Number.isInteger(parsed["pid"])
+    ) {
+      return undefined;
+    }
+    return {
+      acquiredAtMs: parsed["acquiredAtMs"],
+      pid: parsed["pid"]
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 async function readOptionalPrivateFile(path: string, label: string): Promise<string | undefined> {
@@ -1238,8 +1335,32 @@ async function uninstallRuntimeService(
   if (definitionInstalled) {
     const stopCommand = uninstallCommand(plan);
     if (stopCommand) {
-      await options.executor.run(stopCommand);
+      const stopResult = await options.executor.run(stopCommand);
       serviceMutationExecuted = true;
+      if (stopResult.exitCode !== 0) {
+        const safety: INeonRuntimeServiceOperationSafety = {
+          ...operationSafety(),
+          serviceMutationExecuted: true
+        };
+        const detail = redactRuntimeServiceDiagnostic(
+          stopResult.stderr.trim() || stopResult.stdout.trim() || `exit ${stopResult.exitCode}`
+        );
+        await appendOperationEvidence(plan, {
+          at,
+          health: { state: "unavailable" },
+          operation: "uninstall",
+          safety,
+          state: "failed"
+        });
+        return {
+          diagnostics: [`runtime service uninstall failed before definition removal: ${detail}`],
+          health: { state: "unavailable" },
+          manager: plan.manager,
+          operation: "uninstall",
+          safety,
+          state: "failed"
+        };
+      }
     }
     await rm(plan.paths.definitionPath, { force: true });
     if (plan.manager === "systemd") {
@@ -1464,7 +1585,7 @@ function parseStructuredCommandEnv(value: string | undefined): {
   }
   try {
     const parsed: unknown = JSON.parse(value);
-    if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every((entry) => typeof entry === "string")) {
+    if (!isStringArray(parsed) || parsed.length === 0) {
       return { state: "invalid" };
     }
     const [command, ...args] = parsed;
@@ -1477,6 +1598,14 @@ function parseStructuredCommandEnv(value: string | undefined): {
   } catch {
     return { state: "invalid" };
   }
+}
+
+function isStringArray(value: unknown): value is readonly string[] {
+  return Array.isArray(value) && value.every((entry: unknown) => typeof entry === "string");
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function uninstallCommand(plan: INeonRuntimeServicePlan): INeonRuntimeServiceCommand | undefined {

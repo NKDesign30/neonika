@@ -13081,6 +13081,9 @@ async function runRuntimeServiceLiveSmoke(): Promise<string> {
   });
   const executor = createNeonRuntimeServiceExecutor();
   let cleanupPlan: INeonRuntimeServicePlan | undefined;
+  let primaryError: unknown;
+  let report: string | undefined;
+  let serviceRemoved = false;
 
   try {
     const port = await reserveLoopbackPort();
@@ -13117,23 +13120,72 @@ async function runRuntimeServiceLiveSmoke(): Promise<string> {
         `restart=${restart.state}, rollback=${rollback.state}, status=${status.state}`
       );
     }
-    return [
+    const uninstall = await executeNeonRuntimeServiceOperation(firstPlan, "uninstall", {
+      executor,
+      gate,
+      healthProbe: async () => ({ state: "unavailable" })
+    });
+    const uninstalledStatus = await createNeonRuntimeServiceSnapshot(firstPlan, {
+      executor,
+      healthProbe: async () => ({ state: "unavailable" })
+    });
+    if (uninstall.state !== "executed" || uninstalledStatus.installState !== "not-installed") {
+      throw new Error(
+        `runtime service live smoke uninstall=${uninstall.state}, install=${uninstalledStatus.installState}`
+      );
+    }
+    serviceRemoved = true;
+    report = [
       "Neonika Runtime Service Live Smoke: ok",
       `Manager: ${firstPlan.manager}`,
       "Lifecycle: install -> update -> restart -> rollback -> status -> uninstall",
       "Health: ready",
-      "Cleanup: supervisor definition removed"
+      `Cleanup: supervisor definition ${uninstalledStatus.installState}`
     ].join("\n");
-  } finally {
-    if (cleanupPlan) {
-      await executeNeonRuntimeServiceOperation(cleanupPlan, "uninstall", {
+  } catch (error) {
+    primaryError = error;
+  }
+
+  let cleanupError: unknown;
+  if (cleanupPlan && !serviceRemoved) {
+    try {
+      const cleanup = await executeNeonRuntimeServiceOperation(cleanupPlan, "uninstall", {
         executor,
         gate,
         healthProbe: async () => ({ state: "unavailable" })
       });
+      if (cleanup.state !== "executed") {
+        throw new Error(`runtime service live smoke cleanup state: ${cleanup.state}`);
+      }
+      serviceRemoved = true;
+    } catch (error) {
+      cleanupError = error;
     }
+  }
+  if (cleanupPlan === undefined || serviceRemoved) {
     await rm(root, { force: true, recursive: true });
   }
+  if (primaryError && cleanupError) {
+    throw new AggregateError(
+      [leakSafeRuntimeServiceSmokeError(primaryError), leakSafeRuntimeServiceSmokeError(cleanupError)],
+      `runtime service live smoke and cleanup failed for ${label}`
+    );
+  }
+  if (primaryError) {
+    throw leakSafeRuntimeServiceSmokeError(primaryError);
+  }
+  if (cleanupError) {
+    throw leakSafeRuntimeServiceSmokeError(cleanupError);
+  }
+  if (!report) {
+    throw new Error("runtime service live smoke produced no report");
+  }
+  return report;
+}
+
+function leakSafeRuntimeServiceSmokeError(error: unknown): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  return new Error(redactSnapshotText(message, { previewLimit: 512 }));
 }
 
 async function reserveLoopbackPort(): Promise<number> {

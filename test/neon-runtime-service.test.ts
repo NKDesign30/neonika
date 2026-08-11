@@ -462,6 +462,90 @@ describe("Neonika runtime service", () => {
     }
   });
 
+  it("keeps the definition installed when the supervisor refuses to stop", async () => {
+    const root = await mkdtemp(join(tmpdir(), "neonika-runtime-uninstall-failure-"));
+    const configRoot = join(root, "config");
+    const plan = createNeonRuntimeServicePlan({
+      cliPath: join(root, "cli.js"),
+      configRoot,
+      envFilePath: join(root, "runtime.env"),
+      homeDir: join(root, "home"),
+      nodePath: join(root, "node"),
+      platform: "darwin",
+      userId: 501
+    });
+
+    try {
+      await mkdir(configRoot, { mode: 0o700, recursive: true });
+      await mkdir(join(root, "home", "Library", "LaunchAgents"), { recursive: true });
+      await writeFile(plan.paths.definitionPath, `${plan.definition}\n`, { mode: 0o600 });
+      const result = await executeNeonRuntimeServiceOperation(plan, "uninstall", {
+        gate: resolveNeonRuntimeServiceMutationGate({
+          NEON_RUNTIME_SERVICE_MUTATIONS_ENABLED: "ready"
+        }),
+        executor: {
+          run: async () => ({ exitCode: 5, stderr: "stop failed", stdout: "" })
+        },
+        healthProbe: async () => ({ state: "unavailable" })
+      });
+
+      assert.equal(result.state, "failed");
+      assert.equal(result.safety.serviceMutationExecuted, true);
+      assert.equal(await readFile(plan.paths.definitionPath, "utf8"), `${plan.definition}\n`);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("reclaims a private stale operation lock and releases the fresh lock", async () => {
+    const root = await mkdtemp(join(tmpdir(), "neonika-runtime-stale-lock-"));
+    const configRoot = join(root, "config");
+    const envFilePath = join(root, "runtime.env");
+    const nodePath = join(root, "node");
+    const cliPath = join(root, "cli.js");
+
+    try {
+      await mkdir(configRoot, { mode: 0o700, recursive: true });
+      await writeFile(envFilePath, "NEONIKA_PORT=8798\n", { mode: 0o600 });
+      await writeFile(nodePath, "node", { mode: 0o755 });
+      await writeFile(cliPath, "cli", { mode: 0o755 });
+      const plan = createNeonRuntimeServicePlan({
+        cliPath,
+        configRoot,
+        envFilePath,
+        homeDir: join(root, "home"),
+        nodePath,
+        platform: "darwin",
+        userId: 501
+      });
+      await mkdir(plan.paths.stateRoot, { mode: 0o700, recursive: true });
+      await writeFile(
+        join(plan.paths.stateRoot, "operation.lock"),
+        `${JSON.stringify({ pid: 1234, acquiredAtMs: Date.parse("2026-08-11T19:00:00.000Z") })}\n`,
+        { mode: 0o600 }
+      );
+
+      const result = await executeNeonRuntimeServiceOperation(plan, "install", {
+        gate: resolveNeonRuntimeServiceMutationGate({
+          NEON_RUNTIME_SERVICE_MUTATIONS_ENABLED: "ready"
+        }),
+        executor: {
+          run: async () => ({ exitCode: 0, stderr: "", stdout: "" })
+        },
+        healthProbe: async () => ({ state: "ready", statusCode: 200 }),
+        now: () => new Date("2026-08-11T20:00:00.000Z")
+      });
+
+      assert.equal(result.state, "executed");
+      await assert.rejects(
+        readFile(join(plan.paths.stateRoot, "operation.lock"), "utf8"),
+        /ENOENT/u
+      );
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("executes predecessor stand-down only after Retire is ready and keeps command data out of evidence", async () => {
     const root = await mkdtemp(join(tmpdir(), "neonika-runtime-stand-down-"));
     const configRoot = join(root, "config");
@@ -739,7 +823,7 @@ describe("Neonika runtime service", () => {
 
   it("runs only absolute executables in the production executor", async () => {
     const executor = createNeonRuntimeServiceExecutor();
-    const result = await executor.run({ command: "/usr/bin/true", args: [] });
+    const result = await executor.run({ command: process.execPath, args: ["-e", "void 0"] });
 
     assert.equal(result.exitCode, 0);
     await assert.rejects(

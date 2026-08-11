@@ -155,7 +155,7 @@ describe("Neonika CLI runtime entry points", () => {
     assert.doesNotMatch(stdout, /(?:TOKEN|SECRET)=/u);
   });
 
-  it("keeps the supervised runtime on its configured port instead of falling back", async () => {
+  it("keeps the supervised runtime on its configured port instead of falling back", { timeout: 30_000 }, async () => {
     const root = await mkdtemp(join(tmpdir(), "neonika-cli-runtime-service-port-"));
     const envFilePath = join(root, "runtime.env");
     const server = createServer((_request, response) => response.end("occupied"));
