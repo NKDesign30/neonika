@@ -182,6 +182,7 @@ if [ "$installed_version" != "$expected_version" ]; then
 fi
 
 "$neonika_bin" --help | grep -q '^Usage: neonika <command> \[options\]'
+"$neonika_bin" --help | grep -q -- '- whatsapp-canary-tap:'
 (
   cd "$workspace"
   "$neonika_bin" status >/dev/null

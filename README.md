@@ -54,6 +54,26 @@ Discord, and records a terminal shadow run. Start both channel taps from the
 same workspace so they resolve to the same owner session. The WhatsApp tap does
 not send a reply.
 
+For a supervised owner-only outbound canary, stop the shadow tap and start the
+separate canary entry point. It accepts only owner messages beginning with
+`/neon`, rejects groups and other peers, and checks the persisted outbound arm
+again before every reply:
+
+```bash
+NEON_CUTOVER_PROMOTE_ENABLED=ready \
+  NEON_CUTOVER_STAGE=canary \
+  NEON_CUTOVER_CANARY_APPROVED=ready \
+  neonika cutover-promote
+neonika arm-outbound --yes
+NEON_WHATSAPP_CANARY_OUTBOUND_ENABLED=ready neonika whatsapp-canary-tap
+```
+
+`neonika disarm-outbound` stops subsequent sends without relying on a process
+restart. The canary uses Neonika's private linked-device state and never imports
+or shares predecessor credentials. Its receipts and run records contain hashed
+targets, not the owner's phone number. The original `whatsapp-shadow-tap`
+remains permanently no-send even when every outbound gate is armed.
+
 For a supervised Gateway and Mission Control process, create one private runtime
 environment file and install the generated user service. The service runs the
 CLI from the installed package, writes logs and rollback evidence below the

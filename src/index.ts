@@ -151,6 +151,20 @@ export {
   type TNeonWhatsAppInboundDecision
 } from "./channels/whatsappInbound.js";
 export {
+  createNeonWhatsAppCanaryMessageId,
+  deliverNeonWhatsAppCanaryReply,
+  isNeonWhatsAppCanaryMessageId,
+  neonWhatsAppCanaryCommandPrefix,
+  neonWhatsAppCanaryOutboundEnabledEnvKey,
+  parseNeonWhatsAppCanaryCommand,
+  resolveNeonWhatsAppCanaryGate,
+  type IDeliverNeonWhatsAppCanaryReplyOptions,
+  type INeonWhatsAppCanaryGate,
+  type INeonWhatsAppCanaryDeliveryResult,
+  type TNeonWhatsAppCanaryCommandDecision,
+  type TNeonWhatsAppCanaryGateBlocker
+} from "./channels/whatsappCanary.js";
+export {
   startNeonWhatsAppShadowTap,
   type INeonWhatsAppShadowTapHandle,
   type INeonWhatsAppTapCloseResult,
@@ -158,6 +172,14 @@ export {
   type IStartNeonWhatsAppShadowTapOptions,
   type TNeonWhatsAppTapEvent
 } from "./channels/whatsappShadowTap.js";
+export {
+  startNeonWhatsAppCanaryTap,
+  type INeonWhatsAppCanaryTapCloseResult,
+  type INeonWhatsAppCanaryTapHandle,
+  type INeonWhatsAppCanaryTapStats,
+  type IStartNeonWhatsAppCanaryTapOptions,
+  type TNeonWhatsAppCanaryTapEvent
+} from "./channels/whatsappCanaryTap.js";
 export {
   createNeonWhatsAppReplayStore,
   type ICreateNeonWhatsAppReplayStoreOptions,

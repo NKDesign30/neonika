@@ -58,6 +58,7 @@ describe("Neonika CLI runtime entry points", () => {
 
     assert.match(help, /^Usage: neonika <command> \[options\]/u);
     assert.match(help, /neonika status/u);
+    assert.match(help, /whatsapp-canary-tap/u);
     assert.match(help, /Onboard options:/u);
     assert.match(help, /--whatsapp-mode <dedicated\|personal>/u);
     assert.equal(version.trim(), manifest.version);

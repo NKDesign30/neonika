@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Added a separate owner-only WhatsApp `/neon` canary tap with an independent
+  enable flag, persisted outbound-arm checks, exactly-once receipts, replay-loop
+  protection, bounded reconnects, and permanently no-send shadow ingress.
 - Added a portable launchd/systemd user service for Gateway and Mission Control
   with private external environment files, leak-safe status, health-verified
   install/restart/update/rollback/uninstall, and Retire-gated predecessor
