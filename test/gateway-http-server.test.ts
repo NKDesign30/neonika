@@ -1657,6 +1657,7 @@ describe("Neonika Gateway HTTP server", () => {
   it("serves the live-index sync projection over HTTP without default memory writes", async () => {
     const projectRoot = await createTempProjectRoot();
     const sensitiveMarker = "sk-live-index-sync-boundary-marker-1234567890";
+    const mutationToken = "live-index-sync-mutation-fixture";
     const transcriptProjectsDir = join(projectRoot, "claude-projects");
     const liveIndexCodexSessionsDir = join(projectRoot, "codex-sessions");
     const envKeys = [
@@ -1664,7 +1665,8 @@ describe("Neonika Gateway HTTP server", () => {
       "NEON_MEMORY_DB_PATH",
       "NEON_MEMORY_BACKUP_DIR",
       "NEON_MEMORY_WRITE_ENABLED",
-      "NEON_LIVE_INDEX_WRITEBACK_ENABLED"
+      "NEON_LIVE_INDEX_WRITEBACK_ENABLED",
+      NEON_GATEWAY_HTTP_MUTATION_TOKEN_ENV
     ] as const;
     const previousEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
 
@@ -1672,6 +1674,7 @@ describe("Neonika Gateway HTTP server", () => {
       for (const key of envKeys) {
         delete process.env[key];
       }
+      process.env[NEON_GATEWAY_HTTP_MUTATION_TOKEN_ENV] = mutationToken;
       await mkdir(transcriptProjectsDir, { recursive: true });
       await mkdir(liveIndexCodexSessionsDir, { recursive: true });
       await writeNeonGatewayRun(
@@ -1688,10 +1691,19 @@ describe("Neonika Gateway HTTP server", () => {
       );
 
       try {
-        const response = await fetch(`${handle.url}/api/neon-live-index-sync`);
+        const rejectedGet = await fetch(`${handle.url}/api/neon-live-index-sync`);
+        const unauthorizedPost = await fetch(`${handle.url}/api/neon-live-index-sync`, {
+          method: "POST"
+        });
+        const response = await fetch(`${handle.url}/api/neon-live-index-sync`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${mutationToken}` }
+        });
         const body = (await response.json()) as INeonLiveIndexMemorySyncPublicSnapshot;
         const serialized = JSON.stringify(body);
 
+        assert.equal(rejectedGet.status, 405);
+        assert.equal(unauthorizedPost.status, 401);
         assert.equal(response.status, 200);
         assert.equal(body.state, "planned");
         assert.equal(body.totals.discord, 1);
@@ -1721,10 +1733,13 @@ describe("Neonika Gateway HTTP server", () => {
   it("serves the live-index daemon state over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
     const sensitiveMarker = "sk-live-index-daemon-boundary-marker-1234567890";
+    const mutationToken = "live-index-daemon-mutation-fixture";
     const transcriptProjectsDir = join(projectRoot, "claude-projects");
     const liveIndexCodexSessionsDir = join(projectRoot, "codex-sessions");
+    const previousMutationToken = process.env[NEON_GATEWAY_HTTP_MUTATION_TOKEN_ENV];
 
     try {
+      process.env[NEON_GATEWAY_HTTP_MUTATION_TOKEN_ENV] = mutationToken;
       await mkdir(transcriptProjectsDir, { recursive: true });
       await mkdir(liveIndexCodexSessionsDir, { recursive: true });
       await writeNeonGatewayRun(
@@ -1741,10 +1756,26 @@ describe("Neonika Gateway HTTP server", () => {
       );
 
       try {
-        const response = await fetch(`${handle.url}/api/neon-live-index-daemon`);
+        const readOnlyResponse = await fetch(`${handle.url}/api/neon-live-index-daemon`);
+        const readOnlyBody = (await readOnlyResponse.json()) as INeonLiveIndexDaemonPublicSnapshot;
+        const ignoredGetScan = await fetch(`${handle.url}/api/neon-live-index-daemon?scan=1`);
+        const ignoredGetScanBody = (await ignoredGetScan.json()) as INeonLiveIndexDaemonPublicSnapshot;
+        const unauthorizedScan = await fetch(`${handle.url}/api/neon-live-index-daemon?scan=1`, {
+          method: "POST"
+        });
+        const response = await fetch(`${handle.url}/api/neon-live-index-daemon?scan=1`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${mutationToken}` }
+        });
         const body = (await response.json()) as INeonLiveIndexDaemonPublicSnapshot;
         const serialized = JSON.stringify(body);
 
+        assert.equal(readOnlyResponse.status, 200);
+        assert.equal(readOnlyBody.state, undefined);
+        assert.equal(readOnlyBody.collection, undefined);
+        assert.equal(ignoredGetScan.status, 200);
+        assert.equal(ignoredGetScanBody.state, undefined);
+        assert.equal(unauthorizedScan.status, 401);
         assert.equal(response.status, 200);
         assert.equal(body.running, false);
         assert.equal(body.enabled, false);
@@ -1760,6 +1791,11 @@ describe("Neonika Gateway HTTP server", () => {
         await handle.close();
       }
     } finally {
+      if (previousMutationToken === undefined) {
+        delete process.env[NEON_GATEWAY_HTTP_MUTATION_TOKEN_ENV];
+      } else {
+        process.env[NEON_GATEWAY_HTTP_MUTATION_TOKEN_ENV] = previousMutationToken;
+      }
       await rm(projectRoot, { force: true, recursive: true });
     }
   });

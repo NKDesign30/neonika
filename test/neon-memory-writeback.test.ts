@@ -60,6 +60,7 @@ describe("productive Neonika memory writeback", () => {
     const serialized = JSON.stringify(result);
 
     assert.equal(result.state, "blocked");
+    assert.equal(result.target.reason, "not-evaluated");
     assert.equal(result.backup.state, "not-created");
     assert.equal(existsSync(backupDir), false);
     assert.equal(countEntries(primaryDbPath), 1);
@@ -250,6 +251,47 @@ describe("productive Neonika memory writeback", () => {
     assert.doesNotMatch(serialized, new RegExp(escapeRegExp(root), "u"));
   });
 
+  it("recovers the previous target exactly once when the selected restore cannot start", async () => {
+    const now = Date.now();
+    const writeback = await executeNeonMemoryWriteback({
+      targetDbPath: primaryDbPath,
+      primaryDbPath,
+      backupDir,
+      gate: resolveNeonMemoryWritebackGate({
+        NEON_MEMORY_WRITE_ENABLED: "ready",
+        NEON_LIVE_INDEX_WRITEBACK_ENABLED: "ready"
+      }),
+      inputs: [firstInput],
+      operationId: "before-recovery-test",
+      now: () => new Date(now)
+    });
+    const snapshotId = writeback.backup.snapshotId;
+    assert.ok(snapshotId);
+    assert.equal(countEntries(primaryDbPath), 2);
+    const operationId = "restore-with-recovery";
+    await writeFile(
+      join(dirname(primaryDbPath), `.semantic-memory-restore-${operationId}.tmp`),
+      "force the selected restore staging collision",
+      { mode: 0o600 }
+    );
+
+    const result = await rollbackNeonMemoryWriteback({
+      targetDbPath: primaryDbPath,
+      primaryDbPath,
+      backupDir,
+      snapshotId,
+      gate: resolveNeonMemoryRollbackGate({ NEON_MEMORY_ROLLBACK_ENABLED: "ready" }),
+      operationId,
+      now: () => new Date(now + 60_000)
+    });
+
+    assert.equal(result.state, "failed");
+    assert.equal(result.reason, "restore-failed");
+    assert.equal(result.recoveryAttempts, 1);
+    assert.equal(countEntries(primaryDbPath), 2);
+    assert.equal(countSourceEntries(primaryDbPath, firstInput.sourceFile), 1);
+  });
+
   it("rejects traversal and corrupt snapshots without touching the current target", async () => {
     await writeFile(join(root, "outside.db"), "not sqlite", "utf8");
     const gate = resolveNeonMemoryRollbackGate({ NEON_MEMORY_ROLLBACK_ENABLED: "ready" });
@@ -345,6 +387,18 @@ function countEntries(dbPath: string): number {
     const row = database.prepare("SELECT COUNT(*) AS count FROM memory_entries").get() as {
       readonly count: number;
     };
+    return row.count;
+  } finally {
+    database.close();
+  }
+}
+
+function countSourceEntries(dbPath: string, sourceFile: string): number {
+  const database = new DatabaseSync(dbPath, { readOnly: true });
+  try {
+    const row = database
+      .prepare("SELECT COUNT(*) AS count FROM memory_entries WHERE source_file = ?")
+      .get(sourceFile) as { readonly count: number };
     return row.count;
   } finally {
     database.close();

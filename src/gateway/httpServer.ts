@@ -235,15 +235,17 @@ type TNodeSessionAuthResult =
 
 export function createNeonGatewayHttpServer(options: INeonGatewayHttpServerOptions): Server {
   const runtime = createNeonGatewayRuntimeController(options.projectRoot);
-  const liveIndexDbPath = process.env["NEON_LIVE_INDEX_MEMORY_DB_PATH"]?.trim();
-  const liveIndexWritebackGate = resolveNeonMemoryWritebackGate(process.env);
+  const liveIndexDaemonOptions = resolveNeonLiveIndexDaemonOptionsFromEnv(options.projectRoot);
+  const liveIndexDbPath = liveIndexDaemonOptions.memoryDbPath;
   const liveIndexDaemon = createNeonLiveIndexDaemon({
-    ...resolveNeonLiveIndexDaemonOptionsFromEnv(options.projectRoot),
+    ...liveIndexDaemonOptions,
     ...(options.transcriptProjectsDir ? { transcriptProjectsDir: options.transcriptProjectsDir } : {}),
     ...(options.liveIndexCodexSessionsDir ? { codexSessionsDir: options.liveIndexCodexSessionsDir } : {}),
     // Canonical 768d embedder - see memoryRecall.ts; local hash vectors would
     // silently break hybrid recall (dimension mismatch with the query).
-    ...(liveIndexDbPath && liveIndexWritebackGate.enabled ? { embedder: createNeonOllamaEmbeddingProvider({ model: "nomic-embed-text" }) } : {})
+    ...(liveIndexDbPath && liveIndexDaemonOptions.memoryWritebackGate?.enabled
+      ? { embedder: createNeonOllamaEmbeddingProvider({ model: "nomic-embed-text" }) }
+      : {})
   });
   if (liveIndexDaemon.enabled) {
     void liveIndexDaemon.start();
@@ -318,6 +320,40 @@ async function handleGatewayRequest(
     writeJson(response, 400, {
       error: "invalid-request-url"
     });
+    return;
+  }
+
+  if (requestUrl.pathname === "/api/neon-live-index-sync") {
+    const context: IRouteContext = {
+      projectRoot: options.projectRoot,
+      runtime,
+      requestUrl,
+      request,
+      response
+    };
+    if (request.method !== "POST") {
+      writeJson(response, 405, { error: "method-not-allowed" });
+      return;
+    }
+    if (!authorizeHttpMutation(context)) {
+      return;
+    }
+    await handleNeonLiveIndexSync(context, options);
+    return;
+  }
+
+  if (request.method === "POST" && requestUrl.pathname === "/api/neon-live-index-daemon") {
+    const context: IRouteContext = {
+      projectRoot: options.projectRoot,
+      runtime,
+      requestUrl,
+      request,
+      response
+    };
+    if (!authorizeHttpMutation(context)) {
+      return;
+    }
+    await handleNeonLiveIndexDaemon(context, liveIndexDaemon);
     return;
   }
 
@@ -554,11 +590,6 @@ async function handleGatewayRequest(
 
     if (requestUrl.pathname === "/api/neon-indexer-activity") {
       handleNeonIndexerActivity(context);
-      return;
-    }
-
-    if (requestUrl.pathname === "/api/neon-live-index-sync") {
-      await handleNeonLiveIndexSync(context, options);
       return;
     }
 
@@ -1651,7 +1682,9 @@ async function handleNeonLiveIndexDaemon(
     context.response,
     200,
     createNeonLiveIndexDaemonPublicSnapshot(
-      scan === "0" ? liveIndexDaemon.getSnapshot() : await liveIndexDaemon.scanNow("api")
+      context.request.method === "POST" && scan === "1"
+        ? await liveIndexDaemon.scanNow("api")
+        : liveIndexDaemon.getSnapshot()
     )
   );
 }

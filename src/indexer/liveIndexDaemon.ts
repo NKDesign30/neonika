@@ -509,19 +509,17 @@ async function promoteRecordsToMemory(input: {
 }): Promise<INeonLiveIndexMemoryPromotionSnapshot> {
   const dbPath = input.options.memoryDbPath;
   const writebackGate = input.options.memoryWritebackGate;
-  const disabledSnapshot = (state: TNeonLiveIndexMemoryPromotionState): INeonLiveIndexMemoryPromotionSnapshot => ({
-    state,
-    changedRecords: input.changedRecords,
-    promotableRecords: input.recordsToPromote.length,
-    rejectedRecords: input.rejectedRecords,
-    writtenRecords: 0,
-    blockedRecords: state === "blocked" ? input.recordsToPromote.length : 0,
-    failedRecords: state === "failed" ? input.recordsToPromote.length : 0,
-    writeback: emptyWritebackResult("memory writeback is not configured")
-  });
-
   if (!dbPath || !writebackGate) {
-    return disabledSnapshot("disabled");
+    return {
+      state: "disabled",
+      changedRecords: input.changedRecords,
+      promotableRecords: input.recordsToPromote.length,
+      rejectedRecords: input.rejectedRecords,
+      writtenRecords: 0,
+      blockedRecords: 0,
+      failedRecords: 0,
+      writeback: emptyWritebackResult("memory writeback is not configured")
+    };
   }
 
   const writeback = await executeNeonMemoryWriteback({
@@ -580,7 +578,7 @@ function emptyWritebackResult(diagnostic: string): INeonMemoryWritebackResult {
     state: "planned",
     target: {
       state: "blocked",
-      reason: "missing-target",
+      reason: "not-evaluated",
       targetConfigured: false,
       matchesPrimary: false,
       ownerOnly: false

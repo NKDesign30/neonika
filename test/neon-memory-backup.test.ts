@@ -9,7 +9,8 @@ import {
   bootstrapNeonMemorySchema,
   createNeonMemoryBackup,
   renderNeonMemoryBackupReport,
-  rotateNeonMemoryBackups
+  rotateNeonMemoryBackups,
+  verifyNeonMemorySnapshot
 } from "../src/index.js";
 
 function seedDb(dbPath: string, rows: number): void {
@@ -66,6 +67,21 @@ describe("neon memory backup", () => {
     // Source DB was opened read-only: byte-identical after the backup.
     const after = await readFile(dbPath);
     assert.ok(before.equals(after));
+  });
+
+  it("can skip the checksum for state-only verification", async () => {
+    const backup = await createNeonMemoryBackup({ dbPath, backupDir, stamp: "state-only" });
+    assert.ok(backup.snapshotPath);
+
+    const verification = await verifyNeonMemorySnapshot(
+      backup.snapshotPath,
+      undefined,
+      { computeChecksum: false }
+    );
+
+    assert.equal(verification.state, "verified");
+    assert.equal(verification.entries, 5);
+    assert.equal(verification.checksum, undefined);
   });
 
   it("rotates old snapshots, keeping only the newest N", async () => {

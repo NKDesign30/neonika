@@ -52,6 +52,7 @@ export interface INeonMemoryRollbackGate {
 
 export type TNeonMemoryWritebackTargetReason =
   | "validated-primary"
+  | "not-evaluated"
   | "missing-target"
   | "target-mismatch"
   | "target-not-regular"
@@ -233,7 +234,11 @@ export async function validateNeonMemoryWritebackTarget(options: {
     return blockedTarget("target-not-regular", { targetConfigured: true, matchesPrimary: true });
   }
 
-  const verification = await verifyNeonMemorySnapshot(targetDbPath);
+  const verification = await verifyNeonMemorySnapshot(
+    targetDbPath,
+    undefined,
+    { computeChecksum: false }
+  );
   if (verification.state !== "verified") {
     return blockedTarget("target-verification-failed", {
       targetConfigured: true,
@@ -257,7 +262,7 @@ export async function executeNeonMemoryWriteback(
   if (options.inputs.length === 0) {
     const target = options.gate.enabled
       ? await validateNeonMemoryWritebackTarget(options)
-      : blockedTarget("missing-target");
+      : blockedTarget("not-evaluated");
     return createWritebackResult({
       state: "planned",
       target,
@@ -268,7 +273,7 @@ export async function executeNeonMemoryWriteback(
   if (!options.gate.enabled) {
     return createWritebackResult({
       state: "blocked",
-      target: blockedTarget("missing-target"),
+      target: blockedTarget("not-evaluated"),
       requested: options.inputs.length,
       diagnostics: [`memory writeback blocked: ${options.gate.reason}`]
     });

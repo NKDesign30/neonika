@@ -2499,7 +2499,8 @@ export {
   verifyNeonMemorySnapshot,
   type INeonMemoryBackupOptions,
   type INeonMemoryBackupResult,
-  type INeonMemorySnapshotVerification
+  type INeonMemorySnapshotVerification,
+  type IVerifyNeonMemorySnapshotOptions
 } from "./memory/neonMemoryBackup.js";
 export {
   NEON_LIVE_INDEX_WRITEBACK_ENV,

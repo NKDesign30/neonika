@@ -50,6 +50,10 @@ export interface INeonMemorySnapshotVerification {
   readonly diagnostics: readonly string[];
 }
 
+export interface IVerifyNeonMemorySnapshotOptions {
+  readonly computeChecksum?: boolean;
+}
+
 function sanitizeStamp(stamp: string): string {
   // Filenames must be filesystem-safe; collapse anything but [A-Za-z0-9._-].
   return stamp.replace(/[^A-Za-z0-9._-]/g, "-");
@@ -157,7 +161,8 @@ export async function createNeonMemoryBackup(
 /** Verifies SQLite integrity, the required memory table, row count and bytes. */
 export async function verifyNeonMemorySnapshot(
   snapshotPath: string,
-  expectedEntries?: number
+  expectedEntries?: number,
+  options: IVerifyNeonMemorySnapshotOptions = {}
 ): Promise<INeonMemorySnapshotVerification> {
   try {
     const snapshotStat = await stat(snapshotPath);
@@ -188,7 +193,7 @@ export async function verifyNeonMemorySnapshot(
       state: "verified",
       bytes: snapshotStat.size,
       entries,
-      checksum: await hashFile(snapshotPath),
+      checksum: options.computeChecksum === false ? undefined : await hashFile(snapshotPath),
       diagnostics: ["snapshot verification passed"]
     };
   } catch (error) {

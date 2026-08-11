@@ -288,7 +288,11 @@ export async function writeNeonMemoryDbEntries(
       database.exec("COMMIT");
       return results;
     } catch (error) {
-      database.exec("ROLLBACK");
+      try {
+        database.exec("ROLLBACK");
+      } catch {
+        // SQLite may already have aborted the transaction. Preserve the original error.
+      }
       throw error;
     }
   } finally {
