@@ -2,8 +2,14 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-11
+
 - Added a portable Ultraresearch skill with explicit source accounting,
   untrusted-source handling and public-repository leak safeguards.
+- Fixed Mission Control so HTTP, server-rendered HTML and WebSocket snapshots
+  reload the authoritative persisted outbound arm and fail closed after disarming.
+- Updated Discord runtime and Mission Control build dependencies to clear the
+  current npm security audits.
 
 ## [0.4.0] - 2026-07-29
 
