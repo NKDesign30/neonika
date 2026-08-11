@@ -86,7 +86,7 @@ export function redactText(value: string): string {
 // previews strip them too. Shared by every snapshot projector (activity, indexer,
 // transcript) so the path-strip rule lives in exactly one place.
 const SNAPSHOT_PATH_PATTERN =
-  /(^|[\s"'`=])(?:\/Users\/|\/home\/|\/var\/folders\/|[A-Za-z]:\\)[^\s"'`,;]+/g;
+  /(^|[\s"'`=])(?:\/Users\/|\/home\/|\/tmp\/|\/private\/tmp\/|\/var\/folders\/|[A-Za-z]:\\)[^\s"'`,;]+/g;
 
 export interface IRedactSnapshotTextOptions {
   /** Max length of the returned preview; longer values are truncated with a trailing "...". */

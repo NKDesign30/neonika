@@ -25,6 +25,7 @@ import {
 const DEFAULT_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 const DEFAULT_MAX_SOURCE_ITEMS = 50;
 const PREVIEW_LIMIT = 500;
+const PUBLIC_DIAGNOSTIC_LIMIT = 500;
 // Provisional score stamped at collect time; the quality gate replaces it with
 // a content-derived score (20-60) before any record reaches the memory DB.
 const COLLECT_IMPORTANCE_PLACEHOLDER = 72;
@@ -201,8 +202,16 @@ export function createNeonLiveIndexMemorySyncPublicSnapshot(
     totals: result.collection.totals,
     quality: result.quality,
     writeback: result.writeback,
-    diagnostics: result.diagnostics
+    diagnostics: createNeonLiveIndexPublicDiagnostics(result.diagnostics)
   };
+}
+
+export function createNeonLiveIndexPublicDiagnostics(
+  diagnostics: readonly string[]
+): readonly string[] {
+  return diagnostics.map((diagnostic) =>
+    redactSnapshotText(diagnostic, { previewLimit: PUBLIC_DIAGNOSTIC_LIMIT })
+  );
 }
 
 export function renderNeonLiveIndexMemorySyncReport(result: INeonLiveIndexMemorySyncResult): string {

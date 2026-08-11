@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 
 import {
   collectNeonLiveIndexRecords,
+  createNeonLiveIndexPublicDiagnostics,
   type ICollectNeonLiveIndexOptions,
   type INeonLiveIndexCollection,
   type INeonLiveIndexRecord,
@@ -349,7 +350,7 @@ export function createNeonLiveIndexDaemonPublicSnapshot(
     ? {
         generatedAt: snapshot.collection.generatedAt,
         totals: snapshot.collection.totals,
-        diagnostics: snapshot.collection.diagnostics
+        diagnostics: createNeonLiveIndexPublicDiagnostics(snapshot.collection.diagnostics)
       }
     : undefined;
 
@@ -361,7 +362,7 @@ export function createNeonLiveIndexDaemonPublicSnapshot(
     ...(state ? { state } : {}),
     ...(collection ? { collection } : {}),
     memoryPromotion: snapshot.memoryPromotion,
-    diagnostics: snapshot.diagnostics
+    diagnostics: createNeonLiveIndexPublicDiagnostics(snapshot.diagnostics)
   };
 }
 

@@ -59,4 +59,12 @@ describe("redactSnapshotText — byte-identical extraction (S0b)", () => {
     assert.ok(!out.includes("/Users/operator"));
     assert.match(out, /\[REDACTED_PATH\]/);
   });
+
+  it("strips Linux temporary paths from snapshot text", () => {
+    const out = redactSnapshotText("unavailable: /tmp/neonika/codex-sessions", {
+      previewLimit: 1200
+    });
+
+    assert.equal(out, "unavailable: [REDACTED_PATH]");
+  });
 });
