@@ -2,9 +2,10 @@ import { openNeonMemoryDatabase } from "./neonMemoryDbOpen.js";
 import { createReadStream } from "node:fs";
 import { access, chmod, lstat, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import { redactSnapshotText } from "../harness/redaction.js";
+import { canonicalNeonDbPath } from "./neonMemoryDbProvider.js";
 
 /**
  * Read-only memory-DB backup for Neonika (memory autarky).
@@ -64,7 +65,14 @@ export async function createNeonMemoryBackup(
   const keep = typeof options.keep === "number" && options.keep > 0 ? Math.floor(options.keep) : defaultKeep;
   const stamp = sanitizeStamp(options.stamp ?? new Date().toISOString().replace(/[:.]/g, "-"));
 
-  await mkdir(options.backupDir, { recursive: true });
+  if (
+    canonicalNeonDbPath(options.backupDir) ===
+    dirname(canonicalNeonDbPath(options.dbPath))
+  ) {
+    return invalidBackupResult(keep, "backup directory must be separate from the source database");
+  }
+
+  await mkdir(options.backupDir, { recursive: true, mode: 0o700 });
   const backupDirectory = await lstat(options.backupDir).catch(() => undefined);
   if (!backupDirectory?.isDirectory() || backupDirectory.isSymbolicLink()) {
     return invalidBackupResult(keep, "backup target is not a private regular directory");
@@ -114,17 +122,14 @@ export async function createNeonMemoryBackup(
   // VACUUM INTO requires a string literal, not a bound parameter. The path is
   // ours (built from backupDir + sanitized stamp), and single quotes are escaped.
   const source = openNeonMemoryDatabase(options.dbPath, { readOnly: true });
-  let entries = 0;
   try {
     source.exec(`VACUUM INTO '${snapshotPath.replace(/'/g, "''")}'`);
-    const countRow = source.prepare("SELECT COUNT(*) AS n FROM memory_entries").get() as { n?: number };
-    entries = typeof countRow?.n === "number" ? countRow.n : 0;
   } finally {
     source.close();
   }
 
   await chmod(snapshotPath, 0o600);
-  const verification = await verifyNeonMemorySnapshot(snapshotPath, entries);
+  const verification = await verifyNeonMemorySnapshot(snapshotPath);
   if (verification.state !== "verified") {
     await rm(snapshotPath, { force: true });
     return invalidBackupResult(keep, verification.diagnostics);

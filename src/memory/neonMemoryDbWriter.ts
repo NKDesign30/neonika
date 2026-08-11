@@ -35,6 +35,9 @@ import {
 const memoryWriteEnabledEnvKey = "NEON_MEMORY_WRITE_ENABLED";
 const maxMemoryEntryLength = 8_000;
 const defaultImportanceScore = 50;
+const defaultEmbeddingConcurrency = 4;
+const maxEmbeddingConcurrency = 16;
+const defaultEmbeddingTimeoutMs = 30_000;
 
 export interface INeonMemoryDbWriteInput {
   readonly sourceFile: string;
@@ -58,6 +61,7 @@ export interface INeonMemoryDbWriteResult {
   readonly entryId: number | undefined;
   readonly contentHash: string | undefined;
   readonly embedded: boolean;
+  readonly degraded: boolean;
   readonly dbPath: string | undefined;
   readonly safety: { readonly targetedRealMemoryDb: boolean };
   readonly diagnostics: readonly string[];
@@ -88,6 +92,8 @@ export interface IWriteNeonMemoryDbEntryOptions {
 export interface IWriteNeonMemoryDbEntriesOptions
   extends Omit<IWriteNeonMemoryDbEntryOptions, "input"> {
   readonly inputs: readonly INeonMemoryDbWriteInput[];
+  readonly embeddingConcurrency?: number;
+  readonly embeddingTimeoutMs?: number;
 }
 
 interface IPreparedNeonMemoryDbWrite {
@@ -100,6 +106,7 @@ interface IPreparedNeonMemoryDbWrite {
   readonly timestamp: string;
   readonly contentHash: string;
   readonly embeddingBlob: Uint8Array | null;
+  readonly embeddingDegraded: boolean;
   readonly diagnostics: readonly string[];
 }
 
@@ -189,6 +196,7 @@ function blocked(
     entryId: undefined,
     contentHash: undefined,
     embedded: false,
+    degraded: false,
     dbPath: undefined,
     safety: { targetedRealMemoryDb },
     diagnostics
@@ -239,11 +247,21 @@ export async function writeNeonMemoryDbEntries(
       targetsRealDb
     ));
   }
+  if (options.dedupe === "source-file" && hasDuplicateSourceFiles(options.inputs)) {
+    return options.inputs.map(() => blocked(
+      ["memory-write batch blocked: duplicate source file in one batch"],
+      targetsRealDb
+    ));
+  }
 
   const timestamp = (options.now?.() ?? new Date()).toISOString();
-  const prepared = await Promise.all(
-    options.inputs.map((input) => prepareNeonMemoryDbWrite(input, timestamp, options.embedder))
-  );
+  const prepared = await prepareNeonMemoryDbWriteBatch({
+    inputs: options.inputs,
+    timestamp,
+    embedder: options.embedder,
+    concurrency: normalizeEmbeddingConcurrency(options.embeddingConcurrency),
+    timeoutMs: normalizeEmbeddingTimeout(options.embeddingTimeoutMs)
+  });
   if (prepared.some((entry) => entry === undefined)) {
     return options.inputs.map(() => blocked(
       ["memory-write batch blocked: one or more entries have empty content"],
@@ -281,14 +299,15 @@ export async function writeNeonMemoryDbEntries(
 async function prepareNeonMemoryDbWrite(
   input: INeonMemoryDbWriteInput,
   timestamp: string,
-  embedder: INeonEmbeddingProvider | undefined
+  embedder: INeonEmbeddingProvider | undefined,
+  embeddingTimeoutMs: number
 ): Promise<IPreparedNeonMemoryDbWrite | undefined> {
   const content = truncate(redactText(input.content.replace(/\s+/g, " ").trim()), maxMemoryEntryLength);
   if (content.length === 0) {
     return undefined;
   }
 
-  const sourceFile = redactText(input.sourceFile.trim()) || "neonika:unsourced";
+  const sourceFile = normalizeSourceFile(input.sourceFile);
   const agent = redactText(input.agent.trim()) || "neo";
   const category = redactText(input.category.trim()) || "discoveries";
   const importanceScore =
@@ -300,11 +319,13 @@ async function prepareNeonMemoryDbWrite(
 
   const diagnostics: string[] = [];
   let embeddingBlob: Uint8Array | null = null;
+  let embeddingDegraded = false;
   if (embedder) {
     try {
-      const vector = await embedder.embed(content);
+      const vector = await embedWithTimeout(embedder, content, embeddingTimeoutMs);
       embeddingBlob = neonVectorToBuffer(vector);
     } catch (error) {
+      embeddingDegraded = true;
       const reason = error instanceof Error ? redactText(error.message) : "unknown error";
       diagnostics.push(`embedding skipped (row written FTS-only): ${reason}`);
     }
@@ -320,8 +341,93 @@ async function prepareNeonMemoryDbWrite(
     timestamp,
     contentHash,
     embeddingBlob,
+    embeddingDegraded,
     diagnostics
   };
+}
+
+async function prepareNeonMemoryDbWriteBatch(options: {
+  readonly inputs: readonly INeonMemoryDbWriteInput[];
+  readonly timestamp: string;
+  readonly embedder: INeonEmbeddingProvider | undefined;
+  readonly concurrency: number;
+  readonly timeoutMs: number;
+}): Promise<readonly (IPreparedNeonMemoryDbWrite | undefined)[]> {
+  const prepared: Array<IPreparedNeonMemoryDbWrite | undefined> = new Array(options.inputs.length);
+  let nextIndex = 0;
+  const worker = async (): Promise<void> => {
+    while (nextIndex < options.inputs.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const input = options.inputs[index];
+      if (input) {
+        prepared[index] = await prepareNeonMemoryDbWrite(
+          input,
+          options.timestamp,
+          options.embedder,
+          options.timeoutMs
+        );
+      }
+    }
+  };
+  const workerCount = Math.min(options.concurrency, options.inputs.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return prepared;
+}
+
+async function embedWithTimeout(
+  embedder: INeonEmbeddingProvider,
+  content: string,
+  timeoutMs: number
+): Promise<Float32Array> {
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`embedding timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([
+      embedder.embed(content, { signal: controller.signal }),
+      timedOut
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+function hasDuplicateSourceFiles(inputs: readonly INeonMemoryDbWriteInput[]): boolean {
+  const seen = new Set<string>();
+  for (const input of inputs) {
+    const sourceFile = normalizeSourceFile(input.sourceFile);
+    if (seen.has(sourceFile)) {
+      return true;
+    }
+    seen.add(sourceFile);
+  }
+  return false;
+}
+
+function normalizeSourceFile(sourceFile: string): string {
+  return redactText(sourceFile.trim()) || "neonika:unsourced";
+}
+
+function normalizeEmbeddingConcurrency(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return defaultEmbeddingConcurrency;
+  }
+  return Math.max(1, Math.min(maxEmbeddingConcurrency, Math.floor(value)));
+}
+
+function normalizeEmbeddingTimeout(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return defaultEmbeddingTimeoutMs;
+  }
+  return Math.max(1, Math.floor(value));
 }
 
 function writePreparedNeonMemoryDbEntry(options: {
@@ -387,6 +493,7 @@ function writePreparedNeonMemoryDbEntry(options: {
     entryId,
     contentHash: entry.contentHash,
     embedded: entry.embeddingBlob !== null,
+    degraded: entry.embeddingDegraded,
     dbPath: options.dbPath,
     safety: { targetedRealMemoryDb: options.targetsRealDb },
     diagnostics: [
@@ -400,7 +507,7 @@ function writePreparedNeonMemoryDbEntry(options: {
 export function renderNeonMemoryDbWriteReport(result: INeonMemoryDbWriteResult): string {
   return [
     `Neonika Memory DB Write: ${result.state}`,
-    `Inserted: ${result.inserted}  Updated: ${result.updated}  Embedded: ${result.embedded}`,
+    `Inserted: ${result.inserted}  Updated: ${result.updated}  Embedded: ${result.embedded}  Degraded: ${result.degraded}`,
     `Entry id: ${result.entryId ?? "none"}`,
     `DB: ${result.dbPath ? "configured" : "none (gated)"}`,
     `Safety: targetedRealMemoryDb=${result.safety.targetedRealMemoryDb}`,

@@ -1656,6 +1656,7 @@ describe("Neonika Gateway HTTP server", () => {
 
   it("serves the live-index sync projection over HTTP without default memory writes", async () => {
     const projectRoot = await createTempProjectRoot();
+    const sensitiveMarker = "sk-live-index-sync-boundary-marker-1234567890";
     const transcriptProjectsDir = join(projectRoot, "claude-projects");
     const liveIndexCodexSessionsDir = join(projectRoot, "codex-sessions");
     const envKeys = [
@@ -1673,7 +1674,10 @@ describe("Neonika Gateway HTTP server", () => {
       }
       await mkdir(transcriptProjectsDir, { recursive: true });
       await mkdir(liveIndexCodexSessionsDir, { recursive: true });
-      await writeNeonGatewayRun(projectRoot, createHttpRun("run-http-live-index", "completed"));
+      await writeNeonGatewayRun(
+        projectRoot,
+        createHttpRun("run-http-live-index", "completed", sensitiveMarker)
+      );
 
       const handle = await listenNeonGatewayHttpServer(
         { projectRoot, transcriptProjectsDir, liveIndexCodexSessionsDir },
@@ -1695,6 +1699,7 @@ describe("Neonika Gateway HTTP server", () => {
         assert.equal(body.totals.codex, 0);
         assert.equal(body.totals.records, 1);
         assert.equal(body.writeback.writes.written, 0);
+        assert.equal(serialized.includes(sensitiveMarker), false);
         assert.doesNotMatch(serialized, new RegExp(escapeRegExp(projectRoot), "u"));
         assert.doesNotMatch(serialized, /"records":\[|"content"|dbPath|statePath|metricsPath/u);
       } finally {
@@ -1715,13 +1720,17 @@ describe("Neonika Gateway HTTP server", () => {
 
   it("serves the live-index daemon state over HTTP", async () => {
     const projectRoot = await createTempProjectRoot();
+    const sensitiveMarker = "sk-live-index-daemon-boundary-marker-1234567890";
     const transcriptProjectsDir = join(projectRoot, "claude-projects");
     const liveIndexCodexSessionsDir = join(projectRoot, "codex-sessions");
 
     try {
       await mkdir(transcriptProjectsDir, { recursive: true });
       await mkdir(liveIndexCodexSessionsDir, { recursive: true });
-      await writeNeonGatewayRun(projectRoot, createHttpRun("run-http-live-index-daemon", "completed"));
+      await writeNeonGatewayRun(
+        projectRoot,
+        createHttpRun("run-http-live-index-daemon", "completed", sensitiveMarker)
+      );
 
       const handle = await listenNeonGatewayHttpServer(
         { projectRoot, transcriptProjectsDir, liveIndexCodexSessionsDir },
@@ -1744,6 +1753,7 @@ describe("Neonika Gateway HTTP server", () => {
         assert.equal(body.state?.scanCount, 1);
         assert.equal(body.state?.sources.discord.changed, 1);
         assert.deepEqual(body.storage, { state: "private", metrics: "private" });
+        assert.equal(serialized.includes(sensitiveMarker), false);
         assert.doesNotMatch(serialized, new RegExp(escapeRegExp(projectRoot), "u"));
         assert.doesNotMatch(serialized, /"records":\[|"content"|dbPath|statePath|metricsPath/u);
       } finally {
@@ -2043,7 +2053,8 @@ function createHttpCutoverGate(
 
 function createHttpRun(
   runId: string,
-  status: INeonGatewayShadowRun["status"]
+  status: INeonGatewayShadowRun["status"],
+  contentPreview = "HTTP smoke"
 ): INeonGatewayShadowRun {
   return {
     runId,
@@ -2057,7 +2068,7 @@ function createHttpRun(
       agentId: "chaty",
       workspaceRoot: "/Users/operator/neon-projects/neonika",
       mode: "read-only",
-      contentPreview: "HTTP smoke",
+      contentPreview,
       receivedAt: "2026-05-31T14:30:00.000Z"
     },
     harnessId: "codex-app-server",

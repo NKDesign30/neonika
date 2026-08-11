@@ -20,11 +20,12 @@ import {
 describe("Neon live-index daemon", () => {
   it("coalesces overlapping scans so one interval cannot race another writeback", async () => {
     const fixture = await createDaemonFixture();
+    const now = Date.now();
     const service = createNeonLiveIndexDaemon({
       projectRoot: fixture.projectRoot,
       transcriptProjectsDir: fixture.transcriptProjectsDir,
       codexSessionsDir: fixture.codexSessionsDir,
-      now: () => new Date("2026-06-08T12:00:00.000Z")
+      now: () => new Date(now)
     });
 
     try {
@@ -45,7 +46,8 @@ describe("Neon live-index daemon", () => {
 
   it("persists source state and detects unchanged follow-up scans", async () => {
     const fixture = await createDaemonFixture();
-    const now = (): Date => new Date("2026-06-08T12:00:00.000Z");
+    const fixtureTime = Date.now();
+    const now = (): Date => new Date(fixtureTime);
 
     try {
       const first = await scanNeonLiveIndexDaemon({
@@ -88,7 +90,8 @@ describe("Neon live-index daemon", () => {
 
   it("promotes only changed records to an armed isolated memory DB", async () => {
     const fixture = await createDaemonFixture();
-    const now = (): Date => new Date("2026-06-08T12:00:00.000Z");
+    const fixtureTime = Date.now();
+    const now = (): Date => new Date(fixtureTime);
     const dbPath = join(fixture.projectRoot, "isolated-semantic-memory.db");
     const backupDir = join(fixture.projectRoot, "memory-backups");
 
@@ -166,7 +169,8 @@ describe("Neon live-index daemon", () => {
 
   it("keeps a blocked target unmarked and retries the batch on the next scan", async () => {
     const fixture = await createDaemonFixture();
-    const now = (): Date => new Date("2026-06-08T12:00:00.000Z");
+    const fixtureTime = Date.now();
+    const now = (): Date => new Date(fixtureTime);
     const workingDb = join(fixture.projectRoot, "isolated-semantic-memory.db");
     const unwritableDb = join(fixture.projectRoot, "missing-dir", "nested", "memory.db");
     const backupDir = join(fixture.projectRoot, "memory-backups");
@@ -211,7 +215,8 @@ describe("Neon live-index daemon", () => {
   it("keeps rejected records unpromoted in a mixed batch without churn", async () => {
     const fixture = await createDaemonFixture();
     await writeSlopTranscriptFixture(fixture.transcriptProjectsDir);
-    const now = (): Date => new Date("2026-06-08T12:00:00.000Z");
+    const fixtureTime = Date.now();
+    const now = (): Date => new Date(fixtureTime);
     const dbPath = join(fixture.projectRoot, "isolated-semantic-memory.db");
     const backupDir = join(fixture.projectRoot, "memory-backups");
     const scan = (): ReturnType<typeof scanNeonLiveIndexDaemon> =>

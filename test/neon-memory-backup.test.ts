@@ -129,6 +129,19 @@ describe("neon memory backup", () => {
     assert.equal((await readdir(realBackupDir)).length, 0);
   });
 
+  it("rejects the source database directory as a rotation target", async () => {
+    const result = await createNeonMemoryBackup({
+      dbPath,
+      backupDir: root,
+      keep: 1,
+      stamp: "same-directory"
+    });
+
+    assert.equal(result.state, "invalid");
+    assert.match(result.diagnostics[0] ?? "", /separate from the source database/u);
+    assert.equal((await readdir(root)).includes("semantic-memory.db"), true);
+  });
+
   it("rotateNeonMemoryBackups ignores unrelated files", async () => {
     await mkdtemp(join(tmpdir(), "noop-"));
     const dir = join(root, "mixed");

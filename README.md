@@ -141,7 +141,7 @@ promotion still remains off until the daemon and both write gates are armed:
 NEON_LIVE_INDEX_DAEMON_ENABLED=ready \
 NEON_MEMORY_WRITE_ENABLED=ready \
 NEON_LIVE_INDEX_WRITEBACK_ENABLED=ready \
-neonika live-index-production-check
+node dist/src/cli.js live-index-production-check
 ```
 
 The check prints no local paths. It requires both configured database paths to
@@ -152,11 +152,11 @@ metrics expose only states and counts, never database paths or memory content.
 
 Restore is deliberately separate from writeback. Stop the live-index daemon and
 other writers, choose a snapshot id from private operator storage, arm rollback
-for that single invocation, and disarm it afterwards:
+for that single invocation, and disarm it afterward:
 
 ```bash
 NEON_MEMORY_ROLLBACK_ENABLED=ready \
-neonika memory-writeback-rollback <snapshot-id>
+node dist/src/cli.js memory-writeback-rollback <snapshot-id>
 ```
 
 Restore verifies the source, preserves the current database in a safety

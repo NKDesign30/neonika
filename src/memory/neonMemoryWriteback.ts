@@ -11,7 +11,7 @@ import {
   rm,
   stat
 } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 
 import { readReadyCutoverEnv } from "../core/cutover.js";
 import { redactSnapshotText } from "../harness/redaction.js";
@@ -80,6 +80,7 @@ export interface INeonMemoryWritebackCounts {
   readonly inserted: number;
   readonly updated: number;
   readonly embedded: number;
+  readonly degraded: number;
   readonly blocked: number;
 }
 
@@ -186,7 +187,14 @@ export async function validateNeonMemoryWritebackTarget(options: {
     return blockedTarget("target-mismatch", { targetConfigured: true });
   }
   const backupDir = options.backupDir?.trim();
-  if (!backupDir || resolve(backupDir) === resolve(targetDbPath)) {
+  if (!backupDir) {
+    return blockedTarget("invalid-backup-target", { targetConfigured: true, matchesPrimary: true });
+  }
+  const canonicalBackupDir = canonicalNeonDbPath(backupDir);
+  if (
+    canonicalBackupDir === canonicalNeonDbPath(targetDbPath) ||
+    canonicalBackupDir === canonicalNeonDbPath(dirname(targetDbPath))
+  ) {
     return blockedTarget("invalid-backup-target", { targetConfigured: true, matchesPrimary: true });
   }
   try {
@@ -445,7 +453,8 @@ export async function rollbackNeonMemoryWriteback(
   }
 
   const safetyVerification = await verifyNeonMemorySnapshot(safetyBackup.snapshotPath);
-  const recovered = safetyVerification.state === "verified" && safetyVerification.checksum
+  const recoveryAttempted = safetyVerification.state === "verified" && safetyVerification.checksum !== undefined;
+  const recovered = recoveryAttempted && safetyVerification.checksum
     ? await replaceTargetFromSnapshot({
         targetDbPath: options.targetDbPath,
         snapshotPath: safetyBackup.snapshotPath,
@@ -460,12 +469,14 @@ export async function rollbackNeonMemoryWriteback(
     reason: recovered ? "restore-failed" : "recovery-failed",
     snapshotId: options.snapshotId,
     verification: "failed",
-    recoveryAttempts: 1,
+    recoveryAttempts: recoveryAttempted ? 1 : 0,
     safetySnapshotId: safetyBackup.snapshotId,
     diagnostics: [
       recovered
         ? "memory rollback failed verification; previous target recovered once"
-        : "memory rollback and its single recovery attempt failed"
+        : recoveryAttempted
+          ? "memory rollback and its single recovery attempt failed"
+          : "memory rollback failed; the safety snapshot could not be verified, no recovery was attempted"
     ]
   };
 }
@@ -475,7 +486,7 @@ export function renderNeonMemoryWritebackReport(result: INeonMemoryWritebackResu
     `Neonika Memory Writeback: ${result.state}`,
     `Target: ${result.target.state} (${result.target.reason})`,
     `Backup: ${result.backup.state}${result.backup.snapshotId ? ` (${result.backup.snapshotId})` : ""}`,
-    `Writes: requested=${result.writes.requested} written=${result.writes.written} inserted=${result.writes.inserted} updated=${result.writes.updated} blocked=${result.writes.blocked}`,
+    `Writes: requested=${result.writes.requested} written=${result.writes.written} inserted=${result.writes.inserted} updated=${result.writes.updated} embedded=${result.writes.embedded} degraded=${result.writes.degraded} blocked=${result.writes.blocked}`,
     ...result.diagnostics.map((diagnostic) => `- ${diagnostic}`)
   ].join("\n");
 }
@@ -522,6 +533,7 @@ function createWritebackResult(options: {
       inserted: 0,
       updated: 0,
       embedded: 0,
+      degraded: 0,
       blocked: options.state === "blocked" ? options.requested : 0
     },
     diagnostics: options.diagnostics
@@ -538,6 +550,7 @@ function countWriteResults(
     inserted: writes.filter((write) => write.inserted).length,
     updated: writes.filter((write) => write.updated).length,
     embedded: writes.filter((write) => write.embedded).length,
+    degraded: writes.filter((write) => write.degraded).length,
     blocked: writes.filter((write) => write.state === "blocked").length
   };
 }
@@ -640,7 +653,7 @@ async function replaceTargetFromSnapshot(options: {
   try {
     await copyFile(options.snapshotPath, stagingPath, fsConstants.COPYFILE_EXCL);
     await chmod(stagingPath, 0o600);
-    const handle = await open(stagingPath, "r");
+    const handle = await open(stagingPath, "r+");
     try {
       await handle.sync();
     } finally {
@@ -652,6 +665,12 @@ async function replaceTargetFromSnapshot(options: {
     }
     await rename(stagingPath, options.targetDbPath);
     await chmod(options.targetDbPath, 0o600);
+    const targetDirectory = await open(dirname(options.targetDbPath), "r");
+    try {
+      await targetDirectory.sync();
+    } finally {
+      await targetDirectory.close();
+    }
     const restored = await verifyNeonMemorySnapshot(options.targetDbPath, options.expectedEntries);
     return restored.state === "verified" && restored.checksum === options.expectedChecksum;
   } catch {

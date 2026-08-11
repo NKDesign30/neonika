@@ -2569,6 +2569,7 @@ export {
   neonVectorToBuffer,
   normalizeNeonVector,
   type INeonEmbeddingProvider,
+  type INeonEmbeddingRequestOptions,
   type INeonOllamaEmbeddingOptions
 } from "./memory/neonEmbeddingProvider.js";
 export {

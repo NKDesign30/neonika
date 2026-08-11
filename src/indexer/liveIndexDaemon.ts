@@ -586,7 +586,15 @@ function emptyWritebackResult(diagnostic: string): INeonMemoryWritebackResult {
       ownerOnly: false
     },
     backup: { state: "not-created", entries: 0, rotated: 0 },
-    writes: { requested: 0, written: 0, inserted: 0, updated: 0, embedded: 0, blocked: 0 },
+    writes: {
+      requested: 0,
+      written: 0,
+      inserted: 0,
+      updated: 0,
+      embedded: 0,
+      degraded: 0,
+      blocked: 0
+    },
     diagnostics: [diagnostic]
   };
 }

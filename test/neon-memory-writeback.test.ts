@@ -87,6 +87,17 @@ describe("productive Neonika memory writeback", () => {
     assert.equal(mismatch.target.reason, "target-mismatch");
     assert.equal(existsSync(backupDir), false);
 
+    const sameDirectoryBackup = await executeNeonMemoryWriteback({
+      targetDbPath: primaryDbPath,
+      primaryDbPath,
+      backupDir: dirname(primaryDbPath),
+      gate,
+      inputs: [firstInput]
+    });
+    assert.equal(sameDirectoryBackup.state, "blocked");
+    assert.equal(sameDirectoryBackup.target.reason, "invalid-backup-target");
+    assert.equal(countEntries(primaryDbPath), 1);
+
     const linkedBackupTarget = join(root, "linked-backup-target");
     await mkdir(linkedBackupTarget, { recursive: true, mode: 0o700 });
     await symlink(linkedBackupTarget, backupDir);
@@ -116,6 +127,7 @@ describe("productive Neonika memory writeback", () => {
   });
 
   it("creates and verifies a private pre-write backup before one atomic batch", async () => {
+    const now = Date.now();
     const result = await executeNeonMemoryWriteback({
       targetDbPath: primaryDbPath,
       primaryDbPath,
@@ -126,7 +138,7 @@ describe("productive Neonika memory writeback", () => {
       }),
       inputs: [firstInput, secondInput],
       operationId: "writeback-success",
-      now: () => new Date("2026-08-11T18:00:00.000Z")
+      now: () => new Date(now)
     });
     const serialized = JSON.stringify(result);
 
@@ -140,6 +152,33 @@ describe("productive Neonika memory writeback", () => {
     assert.equal((await lstat(join(backupDir, result.backup.snapshotId!))).mode & 0o077, 0);
     assert.doesNotMatch(serialized, new RegExp(escapeRegExp(root), "u"));
     assert.doesNotMatch(serialized, /First accepted live-index/u);
+  });
+
+  it("commits FTS-only fallback rows while exposing embedding degradation", async () => {
+    const result = await executeNeonMemoryWriteback({
+      targetDbPath: primaryDbPath,
+      primaryDbPath,
+      backupDir,
+      gate: resolveNeonMemoryWritebackGate({
+        NEON_MEMORY_WRITE_ENABLED: "ready",
+        NEON_LIVE_INDEX_WRITEBACK_ENABLED: "ready"
+      }),
+      inputs: [firstInput],
+      embedder: {
+        name: "test:unavailable",
+        dimensions: 2,
+        embed: async (): Promise<Float32Array> => {
+          throw new Error("fixture embedding unavailable");
+        }
+      },
+      operationId: "writeback-degraded",
+      now: () => new Date(Date.now())
+    });
+
+    assert.equal(result.state, "written");
+    assert.equal(result.writes.written, 1);
+    assert.equal(result.writes.embedded, 0);
+    assert.equal(result.writes.degraded, 1);
   });
 
   it("rolls back the whole SQLite transaction when one entry fails", async () => {
@@ -164,6 +203,7 @@ describe("productive Neonika memory writeback", () => {
   });
 
   it("restores only a verified snapshot behind the rollback gate and verifies the target", async () => {
+    const now = Date.now();
     const writeback = await executeNeonMemoryWriteback({
       targetDbPath: primaryDbPath,
       primaryDbPath,
@@ -174,7 +214,7 @@ describe("productive Neonika memory writeback", () => {
       }),
       inputs: [firstInput],
       operationId: "before-rollback",
-      now: () => new Date("2026-08-11T18:10:00.000Z")
+      now: () => new Date(now)
     });
     const snapshotId = writeback.backup.snapshotId;
     assert.ok(snapshotId);
@@ -197,7 +237,7 @@ describe("productive Neonika memory writeback", () => {
       snapshotId,
       gate: resolveNeonMemoryRollbackGate({ NEON_MEMORY_ROLLBACK_ENABLED: "ready" }),
       operationId: "restore-once",
-      now: () => new Date("2026-08-11T18:11:00.000Z")
+      now: () => new Date(now + 60_000)
     });
     const serialized = JSON.stringify(restored);
 
